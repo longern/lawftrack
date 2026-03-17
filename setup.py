@@ -17,6 +17,12 @@ setup(
     python_requires=">=3.10",
     package_dir={"": "src"},
     packages=find_packages(where="src"),
+    extras_require={
+        "server": [
+            "fastapi",
+            "uvicorn",
+        ]
+    },
     entry_points={
         "console_scripts": [
             "lawftune=lawftune.cli:main",

@@ -24,6 +24,23 @@ def get_config_path(config_dir: Path | None = None) -> Path:
     return resolved_dir / CONFIG_FILENAME
 
 
+def load_config(config_dir: Path | None = None) -> dict[str, str]:
+    config_path = get_config_path(config_dir)
+    if not config_path.exists():
+        return {
+            "vllm_endpoint": DEFAULT_VLLM_ENDPOINT,
+            "api_key": DEFAULT_API_KEY,
+        }
+
+    payload = json.loads(config_path.read_text(encoding="utf-8"))
+    endpoint = str(payload.get("vllm_endpoint", DEFAULT_VLLM_ENDPOINT))
+    api_key = str(payload.get("api_key", DEFAULT_API_KEY))
+    return {
+        "vllm_endpoint": endpoint,
+        "api_key": api_key,
+    }
+
+
 def save_config(
     *,
     endpoint: str,

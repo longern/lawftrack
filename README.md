@@ -1,69 +1,98 @@
 # lawftune
 
-A minimal Python CLI project scaffold that uses `setuptools` for reliable installation in offline-friendly environments.
+`lawftune` is a Python CLI that stores vLLM connection settings locally and runs a local gateway service.
 
-## Local Development
+## Quick Start
+
+Install the project in editable mode:
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
 python3 -m pip install -e .
+python3 -m pip install ".[server]"
 ```
 
-After installation, you can run:
+Initialize frontend dependencies:
 
 ```bash
-lawftune
+cd frontend
+npm install
+```
+
+Run the setup wizard:
+
+```bash
+lawftune install
+```
+
+The wizard will:
+
+- ask for the vLLM endpoint, default `http://localhost:8000`
+- ask for the API key, default empty
+- save the config to `~/.lawftune/config.json`
+- ask whether the gateway should also be installed as a system service
+
+Start the gateway in the foreground:
+
+```bash
+lawftune gateway
+```
+
+The default bind address is `127.0.0.1:5293`.
+
+## Common Commands
+
+```bash
 lawftune --version
 lawftune install
 lawftune gateway
-lawftune gateway install
+lawftune gateway status
+lawftune gateway start
+lawftune gateway stop
 ```
 
-You can also launch it as a module:
+You can also launch the package as a module:
 
 ```bash
 python3 -m lawftune
 ```
 
-## Installation Wizard
-
-Running `lawftune install` starts an interactive setup flow for vLLM configuration. The configuration is saved to `~/.lawftune/config.json` by default.
-
-- `vLLM endpoint` defaults to `http://localhost:8000`
-- `API key` defaults to an empty value
-
-You can also provide the values directly:
-
-```bash
-lawftune install --endpoint http://localhost:8000 --api-key ""
-```
-
 ## Gateway
 
-Run the gateway in the foreground with:
+`lawftune gateway` runs the local FastAPI gateway and loads config from `~/.lawftune/config.json` by default.
+The browser UI is served from the standalone [frontend/](/Users/longsiyu/workspace/lawftune/frontend) workspace so it can evolve separately from the Python backend.
+
+For frontend development:
 
 ```bash
-lawftune gateway
+cd frontend
+npm run dev
 ```
 
-By default, the gateway starts on `127.0.0.1:5293` and reads configuration from `~/.lawftune/config.json`.
+For a production build served by the Python gateway:
+
+```bash
+cd frontend
+npm run build
+```
 
 Available endpoints:
 
-- `GET /` returns a basic gateway status payload
+- `GET /` serves the local gateway UI
+- `GET /status` returns a basic gateway status payload
 - `GET /healthz` returns a health check payload
 - `GET /config` returns the configured vLLM endpoint and whether an API key is set
 
-If you need to install server dependencies explicitly:
+You can override runtime options when starting it in the foreground:
 
 ```bash
-python3 -m pip install ".[server]"
+lawftune gateway --host 127.0.0.1 --port 5293
 ```
 
-## Managed Gateway
+## System Service
 
-Use `lawftune gateway` for both foreground execution and OS-managed background control.
+The gateway can also be managed as a user-level system service:
 
 ```bash
 lawftune gateway install
@@ -74,11 +103,11 @@ lawftune gateway status
 lawftune gateway uninstall
 ```
 
-Platform backends:
+Supported backends:
 
-- macOS uses a user `launchd` agent
-- Linux uses a user `systemd` service
-- Windows uses a Task Scheduler task
+- macOS: `launchd` user agent
+- Linux: `systemd --user`
+- Windows: Task Scheduler task
 
 You can define the gateway host, port, and config directory during installation:
 

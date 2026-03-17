@@ -53,7 +53,7 @@ class CliTests(unittest.TestCase):
                 [sys.executable, "-m", "lawftune", "install"],
                 cwd=ROOT,
                 env=make_env(LAWFTUNE_HOME=temp_dir),
-                input="\n\n",
+                input="\n\nn\n",
                 capture_output=True,
                 text=True,
                 check=False,
@@ -78,7 +78,7 @@ class CliTests(unittest.TestCase):
                 [sys.executable, "-m", "lawftune", "install"],
                 cwd=ROOT,
                 env=make_env(LAWFTUNE_HOME=temp_dir),
-                input="http://127.0.0.1:9000\nsecret-key\n",
+                input="http://127.0.0.1:9000\nsecret-key\nn\n",
                 capture_output=True,
                 text=True,
                 check=False,
@@ -94,6 +94,47 @@ class CliTests(unittest.TestCase):
                     "api_key": "secret-key",
                 },
             )
+
+    def test_install_wizard_can_install_gateway_service(self) -> None:
+        sys.path.insert(0, str(ROOT / "src"))
+        try:
+            from lawftune.cli import main
+        finally:
+            sys.path.pop(0)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            mocked_manager = mock.Mock()
+            mocked_manager.install.return_value = "gateway installed"
+
+            with mock.patch("lawftune.cli.get_service_manager", return_value=mocked_manager):
+                with mock.patch("builtins.input", side_effect=["", "", "y"]):
+                    with mock.patch("builtins.print") as mocked_print:
+                        exit_code = main(["install", "--config-dir", temp_dir])
+
+            self.assertEqual(exit_code, 0)
+            mocked_manager.install.assert_called_once()
+            service_config = mocked_manager.install.call_args.args[0]
+            self.assertEqual(service_config.host, "127.0.0.1")
+            self.assertEqual(service_config.port, 5293)
+            self.assertEqual(service_config.config_dir, Path(temp_dir))
+            self.assertEqual(mocked_print.call_args_list[-1], mock.call("gateway installed"))
+
+    def test_install_wizard_skips_gateway_service_when_declined(self) -> None:
+        sys.path.insert(0, str(ROOT / "src"))
+        try:
+            from lawftune.cli import main
+        finally:
+            sys.path.pop(0)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            mocked_manager = mock.Mock()
+
+            with mock.patch("lawftune.cli.get_service_manager", return_value=mocked_manager):
+                with mock.patch("builtins.input", side_effect=["", "", "n"]):
+                    exit_code = main(["install", "--config-dir", temp_dir])
+
+            self.assertEqual(exit_code, 0)
+            mocked_manager.install.assert_not_called()
 
     def test_gateway_without_action_starts_uvicorn_with_expected_arguments(self) -> None:
         sys.path.insert(0, str(ROOT / "src"))

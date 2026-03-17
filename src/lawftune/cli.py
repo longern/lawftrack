@@ -91,6 +91,14 @@ def prompt_value(label: str, default: str) -> str:
     return default if value == "" else value
 
 
+def prompt_yes_no(label: str, default: bool = False) -> bool:
+    default_hint = "Y/n" if default else "y/N"
+    value = input(f"{label} [{default_hint}]: ").strip().lower()
+    if value == "":
+        return default
+    return value in {"y", "yes"}
+
+
 def run_install_wizard(args: argparse.Namespace) -> int:
     target_dir = args.config_dir.expanduser() if args.config_dir is not None else get_config_dir()
     endpoint = args.endpoint if args.endpoint is not None else prompt_value(
@@ -107,6 +115,18 @@ def run_install_wizard(args: argparse.Namespace) -> int:
         config_dir=target_dir,
     )
     print(f"Configuration saved to {config_path}")
+
+    if prompt_yes_no("Install the gateway as a system service?", default=False):
+        manager = get_service_manager()
+        service_config = build_service_config(
+            host="127.0.0.1",
+            port=DEFAULT_GATEWAY_PORT,
+            config_dir=target_dir,
+        )
+        try:
+            print(manager.install(service_config))
+        except ServiceManagerError as exc:
+            raise SystemExit(str(exc)) from exc
     return 0
 
 

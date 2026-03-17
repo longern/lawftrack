@@ -34,6 +34,7 @@ class CliTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0)
         self.assertIn("usage: lawftune", result.stdout)
         self.assertIn("install", result.stdout)
+        self.assertIn("train", result.stdout)
         self.assertIn("gateway", result.stdout)
 
     def test_version_flag(self) -> None:
@@ -198,6 +199,94 @@ class CliTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0)
         self.assertIn("Run or manage the lawftune gateway.", result.stdout)
+
+    def test_train_command_dispatches_to_worker(self) -> None:
+        sys.path.insert(0, str(ROOT / "src"))
+        try:
+            from lawftune.cli import main
+        finally:
+            sys.path.pop(0)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with mock.patch("lawftune.train.cli.run_train_worker", return_value=0) as mocked_run:
+                exit_code = main(["train", "--config-dir", temp_dir, "--job-id", "ftjob-123"])
+
+        self.assertEqual(exit_code, 0)
+        mocked_run.assert_called_once()
+        args = mocked_run.call_args.args[0]
+        self.assertEqual(args.config_dir, Path(temp_dir))
+        self.assertEqual(args.job_id, "ftjob-123")
+
+    def test_train_module_help(self) -> None:
+        result = subprocess.run(
+            [sys.executable, "-m", "lawftune.train", "--help"],
+            cwd=ROOT,
+            env=make_env(),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 0)
+        self.assertIn("Run a lawftune training worker.", result.stdout)
+
+    def test_train_worker_dispatches_to_normalized_method(self) -> None:
+        sys.path.insert(0, str(ROOT / "src"))
+        try:
+            from lawftune.train.cli import main
+        finally:
+            sys.path.pop(0)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            job_dir = Path(temp_dir) / "fine_tuning" / "jobs" / "ftjob-123"
+            job_dir.mkdir(parents=True)
+            (job_dir / "job.json").write_text(
+                json.dumps(
+                    {
+                        "id": "ftjob-123",
+                        "model": "Qwen/Qwen2.5-7B-Instruct",
+                        "training_file": "dataset-name",
+                        "method": {"type": "supervised"},
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with mock.patch("lawftune.train.cli.run_algorithm_job", return_value=0) as mocked_run:
+                exit_code = main(["--config-dir", temp_dir, "--job-id", "ftjob-123"])
+
+        self.assertEqual(exit_code, 0)
+        mocked_run.assert_called_once()
+        self.assertEqual(mocked_run.call_args.args[0], "sft")
+
+    def test_train_worker_can_run_explicit_lawf_action(self) -> None:
+        sys.path.insert(0, str(ROOT / "src"))
+        try:
+            from lawftune.train.cli import main
+        finally:
+            sys.path.pop(0)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            job_dir = Path(temp_dir) / "fine_tuning" / "jobs" / "ftjob-456"
+            job_dir.mkdir(parents=True)
+            (job_dir / "job.json").write_text(
+                json.dumps(
+                    {
+                        "id": "ftjob-456",
+                        "model": "Qwen/Qwen2.5-7B-Instruct",
+                        "training_file": "dataset-name",
+                        "method": {"type": "lawf"},
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with mock.patch("lawftune.train.cli.run_algorithm_job", return_value=0) as mocked_run:
+                exit_code = main(["lawf", "--config-dir", temp_dir, "--job-id", "ftjob-456"])
+
+        self.assertEqual(exit_code, 0)
+        mocked_run.assert_called_once()
+        self.assertEqual(mocked_run.call_args.args[0], "lawf")
 
     def test_gateway_install_dispatches_to_service_manager(self) -> None:
         sys.path.insert(0, str(ROOT / "src"))

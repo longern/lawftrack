@@ -11,8 +11,9 @@ from fastapi.responses import FileResponse
 from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 
+from lawftune.api.fine_tuning_api import build_router as build_fine_tuning_router
+from lawftune.api.files_api import build_router as build_files_router
 from lawftune.config import load_config
-from lawftune.fine_tuning_api import build_router as build_fine_tuning_router
 
 
 PACKAGE_FRONTEND_DIR = Path(__file__).resolve().parent / "_frontend"
@@ -86,6 +87,7 @@ def build_cors_middleware_options() -> dict[str, object]:
 def create_app(config_dir: Path | None = None) -> FastAPI:
     app = FastAPI(title="lawftune", version="0.1.0")
     app.add_middleware(CORSMiddleware, **build_cors_middleware_options())
+    app.include_router(build_files_router(config_dir))
     app.include_router(build_fine_tuning_router(config_dir))
     if PACKAGE_FRONTEND_INDEX.exists() and PACKAGE_FRONTEND_ASSETS_DIR.exists():
         app.mount("/assets", StaticFiles(directory=PACKAGE_FRONTEND_ASSETS_DIR), name="assets")

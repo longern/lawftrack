@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from lawftune.config import get_config_dir
+from lawftune.train.algorithms import normalize_training_method
 
 
 TERMINAL_JOB_STATUSES = {"cancelled", "failed", "succeeded"}
@@ -57,6 +58,7 @@ class FineTuningJobStore:
         stdout_path = job_dir / "stdout.log"
         stderr_path = job_dir / "stderr.log"
         process = self._spawn_job_worker(job_id, stdout_path, stderr_path)
+        method = normalize_training_method(payload.get("method"))
 
         job = {
             "id": job_id,
@@ -69,7 +71,7 @@ class FineTuningJobStore:
             "hyperparameters": payload.get("hyperparameters", {}),
             "integrations": payload.get("integrations", []),
             "metadata": payload.get("metadata", {}),
-            "method": payload.get("method", {"type": "supervised"}),
+            "method": method,
             "model": payload["model"],
             "organization_id": "org-lawftune",
             "result_files": [],
@@ -114,7 +116,7 @@ class FineTuningJobStore:
         command = [
             sys.executable,
             "-m",
-            "lawftune.fine_tuning_worker",
+            "lawftune.train",
             "--config-dir",
             str(self.config_dir),
             "--job-id",

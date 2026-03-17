@@ -61,6 +61,23 @@ def build_parser() -> argparse.ArgumentParser:
         help="directory used to store config (default: ~/.lawftune or LAWFTUNE_HOME)",
     )
 
+    train_parser = subparsers.add_parser(
+        "train",
+        help="run a training worker",
+        description="Run a lawftune training worker.",
+    )
+    train_parser.add_argument(
+        "--config-dir",
+        type=Path,
+        required=True,
+        help="directory used to load runtime state",
+    )
+    train_parser.add_argument(
+        "--job-id",
+        required=True,
+        help="fine-tuning job identifier",
+    )
+
     gateway_parser = subparsers.add_parser(
         "gateway",
         help="run or manage the lawftune gateway",
@@ -180,12 +197,21 @@ def run_gateway_command(args: argparse.Namespace) -> int:
         raise SystemExit(str(exc)) from exc
 
 
+def run_train_command(args: argparse.Namespace) -> int:
+    from lawftune.train.cli import run_train_worker
+
+    args.config_dir = args.config_dir.expanduser()
+    return run_train_worker(args)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
 
     if args.command == "install":
         return run_install_wizard(args)
+    if args.command == "train":
+        return run_train_command(args)
     if args.command == "gateway":
         return run_gateway_command(args)
 

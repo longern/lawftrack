@@ -172,7 +172,7 @@ class ServerTests(unittest.TestCase):
         sys.path.insert(0, str(ROOT / "src"))
         try:
             from fastapi.testclient import TestClient
-            import lawftune.fine_tuning_jobs as jobs_module
+            import lawftune.api.fine_tuning_jobs as jobs_module
             import lawftune.server as server_module
         finally:
             sys.path.pop(0)
@@ -231,6 +231,100 @@ class ServerTests(unittest.TestCase):
                         self.assertEqual(cancelled_job["status"], "cancelled")
                         self.assertIsNotNone(cancelled_job["finished_at"])
                         mocked_kill.assert_called_once_with(4242, jobs_module.signal.SIGTERM)
+
+    def test_create_job_normalizes_supported_method(self) -> None:
+        sys.path.insert(0, str(ROOT / "src"))
+        try:
+            from fastapi.testclient import TestClient
+            import lawftune.api.fine_tuning_jobs as jobs_module
+            import lawftune.server as server_module
+        finally:
+            sys.path.pop(0)
+
+        class DummyPopen:
+            def __init__(self, *args, **kwargs) -> None:
+                self.pid = 4343
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with mock.patch.object(jobs_module.subprocess, "Popen", DummyPopen):
+                client = TestClient(server_module.create_app(Path(temp_dir)))
+                response = client.post(
+                    "/v1/fine_tuning/jobs",
+                    json={
+                        "model": "Qwen/Qwen2.5-7B-Instruct",
+                        "training_file": "dataset-name",
+                        "method": {"type": "supervised"},
+                    },
+                )
+
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json()["method"]["type"], "sft")
+
+    def test_create_job_rejects_unknown_method(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            client = self._create_client(temp_dir)
+            response = client.post(
+                "/v1/fine_tuning/jobs",
+                json={
+                    "model": "Qwen/Qwen2.5-7B-Instruct",
+                    "training_file": "dataset-name",
+                    "method": {"type": "unknown"},
+                },
+            )
+
+            self.assertEqual(response.status_code, 400)
+            self.assertIn("Unsupported fine-tuning method", response.json()["detail"])
+
+    def test_files_api_supports_upload_list_retrieve_content_and_delete(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            client = self._create_client(temp_dir)
+
+            upload_response = client.post(
+                "/v1/files",
+                data={"purpose": "fine-tune"},
+                files={"file": ("train.jsonl", b'{\"messages\": []}\n', "application/jsonl")},
+            )
+
+            self.assertEqual(upload_response.status_code, 200)
+            created_file = upload_response.json()
+            self.assertEqual(created_file["object"], "file")
+            self.assertEqual(created_file["filename"], "train.jsonl")
+            self.assertEqual(created_file["purpose"], "fine-tune")
+            self.assertEqual(created_file["bytes"], len(b'{\"messages\": []}\n'))
+
+            list_response = client.get("/v1/files")
+            self.assertEqual(list_response.status_code, 200)
+            list_payload = list_response.json()
+            self.assertEqual(list_payload["object"], "list")
+            self.assertEqual(len(list_payload["data"]), 1)
+            self.assertEqual(list_payload["data"][0]["id"], created_file["id"])
+
+            retrieve_response = client.get(f"/v1/files/{created_file['id']}")
+            self.assertEqual(retrieve_response.status_code, 200)
+            self.assertEqual(retrieve_response.json()["id"], created_file["id"])
+
+            content_response = client.get(f"/v1/files/{created_file['id']}/content")
+            self.assertEqual(content_response.status_code, 200)
+            self.assertEqual(content_response.content, b'{\"messages\": []}\n')
+
+            delete_response = client.delete(f"/v1/files/{created_file['id']}")
+            self.assertEqual(delete_response.status_code, 200)
+            self.assertEqual(
+                delete_response.json(),
+                {
+                    "id": created_file["id"],
+                    "object": "file",
+                    "deleted": True,
+                },
+            )
+
+    def test_retrieve_unknown_file_returns_404(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            client = self._create_client(temp_dir)
+            response = client.get("/v1/files/file-missing")
+
+            self.assertEqual(response.status_code, 404)
+            self.assertIn("File not found", response.json()["detail"])
 
     def test_retrieve_unknown_fine_tuning_job_returns_404(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

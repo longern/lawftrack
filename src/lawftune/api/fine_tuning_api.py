@@ -8,7 +8,8 @@ from fastapi import HTTPException
 from pydantic import BaseModel
 from pydantic import Field
 
-from lawftune.fine_tuning_jobs import FineTuningJobStore
+from lawftune.api.fine_tuning_jobs import FineTuningJobStore
+from lawftune.train.algorithms import normalize_training_method
 
 
 class CreateFineTuningJobRequest(BaseModel):
@@ -42,7 +43,12 @@ def build_router(config_dir: Path | None = None) -> APIRouter:
 
     @router.post("/jobs")
     def create_fine_tuning_job(payload: CreateFineTuningJobRequest) -> dict[str, Any]:
-        return store.create_job(serialize_model(payload))
+        serialized = serialize_model(payload)
+        try:
+            serialized["method"] = normalize_training_method(serialized.get("method"))
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return store.create_job(serialized)
 
     @router.get("/jobs")
     def list_fine_tuning_jobs() -> dict[str, Any]:

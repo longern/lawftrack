@@ -28,6 +28,7 @@ setup(
         "server": [
             "fastapi",
             "httpx",
+            "python-multipart",
             "uvicorn",
         ]
     },

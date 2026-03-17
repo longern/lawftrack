@@ -1,24 +1,24 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import httpx
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from fastapi.responses import FileResponse
 from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 
 from lawftune.config import load_config
-from lawftune.fine_tuning_api import router as fine_tuning_router
+from lawftune.fine_tuning_api import build_router as build_fine_tuning_router
 
 
 PACKAGE_FRONTEND_DIR = Path(__file__).resolve().parent / "_frontend"
 FRONTEND_DIR = Path(__file__).resolve().parents[2] / "frontend"
-FRONTEND_SRC_DIR = FRONTEND_DIR / "src"
 PACKAGE_FRONTEND_ASSETS_DIR = PACKAGE_FRONTEND_DIR / "assets"
 PACKAGE_FRONTEND_INDEX = PACKAGE_FRONTEND_DIR / "index.html"
-SOURCE_FRONTEND_INDEX = FRONTEND_DIR / "index.html"
 HOP_BY_HOP_HEADERS = {
     "connection",
     "content-length",
@@ -31,6 +31,7 @@ HOP_BY_HOP_HEADERS = {
     "transfer-encoding",
     "upgrade",
 }
+DEFAULT_CORS_ORIGIN_REGEX = r"^https?://(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$"
 
 
 def build_vllm_url(base_url: str, path: str, query: str) -> str:
@@ -60,20 +61,39 @@ def sanitize_inbound_headers(headers: httpx.Headers) -> dict[str, str]:
     }
 
 
+def build_cors_middleware_options() -> dict[str, object]:
+    configured_origins = os.environ.get("LAWFTUNE_CORS_ALLOW_ORIGINS", "").strip()
+    configured_regex = os.environ.get("LAWFTUNE_CORS_ALLOW_ORIGIN_REGEX", "").strip()
+    options: dict[str, object] = {
+        "allow_credentials": True,
+        "allow_methods": ["*"],
+        "allow_headers": ["*"],
+    }
+    if configured_origins:
+        options["allow_origins"] = [
+            origin.strip()
+            for origin in configured_origins.split(",")
+            if origin.strip()
+        ]
+        return options
+    if configured_regex:
+        options["allow_origin_regex"] = configured_regex
+        return options
+    options["allow_origin_regex"] = DEFAULT_CORS_ORIGIN_REGEX
+    return options
+
+
 def create_app(config_dir: Path | None = None) -> FastAPI:
     app = FastAPI(title="lawftune", version="0.1.0")
-    app.include_router(fine_tuning_router)
+    app.add_middleware(CORSMiddleware, **build_cors_middleware_options())
+    app.include_router(build_fine_tuning_router(config_dir))
     if PACKAGE_FRONTEND_INDEX.exists() and PACKAGE_FRONTEND_ASSETS_DIR.exists():
         app.mount("/assets", StaticFiles(directory=PACKAGE_FRONTEND_ASSETS_DIR), name="assets")
-    elif SOURCE_FRONTEND_INDEX.exists() and FRONTEND_SRC_DIR.exists():
-        app.mount("/src", StaticFiles(directory=FRONTEND_SRC_DIR), name="src")
 
     @app.get("/", response_class=HTMLResponse)
     def index():
         if PACKAGE_FRONTEND_INDEX.exists():
             return FileResponse(PACKAGE_FRONTEND_INDEX)
-        if SOURCE_FRONTEND_INDEX.exists():
-            return FileResponse(SOURCE_FRONTEND_INDEX)
         return HTMLResponse(
             "<!DOCTYPE html><html><body><h1>lawftune gateway</h1>"
             "<p>The frontend UI is not bundled in this installation.</p>"

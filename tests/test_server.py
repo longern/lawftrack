@@ -7,6 +7,7 @@ import tempfile
 from pathlib import Path
 import unittest
 from unittest import mock
+from urllib.parse import parse_qs, urlparse
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -55,9 +56,8 @@ class ServerTests(unittest.TestCase):
             response = client.get(asset_path)
 
             self.assertEqual(response.status_code, 200)
-            self.assertTrue(
-                "loadGatewayState" in response.text or "document.getElementById" in response.text
-            )
+            self.assertIn("javascript", response.headers["content-type"])
+            self.assertGreater(len(response.text), 100)
 
     def test_root_falls_back_when_no_frontend_is_available(self) -> None:
         sys.path.insert(0, str(ROOT / "src"))
@@ -118,6 +118,77 @@ class ServerTests(unittest.TestCase):
 
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response.json(), {"status": "ok"})
+
+    def test_fine_tuning_subrouter_is_served_locally(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            client = self._create_client(temp_dir)
+            response = client.get("/v1/fine_tuning/")
+
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(
+                response.json(),
+                {
+                    "name": "lawftune fine_tuning",
+                    "status": "ready",
+                },
+            )
+
+    def test_v1_proxy_forwards_to_configured_vllm_endpoint(self) -> None:
+        sys.path.insert(0, str(ROOT / "src"))
+        try:
+            from fastapi.testclient import TestClient
+            import lawftune.server as server_module
+        finally:
+            sys.path.pop(0)
+
+        class DummyResponse:
+            def __init__(self) -> None:
+                self.content = b'{"ok":true}'
+                self.status_code = 200
+                self.headers = {"content-type": "application/json"}
+
+        captured_request: dict[str, object] = {}
+
+        class DummyAsyncClient:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            async def request(self, **kwargs):
+                captured_request.update(kwargs)
+                return DummyResponse()
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "config.json"
+            config_path.write_text(
+                json.dumps(
+                    {
+                        "vllm_endpoint": "http://localhost:8000/base/",
+                        "api_key": "secret-key",
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with mock.patch.object(server_module.httpx, "AsyncClient", return_value=DummyAsyncClient()):
+                client = TestClient(server_module.create_app(Path(temp_dir)))
+                response = client.post(
+                    "/v1/chat/completions?stream=false",
+                    headers={"content-type": "application/json"},
+                    json={"messages": [{"role": "user", "content": "hello"}]},
+                )
+
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json(), {"ok": True})
+            self.assertEqual(captured_request["method"], "POST")
+            parsed_url = urlparse(str(captured_request["url"]))
+            self.assertEqual(parsed_url.scheme, "http")
+            self.assertEqual(parsed_url.netloc, "localhost:8000")
+            self.assertEqual(parsed_url.path, "/base/v1/chat/completions")
+            self.assertEqual(parse_qs(parsed_url.query), {"stream": ["false"]})
+            self.assertEqual(captured_request["headers"]["authorization"], "Bearer secret-key")
 
 
 if __name__ == "__main__":

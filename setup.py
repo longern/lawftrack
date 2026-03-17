@@ -27,6 +27,7 @@ setup(
     extras_require={
         "server": [
             "fastapi",
+            "httpx",
             "uvicorn",
         ]
     },

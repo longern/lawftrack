@@ -32,7 +32,9 @@ class CliTests(unittest.TestCase):
         )
 
         self.assertEqual(result.returncode, 0)
-        self.assertIn("lawftune CLI is ready.", result.stdout)
+        self.assertIn("usage: lawftune", result.stdout)
+        self.assertIn("install", result.stdout)
+        self.assertIn("gateway", result.stdout)
 
     def test_version_flag(self) -> None:
         result = subprocess.run(
@@ -117,7 +119,14 @@ class CliTests(unittest.TestCase):
             self.assertEqual(service_config.host, "127.0.0.1")
             self.assertEqual(service_config.port, 5293)
             self.assertEqual(service_config.config_dir, Path(temp_dir))
-            self.assertEqual(mocked_print.call_args_list[-1], mock.call("gateway installed"))
+            self.assertEqual(
+                mocked_print.call_args_list,
+                [
+                    mock.call(f"Configuration saved to {Path(temp_dir) / 'config.json'}"),
+                    mock.call("gateway installed"),
+                    mock.call("Gateway URL: http://127.0.0.1:5293"),
+                ],
+            )
 
     def test_install_wizard_skips_gateway_service_when_declined(self) -> None:
         sys.path.insert(0, str(ROOT / "src"))
@@ -224,7 +233,13 @@ class CliTests(unittest.TestCase):
             self.assertEqual(service_config.host, "0.0.0.0")
             self.assertEqual(service_config.port, 9002)
             self.assertEqual(service_config.config_dir, Path(temp_dir))
-            mocked_print.assert_called_once_with("installed")
+            self.assertEqual(
+                mocked_print.call_args_list,
+                [
+                    mock.call("installed"),
+                    mock.call("Gateway URL: http://localhost:9002"),
+                ],
+            )
 
     def test_gateway_status_dispatches_to_service_manager(self) -> None:
         sys.path.insert(0, str(ROOT / "src"))

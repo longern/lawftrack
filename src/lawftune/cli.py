@@ -19,6 +19,14 @@ from lawftune.service import (
 DEFAULT_GATEWAY_PORT = 5293
 
 
+def gateway_access_url(host: str, port: int) -> str:
+    if host in {"0.0.0.0", "::", ""}:
+        display_host = "localhost"
+    else:
+        display_host = host
+    return f"http://{display_host}:{port}"
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="lawftune",
@@ -125,6 +133,7 @@ def run_install_wizard(args: argparse.Namespace) -> int:
         )
         try:
             print(manager.install(service_config))
+            print(f"Gateway URL: {gateway_access_url(service_config.host, service_config.port)}")
         except ServiceManagerError as exc:
             raise SystemExit(str(exc)) from exc
     return 0
@@ -161,6 +170,7 @@ def run_gateway_command(args: argparse.Namespace) -> int:
                 config_dir=config_dir,
             )
             print(manager.install(service_config))
+            print(f"Gateway URL: {gateway_access_url(service_config.host, service_config.port)}")
             return 0
 
         action = getattr(manager, args.action)
@@ -179,7 +189,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "gateway":
         return run_gateway_command(args)
 
-    print("lawftune CLI is ready.")
+    parser.print_help()
     return 0
 
 

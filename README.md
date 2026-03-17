@@ -4,7 +4,30 @@
 
 ## Quick Start
 
-Install the project in editable mode:
+For end users, use the installer:
+
+```bash
+./install.sh
+```
+
+If you want to skip packaging the browser UI:
+
+```bash
+./install.sh --headless
+```
+
+That installer will:
+
+- build the Vite frontend bundle
+- create an isolated virtualenv under `~/.lawftune/runtime`
+- install `lawftune` and the gateway dependencies
+- create a `lawftune` launcher script
+- offer to add the launcher directory to your shell `PATH`
+- automatically start the `lawftune install` setup wizard
+
+When `--headless` is used, the gateway API is still installed, but the packaged web UI is omitted.
+
+For developers, install the project in editable mode:
 
 ```bash
 python3 -m venv .venv
@@ -77,6 +100,8 @@ cd frontend
 npm run build
 ```
 
+That build outputs packaged assets into [src/lawftune/_frontend](/Users/longsiyu/workspace/lawftune/src/lawftune/_frontend).
+
 Available endpoints:
 
 - `GET /` serves the local gateway UI
@@ -114,6 +139,8 @@ You can define the gateway host, port, and config directory during installation:
 ```bash
 lawftune gateway install --host 127.0.0.1 --port 5293
 ```
+
+After successful service installation, `lawftune` prints the local gateway URL so users can open it directly.
 
 ## Tests
 

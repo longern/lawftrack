@@ -6,6 +6,7 @@ import sys
 import tempfile
 from pathlib import Path
 import unittest
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -57,6 +58,25 @@ class ServerTests(unittest.TestCase):
             self.assertTrue(
                 "loadGatewayState" in response.text or "document.getElementById" in response.text
             )
+
+    def test_root_falls_back_when_no_frontend_is_available(self) -> None:
+        sys.path.insert(0, str(ROOT / "src"))
+        try:
+            from fastapi.testclient import TestClient
+            import lawftune.server as server_module
+        finally:
+            sys.path.pop(0)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with mock.patch.object(server_module, "PACKAGE_FRONTEND_INDEX", Path("/nonexistent/index.html")):
+                with mock.patch.object(server_module, "PACKAGE_FRONTEND_ASSETS_DIR", Path("/nonexistent/assets")):
+                    with mock.patch.object(server_module, "SOURCE_FRONTEND_INDEX", Path("/nonexistent/source-index.html")):
+                        with mock.patch.object(server_module, "FRONTEND_SRC_DIR", Path("/nonexistent/source-src")):
+                            client = TestClient(server_module.create_app(Path(temp_dir)))
+                            response = client.get("/")
+
+            self.assertEqual(response.status_code, 200)
+            self.assertIn("frontend UI is not bundled", response.text)
 
     def test_status_endpoint(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

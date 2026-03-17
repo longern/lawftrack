@@ -17,6 +17,13 @@ setup(
     python_requires=">=3.10",
     package_dir={"": "src"},
     packages=find_packages(where="src"),
+    include_package_data=True,
+    package_data={
+        "lawftune": [
+            "_frontend/index.html",
+            "_frontend/assets/*",
+        ]
+    },
     extras_require={
         "server": [
             "fastapi",

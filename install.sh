@@ -3,8 +3,11 @@
 set -eu
 
 APP_NAME="lawftune"
+REPO_URL="https://github.com/longern/lawftune"
 OS_NAME="$(uname -s)"
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+SOURCE_DIR="$SCRIPT_DIR"
+TEMP_SOURCE_DIR=""
 DEFAULT_INSTALL_DIR="$HOME/.lawftune/runtime"
 DEFAULT_BIN_DIR="$HOME/.local/bin"
 INSTALL_DIR="$DEFAULT_INSTALL_DIR"
@@ -111,6 +114,42 @@ ensure_python() {
 }
 
 
+ensure_git() {
+  if ! command -v git >/dev/null 2>&1; then
+    printf 'git is required but was not found in PATH.\n' >&2
+    exit 1
+  fi
+}
+
+
+cleanup_temp_source_dir() {
+  if [ -n "$TEMP_SOURCE_DIR" ] && [ -d "$TEMP_SOURCE_DIR" ]; then
+    rm -rf "$TEMP_SOURCE_DIR"
+  fi
+}
+
+
+is_repo_root() {
+  candidate_dir="$1"
+  [ -f "${candidate_dir}/setup.py" ] && [ -d "${candidate_dir}/src/lawftune" ]
+}
+
+
+prepare_source_dir() {
+  if is_repo_root "$SCRIPT_DIR"; then
+    SOURCE_DIR="$SCRIPT_DIR"
+    return
+  fi
+
+  ensure_git
+  TEMP_SOURCE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/${APP_NAME}-install.XXXXXX")"
+  trap cleanup_temp_source_dir EXIT INT TERM HUP
+  printf 'Cloning %s into %s\n' "$REPO_URL" "$TEMP_SOURCE_DIR"
+  git clone --depth 1 "$REPO_URL" "$TEMP_SOURCE_DIR"
+  SOURCE_DIR="$TEMP_SOURCE_DIR"
+}
+
+
 ensure_frontend_tooling() {
   if [ "$HEADLESS_MODE" -eq 1 ]; then
     return
@@ -134,7 +173,7 @@ create_virtualenv() {
 install_package() {
   venv_dir="$1"
   python_bin="${venv_dir}/bin/python"
-  package_ref="${SCRIPT_DIR}[server]"
+  package_ref="${SOURCE_DIR}[server]"
   "$python_bin" -m pip install --upgrade "$package_ref"
 }
 
@@ -147,7 +186,7 @@ build_frontend() {
   fi
   printf 'Installing frontend dependencies...\n'
   (
-    cd "${SCRIPT_DIR}/frontend"
+    cd "${SOURCE_DIR}/frontend"
     npm install
     printf 'Building frontend assets...\n'
     npm run build
@@ -156,7 +195,7 @@ build_frontend() {
 
 
 clear_packaged_frontend() {
-  packaged_dir="${SCRIPT_DIR}/src/lawftune/_frontend"
+  packaged_dir="${SOURCE_DIR}/src/lawftune/_frontend"
   mkdir -p "$packaged_dir"
   find "$packaged_dir" -mindepth 1 ! -name '.gitignore' -exec rm -rf {} +
 }
@@ -262,6 +301,7 @@ done
 
 ensure_supported_os
 ensure_python
+prepare_source_dir
 ensure_frontend_tooling
 
 INSTALL_DIR="$(expand_path "$INSTALL_DIR")"

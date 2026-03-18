@@ -10,6 +10,12 @@ For end users, use the installer:
 ./install.sh
 ```
 
+You can also run the installer remotely:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/longern/lawftune/main/install.sh | sh
+```
+
 If you want to skip packaging the browser UI:
 
 ```bash

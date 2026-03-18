@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import signal
 import subprocess
-import time
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 import re
@@ -165,18 +165,14 @@ def run_sft_job(job: dict[str, Any], config_dir: Path) -> int:
 
 
 def run_lawf_job(job: dict[str, Any], config_dir: Path) -> int:
-    should_exit = False
+    try:
+        from lawftune.train.lawf_runner import run_lawf_training
 
-    def handle_exit(signum, frame) -> None:  # type: ignore[no-untyped-def]
-        nonlocal should_exit
-        should_exit = True
-
-    signal.signal(signal.SIGTERM, handle_exit)
-    signal.signal(signal.SIGINT, handle_exit)
-
-    while not should_exit:
-        time.sleep(1)
-    return 0
+        run_lawf_training(job, config_dir)
+        return 0
+    except Exception as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
 
 
 def run_algorithm_job(

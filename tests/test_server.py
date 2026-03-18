@@ -15,7 +15,8 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 @unittest.skipUnless(
-    importlib.util.find_spec("fastapi") and importlib.util.find_spec("fastapi.testclient"),
+    importlib.util.find_spec("fastapi")
+    and importlib.util.find_spec("fastapi.testclient"),
     "FastAPI server dependencies are not installed",
 )
 class ServerTests(unittest.TestCase):
@@ -37,7 +38,9 @@ class ServerTests(unittest.TestCase):
             self.assertEqual(response.status_code, 200)
             self.assertIn("text/html", response.headers["content-type"])
             self.assertIn("lawftune gateway", response.text)
-            self.assertTrue("/src/main.js" in response.text or "/assets/" in response.text)
+            self.assertTrue(
+                "/src/main.js" in response.text or "/assets/" in response.text
+            )
 
     def test_frontend_javascript_asset_is_served(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -69,8 +72,14 @@ class ServerTests(unittest.TestCase):
             sys.path.pop(0)
 
         with tempfile.TemporaryDirectory() as temp_dir:
-            with mock.patch.object(server_module, "PACKAGE_FRONTEND_INDEX", Path("/nonexistent/index.html")):
-                with mock.patch.object(server_module, "PACKAGE_FRONTEND_ASSETS_DIR", Path("/nonexistent/assets")):
+            with mock.patch.object(
+                server_module, "PACKAGE_FRONTEND_INDEX", Path("/nonexistent/index.html")
+            ):
+                with mock.patch.object(
+                    server_module,
+                    "PACKAGE_FRONTEND_ASSETS_DIR",
+                    Path("/nonexistent/assets"),
+                ):
                     client = TestClient(server_module.create_app(Path(temp_dir)))
                     response = client.get("/")
 
@@ -91,7 +100,7 @@ class ServerTests(unittest.TestCase):
             config_path.write_text(
                 json.dumps(
                     {
-                        "vllm_endpoint": "http://localhost:8000",
+                        "vllm_endpoint": "http://localhost:8000/v1",
                         "api_key": "secret",
                     }
                 ),
@@ -105,7 +114,7 @@ class ServerTests(unittest.TestCase):
             self.assertEqual(
                 response.json(),
                 {
-                    "vllm_endpoint": "http://localhost:8000",
+                    "vllm_endpoint": "http://localhost:8000/v1",
                     "has_api_key": True,
                 },
             )
@@ -143,7 +152,9 @@ class ServerTests(unittest.TestCase):
 
         with mock.patch.dict(
             os.environ,
-            {"LAWFTUNE_CORS_ALLOW_ORIGINS": "http://10.0.0.8:4173,https://lab.example.com"},
+            {
+                "LAWFTUNE_CORS_ALLOW_ORIGINS": "http://10.0.0.8:4173,https://lab.example.com"
+            },
             clear=False,
         ):
             options = server_module.build_cors_middleware_options()
@@ -185,7 +196,9 @@ class ServerTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as temp_dir:
             with mock.patch.object(jobs_module.subprocess, "Popen", DummyPopen):
-                with mock.patch.object(jobs_module, "process_is_running", return_value=True):
+                with mock.patch.object(
+                    jobs_module, "process_is_running", return_value=True
+                ):
                     with mock.patch.object(jobs_module.os, "kill") as mocked_kill:
                         client = TestClient(server_module.create_app(Path(temp_dir)))
 
@@ -205,12 +218,20 @@ class ServerTests(unittest.TestCase):
                         self.assertEqual(created_job["object"], "fine_tuning.job")
                         self.assertEqual(created_job["status"], "running")
                         self.assertEqual(created_job["training_file"], "file-train-123")
-                        self.assertEqual(created_job["validation_file"], "file-valid-456")
+                        self.assertEqual(
+                            created_job["validation_file"], "file-valid-456"
+                        )
                         self.assertEqual(created_job["suffix"], "legal-draft")
                         self.assertEqual(created_job["metadata"], {"dataset": "civil"})
                         self.assertEqual(created_job["process"]["pid"], 4242)
 
-                        job_path = Path(temp_dir) / "fine_tuning" / "jobs" / created_job["id"] / "job.json"
+                        job_path = (
+                            Path(temp_dir)
+                            / "fine_tuning"
+                            / "jobs"
+                            / created_job["id"]
+                            / "job.json"
+                        )
                         self.assertTrue(job_path.exists())
 
                         list_response = client.get("/v1/fine_tuning/jobs")
@@ -219,18 +240,28 @@ class ServerTests(unittest.TestCase):
                         self.assertEqual(list_payload["object"], "list")
                         self.assertFalse(list_payload["has_more"])
                         self.assertEqual(len(list_payload["data"]), 1)
-                        self.assertEqual(list_payload["data"][0]["id"], created_job["id"])
+                        self.assertEqual(
+                            list_payload["data"][0]["id"], created_job["id"]
+                        )
 
-                        retrieve_response = client.get(f"/v1/fine_tuning/jobs/{created_job['id']}")
+                        retrieve_response = client.get(
+                            f"/v1/fine_tuning/jobs/{created_job['id']}"
+                        )
                         self.assertEqual(retrieve_response.status_code, 200)
-                        self.assertEqual(retrieve_response.json()["id"], created_job["id"])
+                        self.assertEqual(
+                            retrieve_response.json()["id"], created_job["id"]
+                        )
 
-                        cancel_response = client.post(f"/v1/fine_tuning/jobs/{created_job['id']}/cancel")
+                        cancel_response = client.post(
+                            f"/v1/fine_tuning/jobs/{created_job['id']}/cancel"
+                        )
                         self.assertEqual(cancel_response.status_code, 200)
                         cancelled_job = cancel_response.json()
                         self.assertEqual(cancelled_job["status"], "cancelled")
                         self.assertIsNotNone(cancelled_job["finished_at"])
-                        mocked_kill.assert_called_once_with(4242, jobs_module.signal.SIGTERM)
+                        mocked_kill.assert_called_once_with(
+                            4242, jobs_module.signal.SIGTERM
+                        )
 
     def test_create_job_normalizes_supported_method(self) -> None:
         sys.path.insert(0, str(ROOT / "src"))
@@ -282,7 +313,9 @@ class ServerTests(unittest.TestCase):
             upload_response = client.post(
                 "/v1/files",
                 data={"purpose": "fine-tune"},
-                files={"file": ("train.jsonl", b'{\"messages\": []}\n', "application/jsonl")},
+                files={
+                    "file": ("train.jsonl", b'{"messages": []}\n', "application/jsonl")
+                },
             )
 
             self.assertEqual(upload_response.status_code, 200)
@@ -290,7 +323,7 @@ class ServerTests(unittest.TestCase):
             self.assertEqual(created_file["object"], "file")
             self.assertEqual(created_file["filename"], "train.jsonl")
             self.assertEqual(created_file["purpose"], "fine-tune")
-            self.assertEqual(created_file["bytes"], len(b'{\"messages\": []}\n'))
+            self.assertEqual(created_file["bytes"], len(b'{"messages": []}\n'))
 
             list_response = client.get("/v1/files")
             self.assertEqual(list_response.status_code, 200)
@@ -305,7 +338,7 @@ class ServerTests(unittest.TestCase):
 
             content_response = client.get(f"/v1/files/{created_file['id']}/content")
             self.assertEqual(content_response.status_code, 200)
-            self.assertEqual(content_response.content, b'{\"messages\": []}\n')
+            self.assertEqual(content_response.content, b'{"messages": []}\n')
 
             delete_response = client.delete(f"/v1/files/{created_file['id']}")
             self.assertEqual(delete_response.status_code, 200)
@@ -373,10 +406,12 @@ class ServerTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            with mock.patch.object(server_module.httpx, "AsyncClient", return_value=DummyAsyncClient()):
+            with mock.patch.object(
+                server_module.httpx, "AsyncClient", return_value=DummyAsyncClient()
+            ):
                 client = TestClient(server_module.create_app(Path(temp_dir)))
                 response = client.post(
-                    "/v1/chat/completions?stream=false",
+                    "/chat/completions?stream=false",
                     headers={"content-type": "application/json"},
                     json={"messages": [{"role": "user", "content": "hello"}]},
                 )
@@ -387,9 +422,11 @@ class ServerTests(unittest.TestCase):
             parsed_url = urlparse(str(captured_request["url"]))
             self.assertEqual(parsed_url.scheme, "http")
             self.assertEqual(parsed_url.netloc, "localhost:8000")
-            self.assertEqual(parsed_url.path, "/base/v1/chat/completions")
+            self.assertEqual(parsed_url.path, "/base/chat/completions")
             self.assertEqual(parse_qs(parsed_url.query), {"stream": ["false"]})
-            self.assertEqual(captured_request["headers"]["authorization"], "Bearer secret-key")
+            self.assertEqual(
+                captured_request["headers"]["authorization"], "Bearer secret-key"
+            )
 
 
 if __name__ == "__main__":

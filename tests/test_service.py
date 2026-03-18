@@ -90,6 +90,7 @@ class ServiceManagerTests(unittest.TestCase):
                         "/tmp/lawftune-config",
                     ],
                 )
+                self.assertTrue(manager.is_installed())
 
     def test_systemd_install_writes_service_file(self) -> None:
         manager = SystemdUserServiceManager()
@@ -110,6 +111,7 @@ class ServiceManagerTests(unittest.TestCase):
                 self.assertTrue(service_path.exists())
                 self.assertIn("ExecStart=/usr/bin/python3 -m lawftune gateway run", service_path.read_text(encoding="utf-8"))
                 self.assertEqual(mocked_command.call_count, 2)
+                self.assertTrue(manager.is_installed())
 
     def test_windows_install_uses_schtasks(self) -> None:
         manager = WindowsTaskServiceManager()
@@ -127,6 +129,14 @@ class ServiceManagerTests(unittest.TestCase):
         mocked_command.assert_called_once()
         command = mocked_command.call_args.args[0]
         self.assertEqual(command[:6], ["schtasks", "/create", "/f", "/tn", "lawftune-gateway", "/sc"])
+
+    def test_windows_is_installed_checks_task_presence(self) -> None:
+        manager = WindowsTaskServiceManager()
+
+        with mock.patch.object(manager, "_run_command") as mocked_command:
+            self.assertTrue(manager.is_installed())
+
+        mocked_command.assert_called_once_with(["schtasks", "/query", "/tn", "lawftune-gateway"])
 
 
 if __name__ == "__main__":

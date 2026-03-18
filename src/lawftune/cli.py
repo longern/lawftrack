@@ -39,22 +39,22 @@ def build_parser() -> argparse.ArgumentParser:
     )
     subparsers = parser.add_subparsers(dest="command")
 
-    install_parser = subparsers.add_parser(
-        "install",
-        help="run the installation wizard",
+    wizard_parser = subparsers.add_parser(
+        "wizard",
+        help="run the setup wizard",
         description="Configure lawftune for a vLLM endpoint.",
     )
-    install_parser.add_argument(
+    wizard_parser.add_argument(
         "--endpoint",
         default=None,
         help=f"vLLM endpoint address (default: {DEFAULT_VLLM_ENDPOINT})",
     )
-    install_parser.add_argument(
+    wizard_parser.add_argument(
         "--api-key",
         default=None,
         help="API key for the vLLM endpoint (default: empty)",
     )
-    install_parser.add_argument(
+    wizard_parser.add_argument(
         "--config-dir",
         type=Path,
         default=None,
@@ -76,6 +76,28 @@ def build_parser() -> argparse.ArgumentParser:
         "--job-id",
         required=True,
         help="fine-tuning job identifier",
+    )
+
+    update_parser = subparsers.add_parser(
+        "update",
+        help="update lawftune",
+        description="Update lawftune from the current install source, a local path, or a git repository.",
+    )
+    update_parser.add_argument(
+        "source",
+        nargs="?",
+        default=None,
+        help="optional update source: local directory, git repository URL, or pip requirement",
+    )
+    update_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="print the pip command without executing it",
+    )
+    update_parser.add_argument(
+        "--yes",
+        action="store_true",
+        help="accept the gateway restart prompt automatically",
     )
 
     gateway_parser = subparsers.add_parser(
@@ -124,7 +146,7 @@ def prompt_yes_no(label: str, default: bool = False) -> bool:
     return value in {"y", "yes"}
 
 
-def run_install_wizard(args: argparse.Namespace) -> int:
+def run_wizard(args: argparse.Namespace) -> int:
     target_dir = args.config_dir.expanduser() if args.config_dir is not None else get_config_dir()
     endpoint = args.endpoint if args.endpoint is not None else prompt_value(
         "vLLM endpoint",
@@ -204,14 +226,22 @@ def run_train_command(args: argparse.Namespace) -> int:
     return run_train_worker(args)
 
 
+def run_update_command(args: argparse.Namespace) -> int:
+    from lawftune.update import run_update
+
+    return run_update(args.source, dry_run=args.dry_run, assume_yes=args.yes)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
 
-    if args.command == "install":
-        return run_install_wizard(args)
+    if args.command == "wizard":
+        return run_wizard(args)
     if args.command == "train":
         return run_train_command(args)
+    if args.command == "update":
+        return run_update_command(args)
     if args.command == "gateway":
         return run_gateway_command(args)
 

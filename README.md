@@ -16,6 +16,12 @@ If you want to skip packaging the browser UI:
 ./install.sh --headless
 ```
 
+If you want to finish installation without launching the setup wizard immediately:
+
+```bash
+./install.sh --skip-wizard
+```
+
 That installer will:
 
 - build the Vite frontend bundle
@@ -23,7 +29,7 @@ That installer will:
 - install `lawftune` and the gateway dependencies
 - create a `lawftune` launcher script
 - offer to add the launcher directory to your shell `PATH`
-- automatically start the `lawftune install` setup wizard
+- automatically start the `lawftune wizard` setup flow unless `--skip-wizard` is used
 
 When `--headless` is used, the gateway API is still installed, but the packaged web UI is omitted.
 
@@ -46,12 +52,12 @@ npm install
 Run the setup wizard:
 
 ```bash
-lawftune install
+lawftune wizard
 ```
 
 The wizard will:
 
-- ask for the vLLM endpoint, default `http://localhost:8000`
+- ask for the vLLM endpoint, default `http://localhost:8000/v1`
 - ask for the API key, default empty
 - save the config to `~/.lawftune/config.json`
 - ask whether the gateway should also be installed as a system service
@@ -68,7 +74,8 @@ The default bind address is `127.0.0.1:5293`.
 
 ```bash
 lawftune --version
-lawftune install
+lawftune wizard
+lawftune update
 lawftune gateway
 lawftune gateway status
 lawftune gateway start
@@ -114,6 +121,19 @@ You can override runtime options when starting it in the foreground:
 ```bash
 lawftune gateway --host 127.0.0.1 --port 5293
 ```
+
+## Updates
+
+`lawftune update` upgrades the current installation using the same Python runtime that is running the CLI.
+
+```bash
+lawftune update
+lawftune update /path/to/lawftune
+lawftune update https://github.com/your-org/lawftune.git
+lawftune update --dry-run
+```
+
+When no source is provided, `lawftune` tries to reuse the current installation source. If that cannot be detected, it falls back to `lawftune[server]`.
 
 ## System Service
 

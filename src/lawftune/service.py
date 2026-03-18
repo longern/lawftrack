@@ -42,6 +42,9 @@ class ServiceManagerError(RuntimeError):
 
 
 class BaseServiceManager:
+    def is_installed(self) -> bool:
+        raise NotImplementedError
+
     def install(self, config: ServiceConfig) -> str:
         raise NotImplementedError
 
@@ -74,6 +77,9 @@ class LaunchdServiceManager(BaseServiceManager):
     @property
     def service_target(self) -> str:
         return f"{self.bootstrap_target}/{MACOS_LABEL}"
+
+    def is_installed(self) -> bool:
+        return self.service_file.exists()
 
     def install(self, config: ServiceConfig) -> str:
         self.service_file.parent.mkdir(parents=True, exist_ok=True)
@@ -172,6 +178,9 @@ class SystemdUserServiceManager(BaseServiceManager):
     def service_unit(self) -> str:
         return f"{SERVICE_NAME}.service"
 
+    def is_installed(self) -> bool:
+        return self.service_file.exists()
+
     def install(self, config: ServiceConfig) -> str:
         self.service_file.parent.mkdir(parents=True, exist_ok=True)
         service_text = "\n".join(
@@ -249,6 +258,13 @@ class WindowsTaskServiceManager(BaseServiceManager):
     @property
     def task_name(self) -> str:
         return SERVICE_NAME
+
+    def is_installed(self) -> bool:
+        try:
+            self._run_command(["schtasks", "/query", "/tn", self.task_name])
+        except ServiceManagerError:
+            return False
+        return True
 
     def install(self, config: ServiceConfig) -> str:
         command = subprocess.list2cmdline(config.gateway_run_command())

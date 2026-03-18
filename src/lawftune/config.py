@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 
 
-DEFAULT_VLLM_ENDPOINT = "http://localhost:8000"
+DEFAULT_VLLM_ENDPOINT = "http://localhost:8000/v1"
 DEFAULT_API_KEY = ""
 DEFAULT_CONFIG_DIRNAME = ".lawftune"
 CONFIG_FILENAME = "config.json"

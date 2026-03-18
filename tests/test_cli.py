@@ -33,8 +33,9 @@ class CliTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0)
         self.assertIn("usage: lawftune", result.stdout)
-        self.assertIn("install", result.stdout)
+        self.assertIn("wizard", result.stdout)
         self.assertIn("train", result.stdout)
+        self.assertIn("update", result.stdout)
         self.assertIn("gateway", result.stdout)
 
     def test_version_flag(self) -> None:
@@ -50,10 +51,10 @@ class CliTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0)
         self.assertIn("lawftune 0.1.0", result.stdout)
 
-    def test_install_wizard_uses_defaults(self) -> None:
+    def test_wizard_uses_defaults(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             result = subprocess.run(
-                [sys.executable, "-m", "lawftune", "install"],
+                [sys.executable, "-m", "lawftune", "wizard"],
                 cwd=ROOT,
                 env=make_env(LAWFTUNE_HOME=temp_dir),
                 input="\n\nn\n",
@@ -70,15 +71,15 @@ class CliTests(unittest.TestCase):
             self.assertEqual(
                 json.loads(config_path.read_text(encoding="utf-8")),
                 {
-                    "vllm_endpoint": "http://localhost:8000",
+                    "vllm_endpoint": "http://localhost:8000/v1",
                     "api_key": "",
                 },
             )
 
-    def test_install_wizard_accepts_custom_values(self) -> None:
+    def test_wizard_accepts_custom_values(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             result = subprocess.run(
-                [sys.executable, "-m", "lawftune", "install"],
+                [sys.executable, "-m", "lawftune", "wizard"],
                 cwd=ROOT,
                 env=make_env(LAWFTUNE_HOME=temp_dir),
                 input="http://127.0.0.1:9000\nsecret-key\nn\n",
@@ -98,7 +99,7 @@ class CliTests(unittest.TestCase):
                 },
             )
 
-    def test_install_wizard_can_install_gateway_service(self) -> None:
+    def test_wizard_can_install_gateway_service(self) -> None:
         sys.path.insert(0, str(ROOT / "src"))
         try:
             from lawftune.cli import main
@@ -109,10 +110,12 @@ class CliTests(unittest.TestCase):
             mocked_manager = mock.Mock()
             mocked_manager.install.return_value = "gateway installed"
 
-            with mock.patch("lawftune.cli.get_service_manager", return_value=mocked_manager):
+            with mock.patch(
+                "lawftune.cli.get_service_manager", return_value=mocked_manager
+            ):
                 with mock.patch("builtins.input", side_effect=["", "", "y"]):
                     with mock.patch("builtins.print") as mocked_print:
-                        exit_code = main(["install", "--config-dir", temp_dir])
+                        exit_code = main(["wizard", "--config-dir", temp_dir])
 
             self.assertEqual(exit_code, 0)
             mocked_manager.install.assert_called_once()
@@ -123,13 +126,15 @@ class CliTests(unittest.TestCase):
             self.assertEqual(
                 mocked_print.call_args_list,
                 [
-                    mock.call(f"Configuration saved to {Path(temp_dir) / 'config.json'}"),
+                    mock.call(
+                        f"Configuration saved to {Path(temp_dir) / 'config.json'}"
+                    ),
                     mock.call("gateway installed"),
                     mock.call("Gateway URL: http://127.0.0.1:5293"),
                 ],
             )
 
-    def test_install_wizard_skips_gateway_service_when_declined(self) -> None:
+    def test_wizard_skips_gateway_service_when_declined(self) -> None:
         sys.path.insert(0, str(ROOT / "src"))
         try:
             from lawftune.cli import main
@@ -139,14 +144,18 @@ class CliTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             mocked_manager = mock.Mock()
 
-            with mock.patch("lawftune.cli.get_service_manager", return_value=mocked_manager):
+            with mock.patch(
+                "lawftune.cli.get_service_manager", return_value=mocked_manager
+            ):
                 with mock.patch("builtins.input", side_effect=["", "", "n"]):
-                    exit_code = main(["install", "--config-dir", temp_dir])
+                    exit_code = main(["wizard", "--config-dir", temp_dir])
 
             self.assertEqual(exit_code, 0)
             mocked_manager.install.assert_not_called()
 
-    def test_gateway_without_action_starts_uvicorn_with_expected_arguments(self) -> None:
+    def test_gateway_without_action_starts_uvicorn_with_expected_arguments(
+        self,
+    ) -> None:
         sys.path.insert(0, str(ROOT / "src"))
         try:
             from lawftune.cli import main
@@ -208,8 +217,12 @@ class CliTests(unittest.TestCase):
             sys.path.pop(0)
 
         with tempfile.TemporaryDirectory() as temp_dir:
-            with mock.patch("lawftune.train.cli.run_train_worker", return_value=0) as mocked_run:
-                exit_code = main(["train", "--config-dir", temp_dir, "--job-id", "ftjob-123"])
+            with mock.patch(
+                "lawftune.train.cli.run_train_worker", return_value=0
+            ) as mocked_run:
+                exit_code = main(
+                    ["train", "--config-dir", temp_dir, "--job-id", "ftjob-123"]
+                )
 
         self.assertEqual(exit_code, 0)
         mocked_run.assert_called_once()
@@ -229,6 +242,21 @@ class CliTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0)
         self.assertIn("Run a lawftune training worker.", result.stdout)
+
+    def test_update_command_dispatches_to_updater(self) -> None:
+        sys.path.insert(0, str(ROOT / "src"))
+        try:
+            from lawftune.cli import main
+        finally:
+            sys.path.pop(0)
+
+        with mock.patch("lawftune.update.run_update", return_value=0) as mocked_run:
+            exit_code = main(["update", "/tmp/lawftune-src", "--dry-run", "--yes"])
+
+        self.assertEqual(exit_code, 0)
+        mocked_run.assert_called_once_with(
+            "/tmp/lawftune-src", dry_run=True, assume_yes=True
+        )
 
     def test_train_worker_dispatches_to_normalized_method(self) -> None:
         sys.path.insert(0, str(ROOT / "src"))
@@ -252,7 +280,9 @@ class CliTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            with mock.patch("lawftune.train.cli.run_algorithm_job", return_value=0) as mocked_run:
+            with mock.patch(
+                "lawftune.train.cli.run_algorithm_job", return_value=0
+            ) as mocked_run:
                 exit_code = main(["--config-dir", temp_dir, "--job-id", "ftjob-123"])
 
         self.assertEqual(exit_code, 0)
@@ -281,8 +311,12 @@ class CliTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            with mock.patch("lawftune.train.cli.run_algorithm_job", return_value=0) as mocked_run:
-                exit_code = main(["lawf", "--config-dir", temp_dir, "--job-id", "ftjob-456"])
+            with mock.patch(
+                "lawftune.train.cli.run_algorithm_job", return_value=0
+            ) as mocked_run:
+                exit_code = main(
+                    ["lawf", "--config-dir", temp_dir, "--job-id", "ftjob-456"]
+                )
 
         self.assertEqual(exit_code, 0)
         mocked_run.assert_called_once()
@@ -299,7 +333,9 @@ class CliTests(unittest.TestCase):
             mocked_manager = mock.Mock()
             mocked_manager.install.return_value = "installed"
 
-            with mock.patch("lawftune.cli.get_service_manager", return_value=mocked_manager):
+            with mock.patch(
+                "lawftune.cli.get_service_manager", return_value=mocked_manager
+            ):
                 with mock.patch("builtins.print") as mocked_print:
                     exit_code = main(
                         [
@@ -340,7 +376,9 @@ class CliTests(unittest.TestCase):
         mocked_manager = mock.Mock()
         mocked_manager.status.return_value = "running"
 
-        with mock.patch("lawftune.cli.get_service_manager", return_value=mocked_manager):
+        with mock.patch(
+            "lawftune.cli.get_service_manager", return_value=mocked_manager
+        ):
             with mock.patch("builtins.print") as mocked_print:
                 exit_code = main(["gateway", "status"])
 

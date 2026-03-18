@@ -37,7 +37,7 @@ DEFAULT_CORS_ORIGIN_REGEX = r"^https?://(localhost|127\.0\.0\.1|\[::1\])(?::\d+)
 
 def build_vllm_url(base_url: str, path: str, query: str) -> str:
     normalized_base = base_url.rstrip("/")
-    url = f"{normalized_base}/v1/{path}"
+    url = f"{normalized_base}/{path}"
     if query:
         return f"{url}?{query}"
     return url
@@ -72,9 +72,7 @@ def build_cors_middleware_options() -> dict[str, object]:
     }
     if configured_origins:
         options["allow_origins"] = [
-            origin.strip()
-            for origin in configured_origins.split(",")
-            if origin.strip()
+            origin.strip() for origin in configured_origins.split(",") if origin.strip()
         ]
         return options
     if configured_regex:
@@ -90,7 +88,9 @@ def create_app(config_dir: Path | None = None) -> FastAPI:
     app.include_router(build_files_router(config_dir))
     app.include_router(build_fine_tuning_router(config_dir))
     if PACKAGE_FRONTEND_INDEX.exists() and PACKAGE_FRONTEND_ASSETS_DIR.exists():
-        app.mount("/assets", StaticFiles(directory=PACKAGE_FRONTEND_ASSETS_DIR), name="assets")
+        app.mount(
+            "/assets", StaticFiles(directory=PACKAGE_FRONTEND_ASSETS_DIR), name="assets"
+        )
 
     @app.get("/", response_class=HTMLResponse)
     def index():

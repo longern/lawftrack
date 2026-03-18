@@ -12,6 +12,7 @@ BIN_DIR="$DEFAULT_BIN_DIR"
 NO_MODIFY_SHELL=0
 ASSUME_YES=0
 HEADLESS_MODE=0
+SKIP_WIZARD=0
 
 
 usage() {
@@ -24,6 +25,7 @@ Options:
   --install-dir PATH   Runtime install directory (default: ${DEFAULT_INSTALL_DIR})
   --bin-dir PATH       Directory where the launcher script will be created (default: ${DEFAULT_BIN_DIR})
   --headless           Install without bundling the frontend UI
+  --skip-wizard        Do not automatically run \`${APP_NAME} wizard\` after installation
   --no-modify-shell    Do not offer to update your shell rc file
   --yes                Accept non-destructive prompts automatically
   -h, --help           Show this help message
@@ -234,6 +236,10 @@ while [ "$#" -gt 0 ]; do
       HEADLESS_MODE=1
       shift
       ;;
+    --skip-wizard)
+      SKIP_WIZARD=1
+      shift
+      ;;
     --no-modify-shell)
       NO_MODIFY_SHELL=1
       shift
@@ -279,5 +285,9 @@ else
   printf 'If your current shell still cannot find `%s`, open a new terminal and try again.\n' "$APP_NAME"
 fi
 
-printf 'Starting `%s install`...\n' "$APP_NAME"
-"$EXECUTABLE" install
+if [ "$SKIP_WIZARD" -eq 1 ]; then
+  printf 'Skipping `%s wizard`. Run `%s wizard` later when you are ready.\n' "$APP_NAME" "$APP_NAME"
+else
+  printf 'Starting `%s wizard`...\n' "$APP_NAME"
+  "$EXECUTABLE" wizard
+fi

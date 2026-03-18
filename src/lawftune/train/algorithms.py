@@ -37,22 +37,27 @@ TRAINING_ALGORITHMS: dict[str, TrainingAlgorithm] = {
 }
 
 
+def get_algorithm(method_type: str) -> TrainingAlgorithm:
+    normalized_type = method_type.strip().lower()
+    for algorithm in TRAINING_ALGORITHMS.values():
+        if normalized_type == algorithm.name or normalized_type in algorithm.aliases:
+            return algorithm
+
+    supported = ", ".join(sorted(TRAINING_ALGORITHMS))
+    raise ValueError(
+        f"Unsupported fine-tuning method: {method_type}. Supported methods: {supported}"
+    )
+
+
 def normalize_training_method(method: dict[str, Any] | None) -> dict[str, Any]:
     raw_type = DEFAULT_TRAINING_ALGORITHM
     if method is not None:
         raw_type = str(method.get("type", DEFAULT_TRAINING_ALGORITHM))
 
-    normalized_type = raw_type.strip().lower()
-    for algorithm in TRAINING_ALGORITHMS.values():
-        if normalized_type == algorithm.name or normalized_type in algorithm.aliases:
-            normalized_method = dict(method or {})
-            normalized_method["type"] = algorithm.name
-            return normalized_method
-
-    supported = ", ".join(sorted(TRAINING_ALGORITHMS))
-    raise ValueError(
-        f"Unsupported fine-tuning method: {raw_type}. Supported methods: {supported}"
-    )
+    algorithm = get_algorithm(raw_type)
+    normalized_method = dict(method or {})
+    normalized_method["type"] = algorithm.name
+    return normalized_method
 
 
 def get_job_dir(config_dir: Path, job_id: str) -> Path:
@@ -74,6 +79,40 @@ def build_fine_tuned_model_name(job: dict[str, Any]) -> str:
 
 def is_lora_adapter_artifact(path: Path) -> bool:
     return (path / LORA_ADAPTER_CONFIG_FILENAME).is_file()
+
+
+def get_method_hyperparameters(job: dict[str, Any]) -> dict[str, Any]:
+    method = job.get("method")
+    if not isinstance(method, dict):
+        return {}
+
+    raw_type = str(method.get("type", DEFAULT_TRAINING_ALGORITHM))
+    algorithm = get_algorithm(raw_type)
+    candidates = (algorithm.name, *algorithm.aliases)
+
+    for key in candidates:
+        scoped_config = method.get(key)
+        if isinstance(scoped_config, dict):
+            hyperparameters = scoped_config.get("hyperparameters")
+            if isinstance(hyperparameters, dict):
+                return hyperparameters
+
+    top_level_hyperparameters = method.get("hyperparameters")
+    if isinstance(top_level_hyperparameters, dict):
+        return top_level_hyperparameters
+    return {}
+
+
+def build_sft_hyperparameter_args(job: dict[str, Any]) -> list[str]:
+    hyperparameters = get_method_hyperparameters(job)
+    extra_args: list[str] = []
+
+    if "n_epochs" in hyperparameters:
+        extra_args.extend(
+            ["--num_train_epochs", str(hyperparameters["n_epochs"])]
+        )
+
+    return extra_args
 
 
 def export_uploaded_file_for_job(
@@ -105,6 +144,7 @@ def build_sft_command(job: dict[str, Any], config_dir: Path) -> list[str]:
         str(training_file_path),
         "--output_dir",
         str(output_dir),
+        *build_sft_hyperparameter_args(job),
     ]
 
 

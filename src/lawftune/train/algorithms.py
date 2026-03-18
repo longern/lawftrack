@@ -5,10 +5,13 @@ import subprocess
 import time
 from dataclasses import dataclass
 from pathlib import Path
+import re
 from typing import Any
 
 
 DEFAULT_TRAINING_ALGORITHM = "sft"
+LORA_ADAPTER_CONFIG_FILENAME = "adapter_config.json"
+SANITIZED_ADAPTER_NAME_PATTERN = re.compile(r"[^A-Za-z0-9._-]+")
 
 
 @dataclass(frozen=True)
@@ -50,9 +53,29 @@ def normalize_training_method(method: dict[str, Any] | None) -> dict[str, Any]:
     )
 
 
+def get_job_dir(config_dir: Path, job_id: str) -> Path:
+    return config_dir / "fine_tuning" / "jobs" / job_id
+
+
+def get_job_output_dir(config_dir: Path, job: dict[str, Any]) -> Path:
+    return get_job_dir(config_dir, str(job["id"])) / "artifacts" / "model"
+
+
+def build_fine_tuned_model_name(job: dict[str, Any]) -> str:
+    raw_suffix = str(job.get("suffix") or "").strip()
+    if raw_suffix:
+        normalized = SANITIZED_ADAPTER_NAME_PATTERN.sub("-", raw_suffix).strip("._-")
+        if normalized:
+            return normalized.lower()
+    return str(job["id"])
+
+
+def is_lora_adapter_artifact(path: Path) -> bool:
+    return (path / LORA_ADAPTER_CONFIG_FILENAME).is_file()
+
+
 def build_sft_command(job: dict[str, Any], config_dir: Path) -> list[str]:
-    job_dir = config_dir / "fine_tuning" / "jobs" / job["id"]
-    output_dir = job_dir / "artifacts" / "model"
+    output_dir = get_job_output_dir(config_dir, job)
     output_dir.mkdir(parents=True, exist_ok=True)
     return [
         "trl",

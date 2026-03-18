@@ -14,6 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from lawftune.api.fine_tuning_api import build_router as build_fine_tuning_router
 from lawftune.api.files_api import build_router as build_files_router
 from lawftune.config import load_config
+from lawftune.vllm import build_vllm_url
 
 
 PACKAGE_FRONTEND_DIR = Path(__file__).resolve().parent / "_frontend"
@@ -33,16 +34,6 @@ HOP_BY_HOP_HEADERS = {
     "upgrade",
 }
 DEFAULT_CORS_ORIGIN_REGEX = r"^https?://(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$"
-
-
-def build_vllm_url(base_url: str, path: str, query: str) -> str:
-    normalized_base = base_url.rstrip("/")
-    url = f"{normalized_base}/{path}"
-    if query:
-        return f"{url}?{query}"
-    return url
-
-
 def sanitize_outbound_headers(headers: Request.headers, api_key: str) -> dict[str, str]:
     outbound_headers = {
         key: value

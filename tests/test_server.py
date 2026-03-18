@@ -411,7 +411,7 @@ class ServerTests(unittest.TestCase):
             ):
                 client = TestClient(server_module.create_app(Path(temp_dir)))
                 response = client.post(
-                    "/chat/completions?stream=false",
+                    "/v1/chat/completions?stream=false",
                     headers={"content-type": "application/json"},
                     json={"messages": [{"role": "user", "content": "hello"}]},
                 )

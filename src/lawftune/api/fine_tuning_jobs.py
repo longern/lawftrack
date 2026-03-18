@@ -57,7 +57,6 @@ class FineTuningJobStore:
 
         stdout_path = job_dir / "stdout.log"
         stderr_path = job_dir / "stderr.log"
-        process = self._spawn_job_worker(job_id, stdout_path, stderr_path)
         method = normalize_training_method(payload.get("method"))
 
         job = {
@@ -81,12 +80,28 @@ class FineTuningJobStore:
             "training_file": payload["training_file"],
             "validation_file": payload.get("validation_file"),
             "suffix": payload.get("suffix"),
+            "lora_adapter": None,
             "process": {
-                "pid": process.pid,
+                "pid": None,
                 "started_at": now,
                 "exit_code": None,
             },
         }
+        self._write_job(job)
+
+        try:
+            process = self._spawn_job_worker(job_id, stdout_path, stderr_path)
+        except Exception as exc:
+            job["status"] = "failed"
+            job["finished_at"] = int(time.time())
+            job["error"] = {
+                "code": "worker_spawn_failed",
+                "message": f"Could not start fine-tuning worker: {exc}",
+            }
+            self._write_job(job)
+            raise
+
+        job["process"]["pid"] = process.pid
         self._write_job(job)
         return job
 
@@ -151,6 +166,8 @@ class FineTuningJobStore:
             return job
 
         pid = int(job.get("process", {}).get("pid") or 0)
+        if pid <= 0:
+            return job
         if process_is_running(pid):
             return job
 

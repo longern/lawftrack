@@ -122,6 +122,21 @@ You can override runtime options when starting it in the foreground:
 lawftune gateway --host 127.0.0.1 --port 5293
 ```
 
+## Dynamic LoRA Loading
+
+When an SFT job finishes successfully, `lawftune` now checks whether the training artifact directory contains a LoRA adapter and, if it does, automatically sends a runtime load request to the configured vLLM endpoint.
+
+To make that work on the vLLM side, start `vllm serve` with LoRA enabled and turn on runtime LoRA updates:
+
+```bash
+export VLLM_ALLOW_RUNTIME_LORA_UPDATING=True
+vllm serve <base-model> --enable-lora
+```
+
+vLLM's official documentation for dynamic LoRA loading is here:
+
+- [LoRA Adapters - vLLM](https://docs.vllm.ai/en/stable/features/lora/)
+
 ## Updates
 
 `lawftune update` upgrades the current installation using the same Python runtime that is running the CLI.

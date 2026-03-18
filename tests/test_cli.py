@@ -322,6 +322,114 @@ class CliTests(unittest.TestCase):
         mocked_run.assert_called_once()
         self.assertEqual(mocked_run.call_args.args[0], "lawf")
 
+    def test_train_worker_marks_success_and_loads_lora_adapter(self) -> None:
+        sys.path.insert(0, str(ROOT / "src"))
+        try:
+            from lawftune.train.cli import main
+            from lawftune.vllm import RuntimeLoRAUpdateResult
+        finally:
+            sys.path.pop(0)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_dir = Path(temp_dir)
+            job_dir = config_dir / "fine_tuning" / "jobs" / "ftjob-789"
+            output_dir = job_dir / "artifacts" / "model"
+            output_dir.mkdir(parents=True)
+            (output_dir / "adapter_config.json").write_text("{}", encoding="utf-8")
+            (config_dir / "config.json").write_text(
+                json.dumps(
+                    {
+                        "vllm_endpoint": "http://localhost:8000/v1",
+                        "api_key": "secret-key",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (job_dir / "job.json").write_text(
+                json.dumps(
+                    {
+                        "id": "ftjob-789",
+                        "model": "Qwen/Qwen2.5-7B-Instruct",
+                        "training_file": "dataset-name",
+                        "suffix": "Legal Draft",
+                        "method": {"type": "sft"},
+                        "status": "running",
+                        "process": {"pid": 1234, "started_at": 1, "exit_code": None},
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with mock.patch(
+                "lawftune.train.cli.run_algorithm_job", return_value=0
+            ) as mocked_run:
+                with mock.patch(
+                    "lawftune.train.cli.load_lora_adapter",
+                    return_value=RuntimeLoRAUpdateResult(
+                        ok=True,
+                        status_code=200,
+                        message="ok",
+                        response_body="Success",
+                    ),
+                ) as mocked_load:
+                    exit_code = main(
+                        ["run-job", "--config-dir", temp_dir, "--job-id", "ftjob-789"]
+                    )
+
+            self.assertEqual(exit_code, 0)
+            mocked_run.assert_called_once()
+            mocked_load.assert_called_once_with(
+                base_url="http://localhost:8000/v1",
+                api_key="secret-key",
+                lora_name="legal-draft",
+                lora_path=output_dir,
+                load_inplace=True,
+            )
+
+            job_payload = json.loads((job_dir / "job.json").read_text(encoding="utf-8"))
+            self.assertEqual(job_payload["status"], "succeeded")
+            self.assertEqual(job_payload["fine_tuned_model"], "legal-draft")
+            self.assertEqual(job_payload["process"]["exit_code"], 0)
+            self.assertEqual(job_payload["lora_adapter"]["status"], "loaded")
+            self.assertEqual(job_payload["lora_adapter"]["path"], str(output_dir))
+
+    def test_train_worker_marks_failed_when_training_command_fails(self) -> None:
+        sys.path.insert(0, str(ROOT / "src"))
+        try:
+            from lawftune.train.cli import main
+        finally:
+            sys.path.pop(0)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            job_dir = Path(temp_dir) / "fine_tuning" / "jobs" / "ftjob-999"
+            job_dir.mkdir(parents=True)
+            (job_dir / "job.json").write_text(
+                json.dumps(
+                    {
+                        "id": "ftjob-999",
+                        "model": "Qwen/Qwen2.5-7B-Instruct",
+                        "training_file": "dataset-name",
+                        "method": {"type": "sft"},
+                        "status": "running",
+                        "process": {"pid": 1234, "started_at": 1, "exit_code": None},
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with mock.patch(
+                "lawftune.train.cli.run_algorithm_job", return_value=7
+            ) as mocked_run:
+                exit_code = main(["--config-dir", temp_dir, "--job-id", "ftjob-999"])
+
+            self.assertEqual(exit_code, 7)
+            mocked_run.assert_called_once()
+
+            job_payload = json.loads((job_dir / "job.json").read_text(encoding="utf-8"))
+            self.assertEqual(job_payload["status"], "failed")
+            self.assertEqual(job_payload["process"]["exit_code"], 7)
+            self.assertEqual(job_payload["error"]["code"], "training_failed")
+
     def test_gateway_install_dispatches_to_service_manager(self) -> None:
         sys.path.insert(0, str(ROOT / "src"))
         try:

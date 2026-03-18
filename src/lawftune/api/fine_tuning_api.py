@@ -8,6 +8,7 @@ from fastapi import HTTPException
 from pydantic import BaseModel
 from pydantic import Field
 
+from lawftune.api.files_store import FileStore
 from lawftune.api.fine_tuning_jobs import FineTuningJobStore
 from lawftune.train.algorithms import normalize_training_method
 
@@ -33,6 +34,25 @@ def serialize_model(model: BaseModel) -> dict[str, Any]:
 def build_router(config_dir: Path | None = None) -> APIRouter:
     router = APIRouter(prefix="/v1/fine_tuning", tags=["fine_tuning"])
     store = FineTuningJobStore(config_dir)
+    file_store = FileStore(config_dir)
+
+    def validate_fine_tuning_file(file_id: str, field_name: str) -> None:
+        try:
+            metadata = file_store.get_file(file_id)
+        except FileNotFoundError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail=f"{field_name} must reference an uploaded file id from /v1/files: {file_id}",
+            ) from exc
+
+        if metadata.get("purpose") != "fine-tune":
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"{field_name} must reference a file uploaded with purpose "
+                    f"'fine-tune': {file_id}"
+                ),
+            )
 
     @router.get("/")
     def fine_tuning_root() -> dict[str, str]:
@@ -48,6 +68,10 @@ def build_router(config_dir: Path | None = None) -> APIRouter:
             serialized["method"] = normalize_training_method(serialized.get("method"))
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+        validate_fine_tuning_file(serialized["training_file"], "training_file")
+        validation_file = serialized.get("validation_file")
+        if validation_file is not None:
+            validate_fine_tuning_file(validation_file, "validation_file")
         return store.create_job(serialized)
 
     @router.get("/jobs")

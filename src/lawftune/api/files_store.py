@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import time
 import uuid
 from pathlib import Path
@@ -65,6 +66,25 @@ class FileStore:
         if not content_path.is_file():
             raise FileNotFoundError(file_id)
         return content_path.read_bytes()
+
+    def get_file_content_path(self, file_id: str) -> Path:
+        content_path = self.files_dir / file_id / "content.bin"
+        if not content_path.is_file():
+            raise FileNotFoundError(file_id)
+        return content_path
+
+    def export_file(self, file_id: str, destination: Path) -> Path:
+        metadata = self.get_file(file_id)
+        source_path = self.get_file_content_path(file_id)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+
+        if destination.is_dir():
+            target_path = destination / metadata["filename"]
+        else:
+            target_path = destination
+
+        shutil.copyfile(source_path, target_path)
+        return target_path
 
     def delete_file(self, file_id: str) -> dict[str, Any]:
         file_dir = self.files_dir / file_id

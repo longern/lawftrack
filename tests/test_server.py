@@ -201,13 +201,35 @@ class ServerTests(unittest.TestCase):
                 ):
                     with mock.patch.object(jobs_module.os, "kill") as mocked_kill:
                         client = TestClient(server_module.create_app(Path(temp_dir)))
+                        training_file = client.post(
+                            "/v1/files",
+                            data={"purpose": "fine-tune"},
+                            files={
+                                "file": (
+                                    "train.jsonl",
+                                    b'{"messages": []}\n',
+                                    "application/jsonl",
+                                )
+                            },
+                        ).json()
+                        validation_file = client.post(
+                            "/v1/files",
+                            data={"purpose": "fine-tune"},
+                            files={
+                                "file": (
+                                    "valid.jsonl",
+                                    b'{"messages": []}\n',
+                                    "application/jsonl",
+                                )
+                            },
+                        ).json()
 
                         create_response = client.post(
                             "/v1/fine_tuning/jobs",
                             json={
                                 "model": "Qwen/Qwen2.5-7B-Instruct",
-                                "training_file": "file-train-123",
-                                "validation_file": "file-valid-456",
+                                "training_file": training_file["id"],
+                                "validation_file": validation_file["id"],
                                 "suffix": "legal-draft",
                                 "metadata": {"dataset": "civil"},
                             },
@@ -217,9 +239,9 @@ class ServerTests(unittest.TestCase):
                         created_job = create_response.json()
                         self.assertEqual(created_job["object"], "fine_tuning.job")
                         self.assertEqual(created_job["status"], "running")
-                        self.assertEqual(created_job["training_file"], "file-train-123")
+                        self.assertEqual(created_job["training_file"], training_file["id"])
                         self.assertEqual(
-                            created_job["validation_file"], "file-valid-456"
+                            created_job["validation_file"], validation_file["id"]
                         )
                         self.assertEqual(created_job["suffix"], "legal-draft")
                         self.assertEqual(created_job["metadata"], {"dataset": "civil"})
@@ -279,17 +301,42 @@ class ServerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             with mock.patch.object(jobs_module.subprocess, "Popen", DummyPopen):
                 client = TestClient(server_module.create_app(Path(temp_dir)))
+                training_file = client.post(
+                    "/v1/files",
+                    data={"purpose": "fine-tune"},
+                    files={
+                        "file": (
+                            "train.jsonl",
+                            b'{"messages": []}\n',
+                            "application/jsonl",
+                        )
+                    },
+                ).json()
                 response = client.post(
                     "/v1/fine_tuning/jobs",
                     json={
                         "model": "Qwen/Qwen2.5-7B-Instruct",
-                        "training_file": "dataset-name",
+                        "training_file": training_file["id"],
                         "method": {"type": "supervised"},
                     },
                 )
 
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response.json()["method"]["type"], "sft")
+
+    def test_create_job_rejects_unknown_training_file(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            client = self._create_client(temp_dir)
+            response = client.post(
+                "/v1/fine_tuning/jobs",
+                json={
+                    "model": "Qwen/Qwen2.5-7B-Instruct",
+                    "training_file": "file-missing",
+                },
+            )
+
+            self.assertEqual(response.status_code, 400)
+            self.assertIn("training_file must reference an uploaded file id", response.json()["detail"])
 
     def test_create_job_rejects_unknown_method(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

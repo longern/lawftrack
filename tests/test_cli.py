@@ -322,6 +322,37 @@ class CliTests(unittest.TestCase):
         mocked_run.assert_called_once()
         self.assertEqual(mocked_run.call_args.args[0], "lawf")
 
+    def test_build_sft_command_exports_uploaded_training_file(self) -> None:
+        sys.path.insert(0, str(ROOT / "src"))
+        try:
+            from lawftune.api.files_store import FileStore
+            from lawftune.train.algorithms import build_sft_command
+        finally:
+            sys.path.pop(0)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            file_store = FileStore(Path(temp_dir))
+            created_file = file_store.create_file(
+                filename="train.jsonl",
+                purpose="fine-tune",
+                content=b'{"messages": []}\n',
+                content_type="application/jsonl",
+            )
+
+            command = build_sft_command(
+                {
+                    "id": "ftjob-123",
+                    "model": "Qwen/Qwen2.5-7B-Instruct",
+                    "training_file": created_file["id"],
+                },
+                Path(temp_dir),
+            )
+
+            exported_path = Path(temp_dir) / "fine_tuning" / "jobs" / "ftjob-123" / "artifacts" / "data" / "train.jsonl"
+            self.assertEqual(command[0:6], ["trl", "sft", "--model_name_or_path", "Qwen/Qwen2.5-7B-Instruct", "--dataset_name", str(exported_path)])
+            self.assertTrue(exported_path.exists())
+            self.assertEqual(exported_path.read_bytes(), b'{"messages": []}\n')
+
     def test_train_worker_marks_success_and_loads_lora_adapter(self) -> None:
         sys.path.insert(0, str(ROOT / "src"))
         try:

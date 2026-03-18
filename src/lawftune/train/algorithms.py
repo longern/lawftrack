@@ -8,6 +8,8 @@ from pathlib import Path
 import re
 from typing import Any
 
+from lawftune.api.files_store import FileStore
+
 
 DEFAULT_TRAINING_ALGORITHM = "sft"
 LORA_ADAPTER_CONFIG_FILENAME = "adapter_config.json"
@@ -74,16 +76,33 @@ def is_lora_adapter_artifact(path: Path) -> bool:
     return (path / LORA_ADAPTER_CONFIG_FILENAME).is_file()
 
 
+def export_uploaded_file_for_job(
+    config_dir: Path,
+    *,
+    file_id: str,
+    target_dir: Path,
+) -> Path:
+    file_store = FileStore(config_dir)
+    metadata = file_store.get_file(file_id)
+    return file_store.export_file(file_id, target_dir / str(metadata["filename"]))
+
+
 def build_sft_command(job: dict[str, Any], config_dir: Path) -> list[str]:
     output_dir = get_job_output_dir(config_dir, job)
     output_dir.mkdir(parents=True, exist_ok=True)
+    data_dir = get_job_dir(config_dir, str(job["id"])) / "artifacts" / "data"
+    training_file_path = export_uploaded_file_for_job(
+        config_dir,
+        file_id=str(job["training_file"]),
+        target_dir=data_dir,
+    )
     return [
         "trl",
         "sft",
         "--model_name_or_path",
         str(job["model"]),
         "--dataset_name",
-        str(job["training_file"]),
+        str(training_file_path),
         "--output_dir",
         str(output_dir),
     ]

@@ -57,7 +57,7 @@ class CliTests(unittest.TestCase):
                 [sys.executable, "-m", "lawftune", "wizard"],
                 cwd=ROOT,
                 env=make_env(LAWFTUNE_HOME=temp_dir),
-                input="\n\nn\n",
+                input="\n\nn\nn\n",
                 capture_output=True,
                 text=True,
                 check=False,
@@ -71,6 +71,12 @@ class CliTests(unittest.TestCase):
             self.assertEqual(
                 json.loads(config_path.read_text(encoding="utf-8")),
                 {
+                    "training": {
+                        "local_vllm_sleep": {
+                            "enabled": False,
+                            "level": 1,
+                        }
+                    },
                     "vllm_endpoint": "http://localhost:8000/v1",
                     "api_key": "",
                 },
@@ -82,7 +88,7 @@ class CliTests(unittest.TestCase):
                 [sys.executable, "-m", "lawftune", "wizard"],
                 cwd=ROOT,
                 env=make_env(LAWFTUNE_HOME=temp_dir),
-                input="http://127.0.0.1:9000\nsecret-key\nn\n",
+                input="http://127.0.0.1:9000\nsecret-key\nn\nn\n",
                 capture_output=True,
                 text=True,
                 check=False,
@@ -94,6 +100,12 @@ class CliTests(unittest.TestCase):
             self.assertEqual(
                 json.loads(config_path.read_text(encoding="utf-8")),
                 {
+                    "training": {
+                        "local_vllm_sleep": {
+                            "enabled": False,
+                            "level": 1,
+                        }
+                    },
                     "vllm_endpoint": "http://127.0.0.1:9000",
                     "api_key": "secret-key",
                 },
@@ -113,7 +125,7 @@ class CliTests(unittest.TestCase):
             with mock.patch(
                 "lawftune.cli.get_service_manager", return_value=mocked_manager
             ):
-                with mock.patch("builtins.input", side_effect=["", "", "y"]):
+                with mock.patch("builtins.input", side_effect=["", "", "n", "y"]):
                     with mock.patch("builtins.print") as mocked_print:
                         exit_code = main(["wizard", "--config-dir", temp_dir])
 
@@ -147,11 +159,34 @@ class CliTests(unittest.TestCase):
             with mock.patch(
                 "lawftune.cli.get_service_manager", return_value=mocked_manager
             ):
-                with mock.patch("builtins.input", side_effect=["", "", "n"]):
+                with mock.patch("builtins.input", side_effect=["", "", "n", "n"]):
                     exit_code = main(["wizard", "--config-dir", temp_dir])
 
             self.assertEqual(exit_code, 0)
             mocked_manager.install.assert_not_called()
+
+    def test_wizard_can_enable_local_vllm_sleep_setting(self) -> None:
+        sys.path.insert(0, str(ROOT / "src"))
+        try:
+            from lawftune.cli import main
+        finally:
+            sys.path.pop(0)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with mock.patch("builtins.input", side_effect=["", "", "y", "n"]):
+                exit_code = main(["wizard", "--config-dir", temp_dir])
+
+            self.assertEqual(exit_code, 0)
+            payload = json.loads(
+                (Path(temp_dir) / "config.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(
+                payload["training"]["local_vllm_sleep"],
+                {
+                    "enabled": True,
+                    "level": 1,
+                },
+            )
 
     def test_gateway_without_action_starts_uvicorn_with_expected_arguments(
         self,

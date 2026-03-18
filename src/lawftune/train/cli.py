@@ -2,17 +2,22 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 import time
 from typing import Any
 
 from lawftune.config import load_config
+from lawftune.config import load_raw_config
 from lawftune.train.algorithms import normalize_training_method
 from lawftune.train.algorithms import build_fine_tuned_model_name
 from lawftune.train.algorithms import get_job_output_dir
 from lawftune.train.algorithms import is_lora_adapter_artifact
 from lawftune.train.algorithms import run_algorithm_job
+from lawftune.vllm import is_local_vllm_endpoint
 from lawftune.vllm import load_lora_adapter
+from lawftune.vllm import sleep_vllm
+from lawftune.vllm import wake_up_vllm
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -49,6 +54,75 @@ def load_job(config_dir: Path, job_id: str) -> dict:
 def write_job(config_dir: Path, job: dict[str, Any]) -> None:
     job_path = config_dir / "fine_tuning" / "jobs" / job["id"] / "job.json"
     job_path.write_text(json.dumps(job, indent=2) + "\n", encoding="utf-8")
+
+
+def fail_job(config_dir: Path, job: dict[str, Any], *, code: str, message: str) -> None:
+    now = int(time.time())
+    process = job.setdefault("process", {})
+    process["exit_code"] = 1
+    job["finished_at"] = now
+    job["status"] = "failed"
+    job["error"] = {
+        "code": code,
+        "message": message,
+    }
+    write_job(config_dir, job)
+
+
+def get_local_vllm_sleep_config(config_dir: Path) -> tuple[bool, int]:
+    payload = load_raw_config(config_dir)
+    training_config = payload.get("training")
+    if not isinstance(training_config, dict):
+        return False, 1
+
+    sleep_config = training_config.get("local_vllm_sleep")
+    if not isinstance(sleep_config, dict):
+        return False, 1
+
+    enabled = bool(sleep_config.get("enabled"))
+    raw_level = sleep_config.get("level", 1)
+    try:
+        level = int(raw_level)
+    except (TypeError, ValueError):
+        level = 1
+    return enabled, level
+
+
+def maybe_sleep_local_vllm(config_dir: Path) -> bool:
+    config = load_config(config_dir)
+    enabled, level = get_local_vllm_sleep_config(config_dir)
+    if not enabled or not is_local_vllm_endpoint(config["vllm_endpoint"]):
+        return False
+
+    result = sleep_vllm(
+        base_url=config["vllm_endpoint"],
+        api_key=config["api_key"],
+        level=level,
+    )
+    if not result.ok:
+        raise RuntimeError(
+            "Configured local vLLM sleep before training, but the sleep request failed. "
+            "Ensure vLLM was started with VLLM_SERVER_DEV_MODE=1 and --enable-sleep-mode. "
+            f"Details: {result.message}"
+        )
+    return True
+
+
+def maybe_wake_local_vllm(config_dir: Path, was_slept: bool) -> None:
+    if not was_slept:
+        return
+
+    config = load_config(config_dir)
+    result = wake_up_vllm(
+        base_url=config["vllm_endpoint"],
+        api_key=config["api_key"],
+    )
+    if not result.ok:
+        print(
+            "Warning: failed to wake vLLM after training. "
+            f"Details: {result.message}",
+            file=sys.stderr,
+        )
 
 
 def finalize_job(config_dir: Path, job: dict[str, Any], exit_code: int) -> None:
@@ -112,14 +186,30 @@ def finalize_job(config_dir: Path, job: dict[str, Any], exit_code: int) -> None:
 def run_train_worker(args: argparse.Namespace) -> int:
     config_dir = args.config_dir.expanduser()
     job = load_job(config_dir, args.job_id)
+    was_slept = False
+
+    try:
+        was_slept = maybe_sleep_local_vllm(config_dir)
+        if args.action == "run-job":
+            method = normalize_training_method(job.get("method"))
+            exit_code = run_algorithm_job(method["type"], job, config_dir)
+        else:
+            exit_code = run_algorithm_job(args.action, job, config_dir)
+    except Exception as exc:
+        fail_job(
+            config_dir,
+            job,
+            code="worker_error",
+            message=str(exc),
+        )
+        return 1
+    finally:
+        maybe_wake_local_vllm(config_dir, was_slept)
 
     if args.action == "run-job":
-        method = normalize_training_method(job.get("method"))
-        exit_code = run_algorithm_job(method["type"], job, config_dir)
         finalize_job(config_dir, job, exit_code)
         return exit_code
 
-    exit_code = run_algorithm_job(args.action, job, config_dir)
     finalize_job(config_dir, job, exit_code)
     return exit_code
 

@@ -22,6 +22,10 @@ from .prompts import prompt_yes_no
 from .train import run_train_command
 from .update_command import run_update_command
 from .wizard import run_wizard as run_wizard_impl
+from lawftune.vllm import is_local_vllm_endpoint
+
+
+DEFAULT_LOCAL_VLLM_SLEEP_LEVEL = 1
 
 
 def run_wizard(args) -> int:
@@ -32,11 +36,14 @@ def run_wizard(args) -> int:
         default_gateway_port=DEFAULT_GATEWAY_PORT,
         get_config_dir=get_config_dir,
         save_config=save_config,
+        set_config_value=set_config_value,
         prompt_value=prompt_value,
         prompt_yes_no=prompt_yes_no,
         get_service_manager=get_service_manager,
         build_service_config=build_service_config,
         gateway_access_url=gateway_access_url,
+        is_local_vllm_endpoint=is_local_vllm_endpoint,
+        vllm_sleep_level=DEFAULT_LOCAL_VLLM_SLEEP_LEVEL,
     )
 
 

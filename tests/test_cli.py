@@ -258,6 +258,97 @@ class CliTests(unittest.TestCase):
             "/tmp/lawftune-src", dry_run=True, assume_yes=True
         )
 
+    def test_config_set_supports_nested_dot_paths(self) -> None:
+        sys.path.insert(0, str(ROOT / "src"))
+        try:
+            from lawftune.cli import main
+        finally:
+            sys.path.pop(0)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with mock.patch("builtins.print") as mocked_print:
+                exit_code = main(
+                    ["config", "set", "a.b.c", "xxx", "--config-dir", temp_dir]
+                )
+
+            self.assertEqual(exit_code, 0)
+            payload = json.loads(
+                (Path(temp_dir) / "config.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(payload["a"]["b"]["c"], "xxx")
+            mocked_print.assert_called_once_with(
+                f"Configuration saved to {Path(temp_dir) / 'config.json'}"
+            )
+
+    def test_config_get_reads_nested_values(self) -> None:
+        sys.path.insert(0, str(ROOT / "src"))
+        try:
+            from lawftune.cli import main
+        finally:
+            sys.path.pop(0)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            (Path(temp_dir) / "config.json").write_text(
+                json.dumps({"a": {"b": {"c": 123}}}),
+                encoding="utf-8",
+            )
+
+            with mock.patch("builtins.print") as mocked_print:
+                exit_code = main(
+                    ["config", "get", "a.b.c", "--config-dir", temp_dir]
+                )
+
+            self.assertEqual(exit_code, 0)
+            mocked_print.assert_called_once_with("123")
+
+    def test_config_show_prints_full_merged_config(self) -> None:
+        sys.path.insert(0, str(ROOT / "src"))
+        try:
+            from lawftune.cli import main
+        finally:
+            sys.path.pop(0)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            (Path(temp_dir) / "config.json").write_text(
+                json.dumps({"nested": {"enabled": True}}),
+                encoding="utf-8",
+            )
+
+            with mock.patch("builtins.print") as mocked_print:
+                exit_code = main(["config", "--config-dir", temp_dir])
+
+            self.assertEqual(exit_code, 0)
+            printed = mocked_print.call_args.args[0]
+            payload = json.loads(printed)
+            self.assertEqual(payload["nested"]["enabled"], True)
+            self.assertEqual(payload["vllm_endpoint"], "http://localhost:8000/v1")
+            self.assertEqual(payload["api_key"], "")
+
+    def test_save_config_preserves_existing_nested_values(self) -> None:
+        sys.path.insert(0, str(ROOT / "src"))
+        try:
+            from lawftune.config import save_config
+        finally:
+            sys.path.pop(0)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "config.json"
+            config_path.write_text(
+                json.dumps({"nested": {"enabled": True}}),
+                encoding="utf-8",
+            )
+
+            save_config(
+                endpoint="http://127.0.0.1:9000",
+                api_key="secret-key",
+                config_dir=Path(temp_dir),
+            )
+
+            payload = json.loads(config_path.read_text(encoding="utf-8"))
+            self.assertEqual(payload["nested"]["enabled"], True)
+            self.assertEqual(payload["vllm_endpoint"], "http://127.0.0.1:9000")
+            self.assertEqual(payload["api_key"], "secret-key")
+
     def test_train_worker_dispatches_to_normalized_method(self) -> None:
         sys.path.insert(0, str(ROOT / "src"))
         try:

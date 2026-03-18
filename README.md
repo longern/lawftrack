@@ -75,6 +75,9 @@ The default bind address is `127.0.0.1:5293`.
 ```bash
 lawftune --version
 lawftune wizard
+lawftune config
+lawftune config get vllm_endpoint
+lawftune config set a.b.c xxx
 lawftune update
 lawftune gateway
 lawftune gateway status

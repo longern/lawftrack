@@ -3,58 +3,10 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>lawftune gateway</title>
-    <link rel="stylesheet" href="/src/styles.css">
+    <title>lawftune console</title>
   </head>
   <body>
-    <main class="page">
-      <section class="hero panel">
-        <div class="eyebrow">lawftune gateway</div>
-        <h1>Local vLLM gateway, ready in one glance.</h1>
-        <p class="subtitle">
-          This UI lives in a dedicated frontend workspace and reflects the local gateway state plus the active vLLM connection.
-        </p>
-      </section>
-
-      <section class="layout">
-        <article class="panel">
-          <h2 class="section-title">Gateway Status</h2>
-          <div class="status-row">
-            <div>
-              <div class="status-label">Health</div>
-              <div class="status-value" id="health-text">Checking...</div>
-            </div>
-            <div class="badge" id="health-badge">Pending</div>
-          </div>
-          <div class="status-row">
-            <div>
-              <div class="status-label">vLLM Endpoint</div>
-              <div class="endpoint" id="endpoint-text">Loading...</div>
-            </div>
-          </div>
-          <div class="status-row">
-            <div>
-              <div class="status-label">API Key</div>
-              <div class="status-value" id="api-key-text">Checking...</div>
-            </div>
-          </div>
-        </article>
-
-        <aside class="panel">
-          <h2 class="section-title">Useful Commands</h2>
-          <div class="actions">
-            <div class="action"><span>Re-run setup</span><code>lawftune install</code></div>
-            <div class="action"><span>Foreground gateway</span><code>lawftune gateway</code></div>
-            <div class="action"><span>Check service state</span><code>lawftune gateway status</code></div>
-            <div class="action"><span>Start service</span><code>lawftune gateway start</code></div>
-          </div>
-          <p class="hint">
-            The page source is under the standalone <code>frontend/</code> folder so the UI can grow without being embedded in Python.
-          </p>
-        </aside>
-      </section>
-    </main>
-
-    <script type="module" src="/src/main.js"></script>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

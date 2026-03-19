@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Iterable
 
 from fastapi import APIRouter
 from fastapi import File
@@ -12,8 +13,12 @@ from fastapi.responses import Response
 from lawftune.api.files_store import FileStore
 
 
-def build_router(config_dir: Path | None = None) -> APIRouter:
-    router = APIRouter(prefix="/v1/files", tags=["files"])
+def build_router(
+    config_dir: Path | None = None,
+    *,
+    prefixes: Iterable[str] = ("/v1/files",),
+) -> APIRouter:
+    router = APIRouter(tags=["files"])
     store = FileStore(config_dir)
 
     @router.post("")
@@ -60,4 +65,7 @@ def build_router(config_dir: Path | None = None) -> APIRouter:
         except FileNotFoundError as exc:
             raise HTTPException(status_code=404, detail=f"File not found: {file_id}") from exc
 
-    return router
+    prefixed_router = APIRouter(tags=["files"])
+    for prefix in prefixes:
+        prefixed_router.include_router(router, prefix=prefix)
+    return prefixed_router

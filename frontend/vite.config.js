@@ -1,6 +1,8 @@
 import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
 
 export default defineConfig({
+  plugins: [react()],
   build: {
     outDir: "../src/lawftune/_frontend",
     emptyOutDir: true,
@@ -9,9 +11,8 @@ export default defineConfig({
     host: "127.0.0.1",
     port: 5173,
     proxy: {
-      "/status": "http://127.0.0.1:5293",
-      "/healthz": "http://127.0.0.1:5293",
-      "/config": "http://127.0.0.1:5293",
+      "/api": "http://127.0.0.1:5293",
+      "/v1": "http://127.0.0.1:5293",
     },
   },
 });

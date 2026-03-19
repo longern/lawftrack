@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
+from typing import Iterable
 
 from fastapi import APIRouter
 from fastapi import HTTPException
@@ -31,8 +32,12 @@ def serialize_model(model: BaseModel) -> dict[str, Any]:
     return model.dict(exclude_none=True)
 
 
-def build_router(config_dir: Path | None = None) -> APIRouter:
-    router = APIRouter(prefix="/v1/fine_tuning", tags=["fine_tuning"])
+def build_router(
+    config_dir: Path | None = None,
+    *,
+    prefixes: Iterable[str] = ("/v1/fine_tuning",),
+) -> APIRouter:
+    router = APIRouter(tags=["fine_tuning"])
     store = FineTuningJobStore(config_dir)
     file_store = FileStore(config_dir)
 
@@ -42,7 +47,10 @@ def build_router(config_dir: Path | None = None) -> APIRouter:
         except FileNotFoundError as exc:
             raise HTTPException(
                 status_code=400,
-                detail=f"{field_name} must reference an uploaded file id from /v1/files: {file_id}",
+                detail=(
+                    f"{field_name} must reference an uploaded file id from "
+                    f"/api/files or /v1/files: {file_id}"
+                ),
             ) from exc
 
         if metadata.get("purpose") != "fine-tune":
@@ -100,4 +108,7 @@ def build_router(config_dir: Path | None = None) -> APIRouter:
                 status_code=404, detail=f"Fine-tuning job not found: {job_id}"
             ) from exc
 
-    return router
+    prefixed_router = APIRouter(tags=["fine_tuning"])
+    for prefix in prefixes:
+        prefixed_router.include_router(router, prefix=prefix)
+    return prefixed_router

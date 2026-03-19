@@ -37,7 +37,7 @@ class ServerTests(unittest.TestCase):
 
             self.assertEqual(response.status_code, 200)
             self.assertIn("text/html", response.headers["content-type"])
-            self.assertIn("lawftune gateway", response.text)
+            self.assertIn("lawftune console", response.text)
             self.assertTrue(
                 "/src/main.js" in response.text or "/assets/" in response.text
             )
@@ -413,6 +413,94 @@ class ServerTests(unittest.TestCase):
 
             self.assertEqual(response.status_code, 404)
             self.assertIn("Fine-tuning job not found", response.json()["detail"])
+
+    def test_datasets_api_persists_base_model_in_yaml_and_supports_update(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            client = self._create_client(temp_dir)
+            created_file = client.post(
+                "/v1/files",
+                data={"purpose": "fine-tune"},
+                files={
+                    "file": ("train.jsonl", b'{"messages": []}\n', "application/jsonl")
+                },
+            ).json()
+
+            create_response = client.post(
+                "/api/datasets",
+                json={
+                    "name": "civil-cases",
+                    "base_model": "Qwen/Qwen2.5-7B-Instruct",
+                    "training_file_id": created_file["id"],
+                },
+            )
+
+            self.assertEqual(create_response.status_code, 200)
+            created_dataset = create_response.json()
+            self.assertEqual(created_dataset["name"], "civil-cases")
+            self.assertEqual(created_dataset["base_model"], "Qwen/Qwen2.5-7B-Instruct")
+            self.assertEqual(created_dataset["training_file_id"], created_file["id"])
+            self.assertEqual(created_dataset["training_filename"], "train.jsonl")
+
+            dataset_yaml_path = (
+                Path(temp_dir)
+                / "datasets"
+                / created_dataset["id"]
+                / "dataset.yaml"
+            )
+            self.assertTrue(dataset_yaml_path.is_file())
+            yaml_text = dataset_yaml_path.read_text(encoding="utf-8")
+            self.assertIn("base_model: Qwen/Qwen2.5-7B-Instruct", yaml_text)
+
+            update_response = client.patch(
+                f"/api/datasets/{created_dataset['id']}",
+                json={"base_model": "/models/qwen-7b-local"},
+            )
+            self.assertEqual(update_response.status_code, 200)
+            self.assertEqual(update_response.json()["base_model"], "/models/qwen-7b-local")
+
+            list_response = client.get("/api/datasets")
+            self.assertEqual(list_response.status_code, 200)
+            list_payload = list_response.json()
+            self.assertEqual(list_payload["object"], "list")
+            self.assertEqual(len(list_payload["data"]), 1)
+            self.assertEqual(list_payload["data"][0]["id"], created_dataset["id"])
+
+    def test_datasets_api_imports_yaml_and_jsonl_files(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            client = self._create_client(temp_dir)
+
+            yaml_response = client.post(
+                "/api/datasets/import",
+                files={
+                    "file": (
+                        "dataset.yaml",
+                        b"name: imported-yaml\nbase_model: Qwen/Qwen2.5-7B-Instruct\n",
+                        "application/x-yaml",
+                    )
+                },
+            )
+            self.assertEqual(yaml_response.status_code, 200)
+            yaml_dataset = yaml_response.json()
+            self.assertEqual(yaml_dataset["name"], "imported-yaml")
+            self.assertEqual(yaml_dataset["base_model"], "Qwen/Qwen2.5-7B-Instruct")
+            self.assertIsNone(yaml_dataset["training_file_id"])
+
+            jsonl_response = client.post(
+                "/api/datasets/import",
+                files={
+                    "file": (
+                        "train.jsonl",
+                        b'{"messages": []}\n',
+                        "application/jsonl",
+                    )
+                },
+            )
+            self.assertEqual(jsonl_response.status_code, 200)
+            jsonl_dataset = jsonl_response.json()
+            self.assertEqual(jsonl_dataset["name"], "train")
+            self.assertIsNone(jsonl_dataset["base_model"])
+            self.assertIsNotNone(jsonl_dataset["training_file_id"])
+            self.assertEqual(jsonl_dataset["training_filename"], "train.jsonl")
 
     def test_v1_proxy_forwards_to_configured_vllm_endpoint(self) -> None:
         sys.path.insert(0, str(ROOT / "src"))

@@ -38,6 +38,55 @@ export interface DatasetRecord {
   base_model: string | null;
   training_file_id: string | null;
   training_filename: string | null;
+  sample_count?: number;
+}
+
+export interface DatasetMessage {
+  role: string;
+  content: string;
+}
+
+export interface DatasetTokenEdit {
+  message_index: number;
+  token_index: number;
+  original_token: string;
+  replacement_token: string;
+  regenerated_from_token_index: number;
+  created_at: number;
+}
+
+export interface DatasetMessageToken {
+  token_index: number;
+  token_id: number;
+  token: string;
+  text: string;
+  start: number;
+  end: number;
+}
+
+export interface DatasetMessageTokenization {
+  message_index: number;
+  role: string;
+  content: string;
+  tokens: DatasetMessageToken[];
+}
+
+export interface DatasetSampleTokenization {
+  object: "dataset.sample.tokenization";
+  sample_id: string;
+  messages: DatasetMessageTokenization[];
+}
+
+export interface DatasetSample {
+  id: string;
+  object: "dataset.sample";
+  dataset_id: string;
+  title: string;
+  created_at: number;
+  updated_at: number;
+  messages: DatasetMessage[];
+  source_messages: DatasetMessage[];
+  edits: DatasetTokenEdit[];
 }
 
 export interface NavItem {

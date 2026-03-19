@@ -7,10 +7,16 @@ from fastapi import APIRouter
 from fastapi import File
 from fastapi import HTTPException
 from fastapi import UploadFile
+import httpx
 from pydantic import BaseModel
 
 from lawftune.api.dataset_store import DatasetStore
 from lawftune.api.files_store import FileStore
+from lawftune.api.tokenizer_service import TokenizerDependencyError
+from lawftune.api.tokenizer_service import build_continuation_prefix
+from lawftune.api.tokenizer_service import tokenize_text
+from lawftune.config import load_config
+from lawftune.vllm import build_vllm_url
 
 
 class CreateDatasetRequest(BaseModel):
@@ -25,10 +31,73 @@ class UpdateDatasetRequest(BaseModel):
     training_file_id: str | None = None
 
 
+class DatasetMessagePayload(BaseModel):
+    role: str
+    content: str
+
+
+class DatasetTokenEditPayload(BaseModel):
+    message_index: int
+    token_index: int
+    original_token: str
+    replacement_token: str
+    regenerated_from_token_index: int | None = None
+    created_at: int | None = None
+
+
+class UpdateDatasetSampleRequest(BaseModel):
+    title: str | None = None
+    messages: list[DatasetMessagePayload]
+    source_messages: list[DatasetMessagePayload] | None = None
+    edits: list[DatasetTokenEditPayload] | None = None
+
+
+class CreateDatasetSampleRequest(BaseModel):
+    title: str | None = None
+    messages: list[DatasetMessagePayload] | None = None
+    source_messages: list[DatasetMessagePayload] | None = None
+
+
+class TokenizeDatasetSampleRequest(BaseModel):
+    model: str
+
+
+class ContinueDatasetSampleRequest(BaseModel):
+    model: str
+    message_index: int
+    token_index: int
+    replacement_token: str
+    max_tokens: int = 256
+    temperature: float = 0.7
+
+
+class GenerateDatasetSampleRequest(BaseModel):
+    model: str
+    max_tokens: int = 512
+    temperature: float = 0.7
+
+
 def serialize_model(model: BaseModel) -> dict[str, Any]:
     if hasattr(model, "model_dump"):
         return model.model_dump(exclude_unset=True)
     return model.dict(exclude_unset=True)
+
+
+def extract_content_from_message_payload(payload: dict[str, Any]) -> str:
+    choices = payload.get("choices") or []
+    if not choices:
+        return ""
+    message = choices[0].get("message") or {}
+    content_value = message.get("content")
+    if isinstance(content_value, str):
+        return content_value
+    if isinstance(content_value, list):
+        return "".join(
+            str(item.get("text") or "")
+            for item in content_value
+            if isinstance(item, dict)
+        )
+    return ""
 
 
 def build_router(config_dir: Path | None = None) -> APIRouter:
@@ -99,6 +168,261 @@ def build_router(config_dir: Path | None = None) -> APIRouter:
         except FileNotFoundError as exc:
             raise HTTPException(status_code=404, detail=f"Dataset not found: {dataset_id}") from exc
 
+    @router.get("/{dataset_id}/samples")
+    def list_dataset_samples(dataset_id: str) -> dict[str, Any]:
+        try:
+            samples = store.list_samples(dataset_id)
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=f"Dataset not found: {dataset_id}") from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+        return {
+            "object": "list",
+            "data": samples,
+            "has_more": False,
+        }
+
+    @router.post("/{dataset_id}/samples")
+    def create_dataset_sample(
+        dataset_id: str,
+        payload: CreateDatasetSampleRequest,
+    ) -> dict[str, Any]:
+        try:
+            return store.create_sample(dataset_id, serialize_model(payload))
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=f"Dataset not found: {dataset_id}") from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @router.post("/{dataset_id}/samples/{sample_id}/tokenize")
+    def tokenize_dataset_sample(
+        dataset_id: str,
+        sample_id: str,
+        payload: TokenizeDatasetSampleRequest,
+    ) -> dict[str, Any]:
+        try:
+            sample = store.get_sample(dataset_id, sample_id)
+        except FileNotFoundError as exc:
+            missing_key = sample_id if str(exc) == sample_id else dataset_id
+            detail = (
+                f"Dataset sample not found: {sample_id}"
+                if missing_key == sample_id
+                else f"Dataset not found: {dataset_id}"
+            )
+            raise HTTPException(status_code=404, detail=detail) from exc
+
+        try:
+            messages = []
+            for index, message in enumerate(sample.get("messages", [])):
+                if message.get("role") == "assistant":
+                    tokens = tokenize_text(model=payload.model, text=str(message.get("content") or ""))
+                else:
+                    tokens = []
+                messages.append(
+                    {
+                        "message_index": index,
+                        "role": message.get("role"),
+                        "content": message.get("content"),
+                        "tokens": tokens,
+                    }
+                )
+        except TokenizerDependencyError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+        return {
+            "object": "dataset.sample.tokenization",
+            "sample_id": sample_id,
+            "messages": messages,
+        }
+
+    @router.post("/{dataset_id}/samples/{sample_id}/continue")
+    async def continue_dataset_sample(
+        dataset_id: str,
+        sample_id: str,
+        payload: ContinueDatasetSampleRequest,
+    ) -> dict[str, Any]:
+        try:
+            sample = store.get_sample(dataset_id, sample_id)
+        except FileNotFoundError as exc:
+            missing_key = sample_id if str(exc) == sample_id else dataset_id
+            detail = (
+                f"Dataset sample not found: {sample_id}"
+                if missing_key == sample_id
+                else f"Dataset not found: {dataset_id}"
+            )
+            raise HTTPException(status_code=404, detail=detail) from exc
+
+        messages = list(sample.get("messages", []))
+        if payload.message_index < 0 or payload.message_index >= len(messages):
+            raise HTTPException(status_code=400, detail="Message index is out of range.")
+
+        target_message = messages[payload.message_index]
+        if target_message.get("role") != "assistant":
+            raise HTTPException(status_code=400, detail="Only assistant messages support token continuation.")
+
+        try:
+            prefix, original_token, replacement_token = build_continuation_prefix(
+                model=payload.model,
+                text=str(target_message.get("content") or ""),
+                token_index=payload.token_index,
+                replacement_text=payload.replacement_token,
+            )
+        except TokenizerDependencyError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+        request_messages = [
+            {"role": str(message.get("role") or ""), "content": str(message.get("content") or "")}
+            for message in messages[: payload.message_index]
+        ]
+        request_messages.append({"role": "assistant", "content": prefix})
+
+        current_config = load_config(config_dir)
+        headers = {"content-type": "application/json"}
+        if current_config.get("api_key"):
+            headers["authorization"] = f"Bearer {current_config['api_key']}"
+        upstream_url = build_vllm_url(current_config["vllm_endpoint"], "chat/completions")
+
+        async with httpx.AsyncClient(follow_redirects=True, timeout=120.0) as client:
+            upstream_response = await client.post(
+                upstream_url,
+                headers=headers,
+                json={
+                    "model": payload.model,
+                    "messages": request_messages,
+                    "max_tokens": payload.max_tokens,
+                    "temperature": payload.temperature,
+                    "add_generation_prompt": False,
+                    "continue_final_message": True,
+                },
+            )
+
+        if not upstream_response.is_success:
+            detail = upstream_response.text or f"Upstream completion failed: {upstream_response.status_code}"
+            raise HTTPException(status_code=upstream_response.status_code, detail=detail)
+
+        completion_payload = upstream_response.json()
+        content = extract_content_from_message_payload(completion_payload)
+
+        next_messages = request_messages[:-1] + [{"role": "assistant", "content": f"{prefix}{content}"}]
+        next_edits = [
+            {
+                "message_index": payload.message_index,
+                "token_index": payload.token_index,
+                "original_token": original_token,
+                "replacement_token": replacement_token,
+                "regenerated_from_token_index": payload.token_index + 1,
+            }
+        ]
+
+        return {
+            "sample": {
+                **sample,
+                "messages": next_messages,
+                "edits": next_edits,
+            }
+        }
+
+    @router.post("/{dataset_id}/samples/{sample_id}/generate")
+    async def generate_dataset_sample_message(
+        dataset_id: str,
+        sample_id: str,
+        payload: GenerateDatasetSampleRequest,
+    ) -> dict[str, Any]:
+        try:
+            sample = store.get_sample(dataset_id, sample_id)
+        except FileNotFoundError as exc:
+            missing_key = sample_id if str(exc) == sample_id else dataset_id
+            detail = (
+                f"Dataset sample not found: {sample_id}"
+                if missing_key == sample_id
+                else f"Dataset not found: {dataset_id}"
+            )
+            raise HTTPException(status_code=404, detail=detail) from exc
+
+        messages = [
+            {"role": str(message.get("role") or ""), "content": str(message.get("content") or "")}
+            for message in sample.get("messages", [])
+            if str(message.get("role") or "").strip()
+        ]
+        if not messages:
+            raise HTTPException(status_code=400, detail="Sample must contain at least one message.")
+
+        fill_existing_assistant = False
+        if messages[-1]["role"] == "assistant":
+            if messages[-1]["content"].strip():
+                raise HTTPException(
+                    status_code=400,
+                    detail="Last message is already an assistant response. Add a user message or clear the assistant message first.",
+                )
+            fill_existing_assistant = True
+            request_messages = messages[:-1]
+        else:
+            request_messages = messages
+
+        if not request_messages:
+            raise HTTPException(status_code=400, detail="Sample must contain at least one non-empty prompt message.")
+
+        current_config = load_config(config_dir)
+        headers = {"content-type": "application/json"}
+        if current_config.get("api_key"):
+            headers["authorization"] = f"Bearer {current_config['api_key']}"
+        upstream_url = build_vllm_url(current_config["vllm_endpoint"], "chat/completions")
+
+        async with httpx.AsyncClient(follow_redirects=True, timeout=120.0) as client:
+            upstream_response = await client.post(
+                upstream_url,
+                headers=headers,
+                json={
+                    "model": payload.model,
+                    "messages": request_messages,
+                    "max_tokens": payload.max_tokens,
+                    "temperature": payload.temperature,
+                },
+            )
+
+        if not upstream_response.is_success:
+            detail = upstream_response.text or f"Upstream completion failed: {upstream_response.status_code}"
+            raise HTTPException(status_code=upstream_response.status_code, detail=detail)
+
+        completion_payload = upstream_response.json()
+        content = extract_content_from_message_payload(completion_payload)
+
+        if fill_existing_assistant:
+            next_messages = request_messages + [{"role": "assistant", "content": content}]
+        else:
+            next_messages = messages + [{"role": "assistant", "content": content}]
+
+        return {
+            "sample": {
+                **sample,
+                "messages": next_messages,
+            }
+        }
+
+    @router.put("/{dataset_id}/samples/{sample_id}")
+    def update_dataset_sample(
+        dataset_id: str,
+        sample_id: str,
+        payload: UpdateDatasetSampleRequest,
+    ) -> dict[str, Any]:
+        try:
+            return store.update_sample(dataset_id, sample_id, serialize_model(payload))
+        except FileNotFoundError as exc:
+            missing_key = sample_id if str(exc) == sample_id else dataset_id
+            detail = (
+                f"Dataset sample not found: {sample_id}"
+                if missing_key == sample_id
+                else f"Dataset not found: {dataset_id}"
+            )
+            raise HTTPException(status_code=404, detail=detail) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     @router.patch("/{dataset_id}")
     def update_dataset(dataset_id: str, payload: UpdateDatasetRequest) -> dict[str, Any]:
         serialized = serialize_model(payload)
@@ -109,5 +433,13 @@ def build_router(config_dir: Path | None = None) -> APIRouter:
             return store.update_dataset(dataset_id, serialized)
         except FileNotFoundError as exc:
             raise HTTPException(status_code=404, detail=f"Dataset not found: {dataset_id}") from exc
+
+    @router.delete("/{dataset_id}")
+    def delete_dataset(dataset_id: str) -> dict[str, Any]:
+        try:
+            store.delete_dataset(dataset_id)
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=f"Dataset not found: {dataset_id}") from exc
+        return {"id": dataset_id, "object": "dataset.deleted", "deleted": True}
 
     return router

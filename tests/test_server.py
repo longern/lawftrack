@@ -8,7 +8,7 @@ import tempfile
 from pathlib import Path
 import unittest
 from unittest import mock
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import urlparse
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -126,6 +126,38 @@ class ServerTests(unittest.TestCase):
 
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response.json(), {"status": "ok"})
+
+    def test_dataset_can_be_deleted(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            client = self._create_client(temp_dir)
+
+            create_response = client.post(
+                "/api/datasets",
+                json={
+                    "name": "delete-me",
+                    "base_model": "Qwen/Qwen2.5-7B-Instruct",
+                },
+            )
+            self.assertEqual(create_response.status_code, 200)
+            dataset = create_response.json()
+
+            delete_response = client.delete(f"/api/datasets/{dataset['id']}")
+            self.assertEqual(delete_response.status_code, 200)
+            self.assertEqual(
+                delete_response.json(),
+                {
+                    "id": dataset["id"],
+                    "object": "dataset.deleted",
+                    "deleted": True,
+                },
+            )
+
+            retrieve_response = client.get(f"/api/datasets/{dataset['id']}")
+            self.assertEqual(retrieve_response.status_code, 404)
+
+            list_response = client.get("/api/datasets")
+            self.assertEqual(list_response.status_code, 200)
+            self.assertEqual(list_response.json()["data"], [])
 
     def test_default_cors_regex_allows_localhost_with_any_port(self) -> None:
         sys.path.insert(0, str(ROOT / "src"))
@@ -501,6 +533,398 @@ class ServerTests(unittest.TestCase):
             self.assertIsNone(jsonl_dataset["base_model"])
             self.assertIsNotNone(jsonl_dataset["training_file_id"])
             self.assertEqual(jsonl_dataset["training_filename"], "train.jsonl")
+            self.assertEqual(jsonl_dataset["sample_count"], 1)
+
+    def test_datasets_api_lists_and_updates_dataset_samples(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            client = self._create_client(temp_dir)
+            created_file = client.post(
+                "/v1/files",
+                data={"purpose": "fine-tune"},
+                files={
+                    "file": (
+                        "train.jsonl",
+                        (
+                            b'{"messages":[{"role":"user","content":"\xe4\xbd\xa0\xe5\xa5\xbd"},{"role":"assistant","content":"\xe4\xbd\xa0\xe5\xa5\xbd\xef\xbc\x8c\xe6\x88\x91\xe6\x98\xaf\xe6\xb3\x95\xe5\xbe\x8b\xe5\x8a\xa9\xe6\x89\x8b"}]}\n'
+                        ),
+                        "application/jsonl",
+                    )
+                },
+            ).json()
+
+            created_dataset = client.post(
+                "/api/datasets",
+                json={
+                    "name": "chat-train",
+                    "base_model": "Qwen/Qwen2.5-7B-Instruct",
+                    "training_file_id": created_file["id"],
+                },
+            ).json()
+
+            samples_response = client.get(f"/api/datasets/{created_dataset['id']}/samples")
+            self.assertEqual(samples_response.status_code, 200)
+            samples_payload = samples_response.json()
+            self.assertEqual(samples_payload["object"], "list")
+            self.assertEqual(len(samples_payload["data"]), 1)
+            sample = samples_payload["data"][0]
+            self.assertEqual(sample["messages"][1]["content"], "你好，我是法律助手")
+
+            update_response = client.put(
+                f"/api/datasets/{created_dataset['id']}/samples/{sample['id']}",
+                json={
+                    "title": "你好样本",
+                    "messages": [
+                        {"role": "user", "content": "你好"},
+                        {"role": "assistant", "content": "您好，我是法律助手，可以继续帮您分析。"},
+                    ],
+                    "source_messages": sample["source_messages"],
+                    "edits": [
+                        {
+                            "message_index": 1,
+                            "token_index": 0,
+                            "original_token": "你好",
+                            "replacement_token": "您好",
+                            "regenerated_from_token_index": 1,
+                        }
+                    ],
+                },
+            )
+            self.assertEqual(update_response.status_code, 200)
+            updated_sample = update_response.json()
+            self.assertEqual(updated_sample["title"], "你好样本")
+            self.assertEqual(updated_sample["messages"][1]["content"], "您好，我是法律助手，可以继续帮您分析。")
+            self.assertEqual(updated_sample["edits"][0]["replacement_token"], "您好")
+
+            samples_path = (
+                Path(temp_dir)
+                / "datasets"
+                / created_dataset["id"]
+                / "samples.json"
+            )
+            self.assertTrue(samples_path.is_file())
+            saved_samples = json.loads(samples_path.read_text(encoding="utf-8"))
+            self.assertEqual(saved_samples[0]["title"], "你好样本")
+
+    def test_datasets_api_can_create_blank_sample(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            client = self._create_client(temp_dir)
+            created_dataset = client.post(
+                "/api/datasets",
+                json={"name": "manual-samples", "base_model": "Qwen/Qwen2.5-7B-Instruct"},
+            ).json()
+
+            create_sample_response = client.post(
+                f"/api/datasets/{created_dataset['id']}/samples",
+                json={"title": "新样本"},
+            )
+            self.assertEqual(create_sample_response.status_code, 200)
+            sample = create_sample_response.json()
+            self.assertEqual(sample["title"], "新样本")
+            self.assertEqual(sample["messages"][0]["role"], "user")
+            self.assertEqual(sample["messages"][1]["role"], "assistant")
+
+            list_samples_response = client.get(f"/api/datasets/{created_dataset['id']}/samples")
+            self.assertEqual(list_samples_response.status_code, 200)
+            self.assertEqual(len(list_samples_response.json()["data"]), 1)
+
+    def test_dataset_metadata_update_does_not_clear_manual_samples(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            client = self._create_client(temp_dir)
+            created_dataset = client.post(
+                "/api/datasets",
+                json={"name": "manual-samples", "base_model": "Qwen/Qwen2.5-7B-Instruct"},
+            ).json()
+
+            created_sample = client.post(
+                f"/api/datasets/{created_dataset['id']}/samples",
+                json={
+                    "title": "新样本",
+                    "messages": [
+                        {"role": "user", "content": "问题"},
+                        {"role": "assistant", "content": "回答"},
+                    ],
+                },
+            ).json()
+
+            update_response = client.patch(
+                f"/api/datasets/{created_dataset['id']}",
+                json={
+                    "name": "manual-samples-v2",
+                    "base_model": "/models/local-qwen",
+                    "training_file_id": None,
+                },
+            )
+            self.assertEqual(update_response.status_code, 200)
+
+            list_samples_response = client.get(f"/api/datasets/{created_dataset['id']}/samples")
+            self.assertEqual(list_samples_response.status_code, 200)
+            samples = list_samples_response.json()["data"]
+            self.assertEqual(len(samples), 1)
+            self.assertEqual(samples[0]["id"], created_sample["id"])
+            self.assertEqual(samples[0]["messages"][1]["content"], "回答")
+
+    def test_dataset_metadata_update_does_not_reset_samples_when_training_file_is_unchanged(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            client = self._create_client(temp_dir)
+            created_file = client.post(
+                "/v1/files",
+                data={"purpose": "fine-tune"},
+                files={
+                    "file": (
+                        "train.jsonl",
+                        (
+                            b'{"messages":[{"role":"user","content":"\xe4\xbd\xa0\xe5\xa5\xbd"},{"role":"assistant","content":"\xe5\x8e\x9f\xe5\xa7\x8b\xe5\x9b\x9e\xe7\xad\x94"}]}\n'
+                        ),
+                        "application/jsonl",
+                    )
+                },
+            ).json()
+
+            created_dataset = client.post(
+                "/api/datasets",
+                json={
+                    "name": "chat-train",
+                    "base_model": "Qwen/Qwen2.5-7B-Instruct",
+                    "training_file_id": created_file["id"],
+                },
+            ).json()
+
+            sample = client.get(f"/api/datasets/{created_dataset['id']}/samples").json()["data"][0]
+            client.put(
+                f"/api/datasets/{created_dataset['id']}/samples/{sample['id']}",
+                json={
+                    "title": sample["title"],
+                    "messages": [
+                        {"role": "user", "content": "你好"},
+                        {"role": "assistant", "content": "编辑后的回答"},
+                    ],
+                    "source_messages": sample["source_messages"],
+                    "edits": [],
+                },
+            )
+
+            update_response = client.patch(
+                f"/api/datasets/{created_dataset['id']}",
+                json={
+                    "base_model": "/models/local-qwen",
+                    "training_file_id": created_file["id"],
+                },
+            )
+            self.assertEqual(update_response.status_code, 200)
+
+            list_samples_response = client.get(f"/api/datasets/{created_dataset['id']}/samples")
+            self.assertEqual(list_samples_response.status_code, 200)
+            samples = list_samples_response.json()["data"]
+            self.assertEqual(len(samples), 1)
+            self.assertEqual(samples[0]["messages"][1]["content"], "编辑后的回答")
+
+    def test_dataset_sample_tokenize_and_continue_use_model_tokenizer(self) -> None:
+        sys.path.insert(0, str(ROOT / "src"))
+        try:
+            import lawftune.api.datasets_api as datasets_api_module
+            import lawftune.server as server_module
+            from fastapi.testclient import TestClient
+        finally:
+            sys.path.pop(0)
+
+        class DummyTokenizer:
+            is_fast = True
+
+            def __call__(self, text, add_special_tokens=False, return_offsets_mapping=False):
+                mapping = {
+                    "你好，助手": {
+                        "input_ids": [11, 12, 13],
+                        "offset_mapping": [(0, 2), (2, 3), (3, 5)],
+                    },
+                    "您好": {
+                        "input_ids": [21],
+                        "offset_mapping": [(0, 2)],
+                    },
+                }
+                payload = mapping[text]
+                if return_offsets_mapping:
+                    return payload
+                return {"input_ids": payload["input_ids"]}
+
+            def convert_ids_to_tokens(self, token_id):
+                return {11: "你好", 12: "，", 13: "助手", 21: "您好"}[token_id]
+
+            def decode(self, token_ids, clean_up_tokenization_spaces=False):
+                return "".join({11: "你好", 12: "，", 13: "助手", 21: "您好"}[token_id] for token_id in token_ids)
+
+        class DummyResponse:
+            def __init__(self, payload):
+                self._payload = payload
+                self.status_code = 200
+                self.is_success = True
+                self.text = json.dumps(payload)
+
+            def json(self):
+                return self._payload
+
+        class DummyAsyncClient:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            async def post(self, url, headers=None, json=None):
+                self.url = url
+                self.headers = headers
+                self.json_payload = json
+                return DummyResponse(
+                    {
+                        "choices": [
+                            {
+                                "message": {
+                                    "content": "，我是新的助手回答",
+                                }
+                            }
+                        ]
+                    }
+                )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "config.json"
+            config_path.write_text(
+                json.dumps({"vllm_endpoint": "http://localhost:8000/v1", "api_key": ""}),
+                encoding="utf-8",
+            )
+
+            client = self._create_client(temp_dir)
+            created_file = client.post(
+                "/v1/files",
+                data={"purpose": "fine-tune"},
+                files={
+                    "file": (
+                        "train.jsonl",
+                        b'{"messages":[{"role":"user","content":"hi"},{"role":"assistant","content":"\xe4\xbd\xa0\xe5\xa5\xbd\xef\xbc\x8c\xe5\x8a\xa9\xe6\x89\x8b"}]}\n',
+                        "application/jsonl",
+                    )
+                },
+            ).json()
+            created_dataset = client.post(
+                "/api/datasets",
+                json={
+                    "name": "token-edit",
+                    "base_model": "Qwen/Qwen2.5-7B-Instruct",
+                    "training_file_id": created_file["id"],
+                },
+            ).json()
+            sample = client.get(f"/api/datasets/{created_dataset['id']}/samples").json()["data"][0]
+
+            with mock.patch.object(datasets_api_module, "tokenize_text", side_effect=lambda model, text: [
+                {"token_index": 0, "token_id": 11, "token": "你好", "text": "你好", "start": 0, "end": 2},
+                {"token_index": 1, "token_id": 12, "token": "，", "text": "，", "start": 2, "end": 3},
+                {"token_index": 2, "token_id": 13, "token": "助手", "text": "助手", "start": 3, "end": 5},
+            ]):
+                tokenize_response = client.post(
+                    f"/api/datasets/{created_dataset['id']}/samples/{sample['id']}/tokenize",
+                    json={"model": "Qwen/Qwen2.5-7B-Instruct"},
+                )
+            self.assertEqual(tokenize_response.status_code, 200)
+            self.assertEqual(tokenize_response.json()["messages"][1]["tokens"][0]["token"], "你好")
+
+            with mock.patch.object(datasets_api_module, "build_continuation_prefix", return_value=("您好", "你好", "您好")):
+                with mock.patch.object(server_module.httpx, "AsyncClient", return_value=DummyAsyncClient()):
+                    with mock.patch.object(datasets_api_module.httpx, "AsyncClient", return_value=DummyAsyncClient()):
+                        continue_response = client.post(
+                            f"/api/datasets/{created_dataset['id']}/samples/{sample['id']}/continue",
+                            json={
+                                "model": "Qwen/Qwen2.5-7B-Instruct",
+                                "message_index": 1,
+                                "token_index": 0,
+                                "replacement_token": "您好",
+                            },
+                        )
+
+            self.assertEqual(continue_response.status_code, 200)
+            continued_sample = continue_response.json()["sample"]
+            self.assertEqual(continued_sample["messages"][1]["content"], "您好，我是新的助手回答")
+            self.assertEqual(continued_sample["edits"][0]["original_token"], "你好")
+            self.assertEqual(continued_sample["edits"][0]["replacement_token"], "您好")
+
+    def test_dataset_sample_can_generate_full_assistant_message(self) -> None:
+        sys.path.insert(0, str(ROOT / "src"))
+        try:
+            import lawftune.api.datasets_api as datasets_api_module
+            import lawftune.server as server_module
+        finally:
+            sys.path.pop(0)
+
+        class DummyResponse:
+            def __init__(self, payload):
+                self._payload = payload
+                self.status_code = 200
+                self.is_success = True
+                self.text = json.dumps(payload)
+
+            def json(self):
+                return self._payload
+
+        class DummyAsyncClient:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            async def post(self, url, headers=None, json=None):
+                self.url = url
+                self.headers = headers
+                self.json_payload = json
+                return DummyResponse(
+                    {
+                        "choices": [
+                            {
+                                "message": {
+                                    "content": "这是完整生成的助手消息",
+                                }
+                            }
+                        ]
+                    }
+                )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "config.json"
+            config_path.write_text(
+                json.dumps({"vllm_endpoint": "http://localhost:8000/v1", "api_key": ""}),
+                encoding="utf-8",
+            )
+
+            client = self._create_client(temp_dir)
+            created_dataset = client.post(
+                "/api/datasets",
+                json={
+                    "name": "full-generate",
+                    "base_model": "Qwen/Qwen2.5-7B-Instruct",
+                },
+            ).json()
+            created_sample = client.post(
+                f"/api/datasets/{created_dataset['id']}/samples",
+                json={
+                    "title": "新样本",
+                    "messages": [
+                        {"role": "user", "content": "请介绍一下合同审查"},
+                    ],
+                },
+            ).json()
+
+            with mock.patch.object(server_module.httpx, "AsyncClient", return_value=DummyAsyncClient()):
+                with mock.patch.object(datasets_api_module.httpx, "AsyncClient", return_value=DummyAsyncClient()):
+                    generate_response = client.post(
+                        f"/api/datasets/{created_dataset['id']}/samples/{created_sample['id']}/generate",
+                        json={
+                            "model": "Qwen/Qwen2.5-7B-Instruct",
+                        },
+                    )
+
+            self.assertEqual(generate_response.status_code, 200)
+            generated_sample = generate_response.json()["sample"]
+            self.assertEqual(len(generated_sample["messages"]), 2)
+            self.assertEqual(generated_sample["messages"][1]["role"], "assistant")
+            self.assertEqual(generated_sample["messages"][1]["content"], "这是完整生成的助手消息")
 
     def test_v1_proxy_forwards_to_configured_vllm_endpoint(self) -> None:
         sys.path.insert(0, str(ROOT / "src"))
@@ -512,22 +936,30 @@ class ServerTests(unittest.TestCase):
 
         class DummyResponse:
             def __init__(self) -> None:
-                self.content = b'{"ok":true}'
                 self.status_code = 200
                 self.headers = {"content-type": "application/json"}
+                self._chunks = [b'{"ok":true}']
+
+            async def aiter_raw(self):
+                for chunk in self._chunks:
+                    yield chunk
+
+            async def aclose(self):
+                return None
 
         captured_request: dict[str, object] = {}
 
         class DummyAsyncClient:
-            async def __aenter__(self):
-                return self
-
-            async def __aexit__(self, exc_type, exc, tb):
-                return False
-
-            async def request(self, **kwargs):
+            def build_request(self, **kwargs):
                 captured_request.update(kwargs)
+                return kwargs
+
+            async def send(self, request, stream=False):
+                captured_request["stream"] = stream
                 return DummyResponse()
+
+            async def aclose(self):
+                return None
 
         with tempfile.TemporaryDirectory() as temp_dir:
             config_path = Path(temp_dir) / "config.json"
@@ -546,9 +978,12 @@ class ServerTests(unittest.TestCase):
             ):
                 client = TestClient(server_module.create_app(Path(temp_dir)))
                 response = client.post(
-                    "/v1/chat/completions?stream=false",
+                    "/v1/chat/completions",
                     headers={"content-type": "application/json"},
-                    json={"messages": [{"role": "user", "content": "hello"}]},
+                    json={
+                        "messages": [{"role": "user", "content": "hello"}],
+                        "stream": False,
+                    },
                 )
 
             self.assertEqual(response.status_code, 200)
@@ -558,10 +993,72 @@ class ServerTests(unittest.TestCase):
             self.assertEqual(parsed_url.scheme, "http")
             self.assertEqual(parsed_url.netloc, "localhost:8000")
             self.assertEqual(parsed_url.path, "/base/chat/completions")
-            self.assertEqual(parse_qs(parsed_url.query), {"stream": ["false"]})
+            self.assertEqual(parsed_url.query, "")
+            self.assertTrue(captured_request["stream"])
+            self.assertIn(b'"stream":false', captured_request["content"])
             self.assertEqual(
                 captured_request["headers"]["authorization"], "Bearer secret-key"
             )
+
+    def test_v1_proxy_streams_sse_responses(self) -> None:
+        sys.path.insert(0, str(ROOT / "src"))
+        try:
+            from fastapi.testclient import TestClient
+            import lawftune.server as server_module
+        finally:
+            sys.path.pop(0)
+
+        class DummyResponse:
+            def __init__(self) -> None:
+                self.status_code = 200
+                self.headers = {"content-type": "text/event-stream"}
+                self._chunks = [
+                    b'data: {"choices":[{"delta":{"content":"\xe4\xbd\xa0\xe5\xa5\xbd"}}]}\n\n',
+                    b"data: [DONE]\n\n",
+                ]
+
+            async def aiter_raw(self):
+                for chunk in self._chunks:
+                    yield chunk
+
+            async def aclose(self):
+                return None
+
+        class DummyAsyncClient:
+            def build_request(self, **kwargs):
+                return kwargs
+
+            async def send(self, request, stream=False):
+                return DummyResponse()
+
+            async def aclose(self):
+                return None
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "config.json"
+            config_path.write_text(
+                json.dumps(
+                    {
+                        "vllm_endpoint": "http://localhost:8000/v1",
+                        "api_key": "",
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with mock.patch.object(
+                server_module.httpx, "AsyncClient", return_value=DummyAsyncClient()
+            ):
+                client = TestClient(server_module.create_app(Path(temp_dir)))
+                response = client.post(
+                    "/v1/chat/completions",
+                    headers={"content-type": "application/json"},
+                    json={"messages": [{"role": "user", "content": "hello"}], "stream": True},
+                )
+
+            self.assertEqual(response.status_code, 200)
+            self.assertIn("text/event-stream", response.headers["content-type"])
+            self.assertIn('data: {"choices":[{"delta":{"content":"你好"}}]}', response.text)
 
 
 if __name__ == "__main__":

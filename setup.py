@@ -30,6 +30,7 @@ setup(
             "httpx",
             "PyYAML",
             "python-multipart",
+            "transformers",
             "uvicorn",
         ]
     },

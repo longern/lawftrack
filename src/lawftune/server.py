@@ -6,9 +6,11 @@ from pathlib import Path
 import httpx
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.background import BackgroundTasks
 from fastapi.responses import HTMLResponse
 from fastapi.responses import FileResponse
 from fastapi.responses import Response
+from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from lawftune.api.datasets_api import build_router as build_datasets_router
@@ -52,6 +54,13 @@ def sanitize_inbound_headers(headers: httpx.Headers) -> dict[str, str]:
         for key, value in headers.items()
         if key.lower() not in HOP_BY_HOP_HEADERS
     }
+
+
+async def close_streaming_upstream(
+    upstream_response: httpx.Response, client: httpx.AsyncClient
+) -> None:
+    await upstream_response.aclose()
+    await client.aclose()
 
 
 def build_cors_middleware_options() -> dict[str, object]:
@@ -135,20 +144,24 @@ def create_app(config_dir: Path | None = None) -> FastAPI:
         )
         headers = sanitize_outbound_headers(request.headers, current_config["api_key"])
         body = await request.body()
+        client = httpx.AsyncClient(follow_redirects=True, timeout=120.0)
+        upstream_request = client.build_request(
+            method=request.method,
+            url=upstream_url,
+            headers=headers,
+            content=body,
+        )
+        upstream_response = await client.send(upstream_request, stream=True)
 
-        async with httpx.AsyncClient(follow_redirects=True, timeout=120.0) as client:
-            upstream_response = await client.request(
-                method=request.method,
-                url=upstream_url,
-                headers=headers,
-                content=body,
-            )
+        background = BackgroundTasks()
+        background.add_task(close_streaming_upstream, upstream_response, client)
 
-        return Response(
-            content=upstream_response.content,
+        return StreamingResponse(
+            upstream_response.aiter_raw(),
             status_code=upstream_response.status_code,
             headers=sanitize_inbound_headers(upstream_response.headers),
             media_type=upstream_response.headers.get("content-type"),
+            background=background,
         )
 
     return app

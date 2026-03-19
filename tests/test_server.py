@@ -829,21 +829,161 @@ class ServerTests(unittest.TestCase):
             with mock.patch.object(datasets_api_module, "build_continuation_prefix", return_value=("您好", "你好", "您好")):
                 with mock.patch.object(server_module.httpx, "AsyncClient", return_value=DummyAsyncClient()):
                     with mock.patch.object(datasets_api_module.httpx, "AsyncClient", return_value=DummyAsyncClient()):
-                        continue_response = client.post(
-                            f"/api/datasets/{created_dataset['id']}/samples/{sample['id']}/continue",
-                            json={
-                                "model": "Qwen/Qwen2.5-7B-Instruct",
-                                "message_index": 1,
-                                "token_index": 0,
-                                "replacement_token": "您好",
-                            },
-                        )
+                        with mock.patch.object(
+                            datasets_api_module,
+                            "tokenize_text",
+                            return_value=[
+                                {"token_index": 0, "token_id": 21, "token": "您好", "text": "您好", "start": 0, "end": 2},
+                                {"token_index": 1, "token_id": 12, "token": "，", "text": "，", "start": 2, "end": 3},
+                                {"token_index": 2, "token_id": 13, "token": "助手", "text": "助手", "start": 7, "end": 9},
+                            ],
+                        ):
+                            continue_response = client.post(
+                                f"/api/datasets/{created_dataset['id']}/samples/{sample['id']}/continue",
+                                json={
+                                    "model": "Qwen/Qwen2.5-7B-Instruct",
+                                    "message_index": 1,
+                                    "token_index": 0,
+                                    "replacement_token": "您好",
+                                },
+                            )
 
             self.assertEqual(continue_response.status_code, 200)
-            continued_sample = continue_response.json()["sample"]
+            continued_payload = continue_response.json()
+            continued_sample = continued_payload["sample"]
             self.assertEqual(continued_sample["messages"][1]["content"], "您好，我是新的助手回答")
             self.assertEqual(continued_sample["edits"][0]["original_token"], "你好")
             self.assertEqual(continued_sample["edits"][0]["replacement_token"], "您好")
+            self.assertEqual(continued_payload["tokenization"]["messages"][1]["tokens"][0]["text"], "您好")
+
+            save_response = client.put(
+                f"/api/datasets/{created_dataset['id']}/samples/{sample['id']}",
+                json={
+                    "title": continued_sample["title"],
+                    "messages": continued_sample["messages"],
+                    "source_messages": continued_sample["source_messages"],
+                    "edits": [
+                        {
+                            **continued_sample["edits"][0],
+                            "regenerated_from_token_index": None,
+                        }
+                    ],
+                },
+            )
+            self.assertEqual(save_response.status_code, 200)
+
+    def test_continue_preserves_edits_before_current_token(self) -> None:
+        sys.path.insert(0, str(ROOT / "src"))
+        try:
+            import lawftune.api.datasets_api as datasets_api_module
+            import lawftune.server as server_module
+        finally:
+            sys.path.pop(0)
+
+        class DummyResponse:
+            def __init__(self, payload):
+                self._payload = payload
+                self.status_code = 200
+                self.is_success = True
+                self.text = json.dumps(payload)
+
+            def json(self):
+                return self._payload
+
+        class DummyAsyncClient:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            async def post(self, url, headers=None, json=None):
+                return DummyResponse(
+                    {
+                        "choices": [
+                            {
+                                "message": {
+                                    "content": " B X",
+                                }
+                            }
+                        ]
+                    }
+                )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "config.json"
+            config_path.write_text(
+                json.dumps({"vllm_endpoint": "http://localhost:8000/v1", "api_key": ""}),
+                encoding="utf-8",
+            )
+
+            client = self._create_client(temp_dir)
+            created_dataset = client.post(
+                "/api/datasets",
+                json={"name": "preserve-edits", "base_model": "Qwen/Qwen2.5-7B-Instruct"},
+            ).json()
+            created_sample = client.post(
+                f"/api/datasets/{created_dataset['id']}/samples",
+                json={
+                    "title": "样本",
+                    "messages": [
+                        {"role": "user", "content": "hi"},
+                        {"role": "assistant", "content": "a b c"},
+                    ],
+                },
+            ).json()
+
+            client.put(
+                f"/api/datasets/{created_dataset['id']}/samples/{created_sample['id']}",
+                json={
+                    "title": created_sample["title"],
+                    "messages": created_sample["messages"],
+                    "source_messages": created_sample["source_messages"],
+                    "edits": [
+                        {
+                            "message_index": 1,
+                            "token_index": 0,
+                            "original_token": "a",
+                            "replacement_token": "A",
+                            "regenerated_from_token_index": None,
+                        }
+                    ],
+                },
+            )
+
+            with mock.patch.object(
+                datasets_api_module,
+                "build_continuation_prefix",
+                return_value=("A b", "b", "B"),
+            ):
+                with mock.patch.object(server_module.httpx, "AsyncClient", return_value=DummyAsyncClient()):
+                    with mock.patch.object(datasets_api_module.httpx, "AsyncClient", return_value=DummyAsyncClient()):
+                        with mock.patch.object(
+                            datasets_api_module,
+                            "tokenize_text",
+                            return_value=[
+                                {"token_index": 0, "token_id": 1, "token": "A", "text": "A", "start": 0, "end": 1},
+                                {"token_index": 1, "token_id": 2, "token": " B", "text": " B", "start": 1, "end": 3},
+                                {"token_index": 2, "token_id": 3, "token": " X", "text": " X", "start": 3, "end": 5},
+                            ],
+                        ):
+                            continue_response = client.post(
+                                f"/api/datasets/{created_dataset['id']}/samples/{created_sample['id']}/continue",
+                                json={
+                                    "model": "Qwen/Qwen2.5-7B-Instruct",
+                                    "message_index": 1,
+                                    "token_index": 1,
+                                    "replacement_token": "B",
+                                },
+                            )
+
+            self.assertEqual(continue_response.status_code, 200)
+            continued_sample = continue_response.json()["sample"]
+            self.assertEqual(len(continued_sample["edits"]), 2)
+            self.assertEqual(continued_sample["edits"][0]["token_index"], 0)
+            self.assertEqual(continued_sample["edits"][0]["replacement_token"], "A")
+            self.assertEqual(continued_sample["edits"][1]["token_index"], 1)
+            self.assertEqual(continued_sample["edits"][1]["replacement_token"], "B")
 
     def test_dataset_sample_can_generate_full_assistant_message(self) -> None:
         sys.path.insert(0, str(ROOT / "src"))

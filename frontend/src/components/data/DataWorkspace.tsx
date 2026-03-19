@@ -19,7 +19,7 @@ import type {
 } from "../../types/app";
 import { DatasetHome } from "./DatasetHome";
 import { WorkspaceShell } from "./DataWorkspaceShell";
-import type { DatasetDraft, TokenCandidate, TokenSelection } from "./dataWorkspaceTypes";
+import type { ContinuationDraft, DatasetDraft, TokenCandidate, TokenSelection } from "./dataWorkspaceTypes";
 
 interface DataWorkspaceProps {
   dataSummary: DataSummaryItem[];
@@ -68,6 +68,7 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
   const [selectedToken, setSelectedToken] = useState<TokenSelection | null>(null);
   const [replacementToken, setReplacementToken] = useState("");
   const [tokenCandidates, setTokenCandidates] = useState<TokenCandidate[]>([]);
+  const [continuationDraft, setContinuationDraft] = useState<ContinuationDraft | null>(null);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -101,6 +102,8 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
   );
   const selectedSample = samples.find((sample) => sample.id === selectedSampleId) ?? samples[0] ?? null;
   const selectedSampleTokenization = selectedSample ? sampleTokenizations[selectedSample.id] ?? null : null;
+  const visibleSample = continuationDraft?.sample ?? selectedSample;
+  const visibleSampleTokenization = continuationDraft?.tokenization ?? selectedSampleTokenization;
 
   useEffect(() => {
     void refreshWorkspace();
@@ -118,6 +121,7 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
       setSelectedSampleId(null);
       setSelectedToken(null);
       setTokenCandidates([]);
+      setContinuationDraft(null);
       setCandidatesLoading(false);
       tokenCandidatesRequestRef.current += 1;
       return;
@@ -135,6 +139,7 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
       setSelectedToken(null);
       setReplacementToken("");
       setTokenCandidates([]);
+      setContinuationDraft(null);
       setCandidatesLoading(false);
       tokenCandidatesRequestRef.current += 1;
       return;
@@ -202,6 +207,7 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
       setSelectedToken(null);
       setReplacementToken("");
       setTokenCandidates([]);
+      setContinuationDraft(null);
       setCandidatesLoading(false);
       tokenCandidatesRequestRef.current += 1;
       setDirtySampleIds([]);
@@ -211,6 +217,7 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
       setSamples([]);
       setSampleTokenizations({});
       setSelectedSampleId(null);
+      setContinuationDraft(null);
       setCandidatesLoading(false);
       tokenCandidatesRequestRef.current += 1;
       setError(loadError instanceof Error ? loadError.message : "加载样本失败");
@@ -341,6 +348,7 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
       setSelectedToken(null);
       setReplacementToken("");
       setTokenCandidates([]);
+      setContinuationDraft(null);
       setCandidatesLoading(false);
       tokenCandidatesRequestRef.current += 1;
       setError("");
@@ -362,6 +370,14 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
     });
   }
 
+  function clearSampleTokenization(sampleId: string) {
+    setSampleTokenizations((current) => {
+      const next = { ...current };
+      delete next[sampleId];
+      return next;
+    });
+  }
+
   function updateSelectedSample(updater: (sample: DatasetSample) => DatasetSample) {
     if (!selectedSample) {
       return;
@@ -376,6 +392,7 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
     setSelectedToken(null);
     setReplacementToken("");
     setTokenCandidates([]);
+    setContinuationDraft(null);
     setCandidatesLoading(false);
     tokenCandidatesRequestRef.current += 1;
   }
@@ -419,10 +436,10 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
   }
 
   async function handleSelectToken(messageIndex: number, tokenIndex: number) {
-    if (!selectedSample) {
+    if (!visibleSample || continuationDraft) {
       return;
     }
-    const tokenization = await ensureSampleTokenization(selectedSample);
+    const tokenization = await ensureSampleTokenization(visibleSample);
     const message = tokenization?.messages.find((item) => item.message_index === messageIndex);
     const token = message?.tokens.find((item) => item.token_index === tokenIndex);
     if (!token) {
@@ -436,7 +453,7 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
       originalToken: token.text || token.token,
     });
     setReplacementToken(token.text || token.token);
-    void loadTokenCandidates(selectedSample, tokenization, messageIndex, tokenIndex);
+    void loadTokenCandidates(visibleSample, tokenization, messageIndex, tokenIndex);
   }
 
   async function loadTokenCandidates(
@@ -540,7 +557,9 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
     }
     setGenerating(true);
     try {
-      const continuation = await fetchJson<{ sample: DatasetSample }>(`/api/datasets/${activeDataset.id}/samples/${selectedSample.id}/continue`, {
+      const continuation = await fetchJson<{ sample: DatasetSample; tokenization: DatasetSampleTokenization }>(
+        `/api/datasets/${activeDataset.id}/samples/${selectedSample.id}/continue`,
+        {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -550,7 +569,11 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
           replacement_token: replacementToken.trim() || selectedToken.currentToken,
         }),
       });
-      updateCurrentSample({ ...continuation.sample, updated_at: Math.floor(Date.now() / 1000) });
+      setSampleTokenizations((current) => ({
+        ...current,
+        [selectedSample.id]: continuation.tokenization,
+      }));
+      setContinuationDraft(continuation);
       setSelectedToken({ ...selectedToken, currentToken: replacementToken.trim() || selectedToken.currentToken });
       setError("");
     } catch (generateError) {
@@ -560,8 +583,48 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
     }
   }
 
+  function handleAcceptContinuationDraft() {
+    if (!selectedSample || !continuationDraft || !selectedToken) {
+      return;
+    }
+    const acceptedSample: DatasetSample = {
+      ...continuationDraft.sample,
+      edits: continuationDraft.sample.edits.map((edit) => ({
+        ...edit,
+        regenerated_from_token_index: null,
+      })),
+      updated_at: Math.floor(Date.now() / 1000),
+    };
+    updateCurrentSample(acceptedSample);
+    setSampleTokenizations((current) => ({
+      ...current,
+      [acceptedSample.id]: continuationDraft.tokenization,
+    }));
+    setContinuationDraft(null);
+    setSelectedToken({
+      ...selectedToken,
+      currentToken: acceptedSample.edits[0]?.replacement_token ?? selectedToken.currentToken,
+    });
+    setTokenCandidates([]);
+    setCandidatesLoading(false);
+    tokenCandidatesRequestRef.current += 1;
+  }
+
+  function handleDiscardContinuationDraft() {
+    if (!continuationDraft || !selectedSample) {
+      return;
+    }
+    setContinuationDraft(null);
+    setReplacementToken(selectedToken?.originalToken ?? "");
+    setTokenCandidates([]);
+    setCandidatesLoading(false);
+    tokenCandidatesRequestRef.current += 1;
+    clearSampleTokenization(selectedSample.id);
+    void ensureSampleTokenization(selectedSample);
+  }
+
   async function handleSaveSample() {
-    if (!activeDataset || !selectedSample) {
+    if (!activeDataset || !selectedSample || continuationDraft) {
       return;
     }
     setSavingSample(true);
@@ -577,7 +640,7 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
   }
 
   async function handleGenerateAssistantMessage() {
-    if (!activeDataset || !draft || !selectedSample) {
+    if (!activeDataset || !draft || !selectedSample || continuationDraft) {
       return;
     }
     const model = draft.base_model.trim() || activeDataset.base_model || "";
@@ -827,13 +890,14 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
           onSetMobileMetadataOpen={setMobileMetadataOpen}
           samples={samples}
           samplesLoading={samplesLoading}
-          selectedSample={selectedSample}
-          selectedSampleTokenization={selectedSampleTokenization}
+          selectedSample={visibleSample}
+          selectedSampleTokenization={visibleSampleTokenization}
           selectedSampleId={selectedSampleId}
           dirtySampleIds={dirtySampleIds}
           selectedToken={selectedToken}
           tokenCandidates={tokenCandidates}
           candidatesLoading={candidatesLoading}
+          hasContinuationDraft={Boolean(continuationDraft)}
           replacementToken={replacementToken}
           generating={generating}
           generatingAssistant={generatingAssistant}
@@ -842,10 +906,20 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
           onCreateSample={() => void handleCreateSample()}
           onGenerateAssistantMessage={() => void handleGenerateAssistantMessage()}
           onGenerateContinuation={() => void handleGenerateContinuation()}
+          onAcceptContinuationDraft={handleAcceptContinuationDraft}
+          onDiscardContinuationDraft={handleDiscardContinuationDraft}
           onSaveSample={() => void handleSaveSample()}
           onUpdateSelectedSampleTitle={updateSelectedSampleTitle}
           onUpdateSelectedSampleMessages={updateSelectedSampleMessages}
-          onSelectSample={setSelectedSampleId}
+          onSelectSample={(sampleId) => {
+            setSelectedSampleId(sampleId);
+            setContinuationDraft(null);
+            setSelectedToken(null);
+            setReplacementToken("");
+            setTokenCandidates([]);
+            setCandidatesLoading(false);
+            tokenCandidatesRequestRef.current += 1;
+          }}
           onSelectToken={handleSelectToken}
           onSetReplacementToken={setReplacementToken}
         />

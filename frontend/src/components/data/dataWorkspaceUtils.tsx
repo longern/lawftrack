@@ -22,6 +22,15 @@ export function buildTokenRenderSegments(
     return [{ kind: "text" as const, text: message.content }];
   }
 
+  const concatenatedTokens = tokenization.tokens.map((token) => token.text || "").join("");
+  if (concatenatedTokens === message.content) {
+    return tokenization.tokens.map((token) => ({
+      kind: "token" as const,
+      tokenIndex: token.token_index,
+      text: token.text,
+    }));
+  }
+
   const segments: Array<
     | { kind: "text"; text: string }
     | { kind: "token"; tokenIndex: number; text: string }
@@ -35,7 +44,7 @@ export function buildTokenRenderSegments(
     segments.push({
       kind: "token",
       tokenIndex: token.token_index,
-      text: message.content.slice(token.start, token.end) || token.text,
+      text: token.text,
     });
     cursor = token.end;
   }

@@ -100,6 +100,33 @@ def extract_content_from_message_payload(payload: dict[str, Any]) -> str:
     return ""
 
 
+def build_sample_tokenization_payload(
+    *,
+    sample_id: str,
+    model: str,
+    messages: list[dict[str, Any]],
+) -> dict[str, Any]:
+    tokenized_messages = []
+    for index, message in enumerate(messages):
+        if message.get("role") == "assistant":
+            tokens = tokenize_text(model=model, text=str(message.get("content") or ""))
+        else:
+            tokens = []
+        tokenized_messages.append(
+            {
+                "message_index": index,
+                "role": message.get("role"),
+                "content": message.get("content"),
+                "tokens": tokens,
+            }
+        )
+    return {
+        "object": "dataset.sample.tokenization",
+        "sample_id": sample_id,
+        "messages": tokenized_messages,
+    }
+
+
 def build_router(config_dir: Path | None = None) -> APIRouter:
     router = APIRouter(prefix="/api/datasets", tags=["datasets"])
     store = DatasetStore(config_dir)
@@ -213,30 +240,15 @@ def build_router(config_dir: Path | None = None) -> APIRouter:
             raise HTTPException(status_code=404, detail=detail) from exc
 
         try:
-            messages = []
-            for index, message in enumerate(sample.get("messages", [])):
-                if message.get("role") == "assistant":
-                    tokens = tokenize_text(model=payload.model, text=str(message.get("content") or ""))
-                else:
-                    tokens = []
-                messages.append(
-                    {
-                        "message_index": index,
-                        "role": message.get("role"),
-                        "content": message.get("content"),
-                        "tokens": tokens,
-                    }
-                )
+            return build_sample_tokenization_payload(
+                sample_id=sample_id,
+                model=payload.model,
+                messages=list(sample.get("messages", [])),
+            )
         except TokenizerDependencyError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-        return {
-            "object": "dataset.sample.tokenization",
-            "sample_id": sample_id,
-            "messages": messages,
-        }
 
     @router.post("/{dataset_id}/samples/{sample_id}/continue")
     async def continue_dataset_sample(
@@ -309,7 +321,19 @@ def build_router(config_dir: Path | None = None) -> APIRouter:
         content = extract_content_from_message_payload(completion_payload)
 
         next_messages = request_messages[:-1] + [{"role": "assistant", "content": f"{prefix}{content}"}]
-        next_edits = [
+        previous_edits = [
+            dict(edit)
+            for edit in sample.get("edits", [])
+            if isinstance(edit, dict)
+            and (
+                int(edit.get("message_index", -1)) < payload.message_index
+                or (
+                    int(edit.get("message_index", -1)) == payload.message_index
+                    and int(edit.get("token_index", -1)) < payload.token_index
+                )
+            )
+        ]
+        next_edits = previous_edits + [
             {
                 "message_index": payload.message_index,
                 "token_index": payload.token_index,
@@ -319,13 +343,24 @@ def build_router(config_dir: Path | None = None) -> APIRouter:
             }
         ]
 
-        return {
-            "sample": {
-                **sample,
-                "messages": next_messages,
-                "edits": next_edits,
-            }
+        next_sample = {
+            **sample,
+            "messages": next_messages,
+            "edits": next_edits,
         }
+
+        try:
+            tokenization = build_sample_tokenization_payload(
+                sample_id=sample_id,
+                model=payload.model,
+                messages=next_messages,
+            )
+        except TokenizerDependencyError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+        return {"sample": next_sample, "tokenization": tokenization}
 
     @router.post("/{dataset_id}/samples/{sample_id}/generate")
     async def generate_dataset_sample_message(

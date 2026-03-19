@@ -364,8 +364,10 @@ class DatasetStore:
                     "token_index": int(item.get("token_index", 0)),
                     "original_token": str(item.get("original_token") or ""),
                     "replacement_token": str(item.get("replacement_token") or ""),
-                    "regenerated_from_token_index": int(
-                        item.get("regenerated_from_token_index", item.get("token_index", 0) + 1)
+                    "regenerated_from_token_index": (
+                        None
+                        if item.get("regenerated_from_token_index") is None
+                        else int(item.get("regenerated_from_token_index"))
                     ),
                     "created_at": int(item.get("created_at", time.time())),
                 }

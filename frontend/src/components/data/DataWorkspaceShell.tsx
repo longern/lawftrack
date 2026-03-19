@@ -1,10 +1,11 @@
-import { type ChangeEvent, type RefObject, type SyntheticEvent, useEffect, useState } from "react";
+import { type ChangeEvent, type ReactNode, type RefObject, type SyntheticEvent, useEffect, useState } from "react";
 import AddRoundedIcon from "@mui/icons-material/AddRounded";
 import CloudUploadRoundedIcon from "@mui/icons-material/CloudUploadRounded";
 import CloseRoundedIcon from "@mui/icons-material/CloseRounded";
 import DataObjectRoundedIcon from "@mui/icons-material/DataObjectRounded";
 import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
 import EditRoundedIcon from "@mui/icons-material/EditRounded";
+import ExpandMoreRoundedIcon from "@mui/icons-material/ExpandMoreRounded";
 import FolderOpenRoundedIcon from "@mui/icons-material/FolderOpenRounded";
 import KeyboardDoubleArrowLeftRoundedIcon from "@mui/icons-material/KeyboardDoubleArrowLeftRounded";
 import KeyboardDoubleArrowRightRoundedIcon from "@mui/icons-material/KeyboardDoubleArrowRightRounded";
@@ -18,6 +19,7 @@ import {
   Box,
   Button,
   CircularProgress,
+  Collapse,
   Drawer,
   FormControl,
   IconButton,
@@ -90,6 +92,7 @@ export interface WorkspaceShellProps {
   dirtySampleIds: string[];
   selectedToken: TokenSelection | null;
   replacementToken: string;
+  hasContinuationDraft: boolean;
   generating: boolean;
   generatingAssistant: boolean;
   saving: boolean;
@@ -97,8 +100,10 @@ export interface WorkspaceShellProps {
   tokenCandidates: TokenCandidate[];
   candidatesLoading: boolean;
   onCreateSample: () => void;
+  onAcceptContinuationDraft: () => void;
   onGenerateAssistantMessage: () => void;
   onGenerateContinuation: () => void;
+  onDiscardContinuationDraft: () => void;
   onSaveSample: () => void;
   onUpdateSelectedSampleTitle: (title: string) => void;
   onUpdateSelectedSampleMessages: (updater: (messages: DatasetMessage[]) => DatasetMessage[]) => void;
@@ -303,6 +308,7 @@ function ExplorerPane({
 function SampleListPane({
   compact = false,
   dirtySampleIds,
+  metadataSection,
   onCreateSample,
   onSelectSample,
   samples,
@@ -312,6 +318,7 @@ function SampleListPane({
 }: {
   compact?: boolean;
   dirtySampleIds: string[];
+  metadataSection?: ReactNode;
   onCreateSample: () => void;
   onSelectSample: (sampleId: string | null) => void;
   samples: DatasetSample[];
@@ -387,12 +394,141 @@ function SampleListPane({
           </List>
         )}
       </Box>
+      {metadataSection ? (
+        <Box sx={{ borderTop: "1px solid rgba(148, 163, 184, 0.12)", flexShrink: 0 }}>
+          {metadataSection}
+        </Box>
+      ) : null}
+    </Box>
+  );
+}
+
+function DatasetMetadataForm({
+  dataset,
+  draft,
+  fineTuneFiles,
+  modelOptions,
+  modelOptionsError,
+  modelsLoading,
+  onChangeDraft,
+  onLoadModelOptions,
+  onSaveDataset,
+  saving,
+}: {
+  dataset: DatasetRecord;
+  draft: DatasetDraft;
+  fineTuneFiles: UploadedFile[];
+  modelOptions: string[];
+  modelOptionsError: string;
+  modelsLoading: boolean;
+  onChangeDraft: (draft: DatasetDraft | null) => void;
+  onLoadModelOptions: () => void;
+  onSaveDataset: () => void;
+  saving: boolean;
+}) {
+  return (
+    <Stack spacing={2}>
+      <Typography variant="caption" sx={{ color: "#94a3b8" }}>
+        datasets/{dataset.id}/dataset.yaml
+      </Typography>
+      <TextField label="数据集名称" value={draft.name} onChange={(event) => onChangeDraft({ ...draft, name: event.target.value })} fullWidth size="small" sx={darkFieldSx} />
+      <Autocomplete
+        freeSolo
+        options={modelOptions}
+        value={draft.base_model}
+        inputValue={draft.base_model}
+        loading={modelsLoading}
+        onOpen={onLoadModelOptions}
+        onChange={(_, value) => onChangeDraft({ ...draft, base_model: typeof value === "string" ? value : value ?? "" })}
+        onInputChange={(_, value) => onChangeDraft({ ...draft, base_model: value })}
+        renderInput={(params) => (
+          <TextField
+            {...params}
+            label="标注模型 / Base Model"
+            helperText={modelOptionsError || "可从模型列表选择，也可直接输入本地模型目录路径。"}
+            fullWidth
+            size="small"
+            sx={darkFieldSx}
+            slotProps={{
+              input: {
+                ...params.InputProps,
+                endAdornment: (
+                  <>
+                    {modelsLoading ? <CircularProgress color="inherit" size={16} /> : null}
+                    {params.InputProps.endAdornment}
+                  </>
+                ),
+              },
+            }}
+          />
+        )}
+      />
+      <FormControl fullWidth size="small" sx={darkFieldSx}>
+        <InputLabel id={`dataset-training-file-label-${dataset.id}`}>训练文件</InputLabel>
+        <Select
+          labelId={`dataset-training-file-label-${dataset.id}`}
+          label="训练文件"
+          value={draft.training_file_id}
+          onChange={(event) => onChangeDraft({ ...draft, training_file_id: event.target.value })}
+        >
+          <MenuItem value="">未绑定</MenuItem>
+          {fineTuneFiles.map((file) => (
+            <MenuItem key={file.id} value={file.id}>
+              {file.filename}
+            </MenuItem>
+          ))}
+        </Select>
+      </FormControl>
+      <Button variant="outlined" onClick={onSaveDataset} disabled={saving}>
+        {saving ? "保存中..." : "保存数据集配置"}
+      </Button>
+    </Stack>
+  );
+}
+
+function DatasetMetadataSection(props: {
+  dataset: DatasetRecord;
+  draft: DatasetDraft;
+  fineTuneFiles: UploadedFile[];
+  modelOptions: string[];
+  modelOptionsError: string;
+  modelsLoading: boolean;
+  onChangeDraft: (draft: DatasetDraft | null) => void;
+  onLoadModelOptions: () => void;
+  onSaveDataset: () => void;
+  saving: boolean;
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <Box sx={{ overflow: "hidden" }}>
+      <Button
+        fullWidth
+        onClick={() => setExpanded((current) => !current)}
+        endIcon={<ExpandMoreRoundedIcon sx={{ fontSize: 18, transform: expanded ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 160ms ease" }} />}
+        sx={{
+          minHeight: 32,
+          justifyContent: "space-between",
+          px: 1.5,
+          py: 0.375,
+          color: "#cbd5e1",
+          borderRadius: 0,
+        }}
+      >
+        数据集元数据
+      </Button>
+      <Collapse in={expanded}>
+        <Box sx={{ px: 1.5, pb: 1.5, borderTop: "1px solid rgba(148, 163, 184, 0.12)" }}>
+          <DatasetMetadataForm {...props} />
+        </Box>
+      </Collapse>
     </Box>
   );
 }
 
 function MessageBubble({
-  edit,
+  edits,
+  hasContinuationDraft,
   isEditing,
   message,
   messageIndex,
@@ -404,7 +540,8 @@ function MessageBubble({
   selectedToken,
   onSelectToken,
 }: {
-  edit: DatasetTokenEdit | null;
+  edits: DatasetTokenEdit[];
+  hasContinuationDraft: boolean;
   isEditing: boolean;
   message: DatasetMessage;
   messageIndex: number;
@@ -419,6 +556,7 @@ function MessageBubble({
   const isAssistant = message.role === "assistant";
   const isUser = message.role === "user";
   const renderSegments = buildTokenRenderSegments(message, messageTokenization);
+  const sortedEdits = [...edits].sort((left, right) => left.token_index - right.token_index);
 
   return (
     <Box sx={{ display: "flex", justifyContent: isUser ? "flex-end" : "flex-start" }}>
@@ -453,31 +591,36 @@ function MessageBubble({
             )}
 
             <Stack direction="row" spacing={0.5}>
-              <IconButton size="small" onClick={() => onSetEditing(!isEditing)} sx={{ color: "#94a3b8" }}>
+              <IconButton size="small" onClick={() => onSetEditing(!isEditing)} disabled={hasContinuationDraft} sx={{ color: "#94a3b8" }}>
                 <EditRoundedIcon fontSize="small" />
               </IconButton>
               {onDelete ? (
-                <IconButton size="small" onClick={onDelete} sx={{ color: "#94a3b8" }}>
+                <IconButton size="small" onClick={onDelete} disabled={hasContinuationDraft} sx={{ color: "#94a3b8" }}>
                   <DeleteOutlineRoundedIcon fontSize="small" />
                 </IconButton>
               ) : null}
             </Stack>
           </Stack>
 
-          {edit ? (
-            <Box
-              sx={{
-                px: 1.25,
-                py: 0.75,
-                borderRadius: 2,
-                bgcolor: "rgba(245, 158, 11, 0.14)",
-                color: "#fcd34d",
-                border: "1px solid rgba(245, 158, 11, 0.32)",
-                fontSize: 12,
-              }}
-            >
-              已改写 token: <s>{edit.original_token}</s> → <strong>{edit.replacement_token}</strong>
-            </Box>
+          {sortedEdits.length > 0 ? (
+            <Stack spacing={0.75}>
+              {sortedEdits.map((edit) => (
+                <Box
+                  key={`${edit.message_index}-${edit.token_index}-${edit.created_at}`}
+                  sx={{
+                    px: 1.25,
+                    py: 0.75,
+                    borderRadius: 2,
+                    bgcolor: "rgba(245, 158, 11, 0.14)",
+                    color: "#fcd34d",
+                    border: "1px solid rgba(245, 158, 11, 0.32)",
+                    fontSize: 12,
+                  }}
+                >
+                  已改写 token: <s>{edit.original_token}</s> → <strong>{edit.replacement_token}</strong>
+                </Box>
+              ))}
+            </Stack>
           ) : null}
 
           <Box
@@ -507,8 +650,13 @@ function MessageBubble({
                 }
 
                 const tokenIndex = segment.tokenIndex;
-                const isChanged = Boolean(edit && tokenIndex === edit.token_index);
-                const isRegenerated = Boolean(edit && tokenIndex >= edit.regenerated_from_token_index);
+                const matchingEdit = sortedEdits.find((item) => tokenIndex === item.token_index) ?? null;
+                const isChanged = Boolean(matchingEdit);
+                const isRegenerated = sortedEdits.some(
+                  (item) =>
+                    item.regenerated_from_token_index !== null &&
+                    tokenIndex >= item.regenerated_from_token_index,
+                );
                 const isSelected = selectedToken?.messageIndex === messageIndex && selectedToken?.tokenIndex === tokenIndex;
 
                 return (
@@ -516,10 +664,14 @@ function MessageBubble({
                     key={`${messageIndex}-${tokenIndex}`}
                     component="button"
                     type="button"
-                    onClick={() => onSelectToken(messageIndex, tokenIndex)}
+                    onClick={() => {
+                      if (!hasContinuationDraft) {
+                        onSelectToken(messageIndex, tokenIndex);
+                      }
+                    }}
                     sx={{
                       border: "none",
-                      cursor: "pointer",
+                      cursor: hasContinuationDraft ? "default" : "pointer",
                       display: "inline",
                       font: "inherit",
                       color: isChanged ? "#111827" : "#f8fafc",
@@ -537,7 +689,17 @@ function MessageBubble({
                       fontWeight: isChanged ? 800 : isSelected ? 700 : 500,
                       transition: "background-color 120ms ease",
                       "&:hover": {
-                        backgroundColor: isChanged ? "#fbbf24" : "rgba(148, 163, 184, 0.18)",
+                        backgroundColor: hasContinuationDraft
+                          ? isChanged
+                            ? "#f59e0b"
+                            : isSelected
+                              ? "rgba(96, 165, 250, 0.28)"
+                              : isRegenerated
+                                ? "rgba(59, 130, 246, 0.18)"
+                                : "transparent"
+                          : isChanged
+                            ? "#fbbf24"
+                            : "rgba(148, 163, 184, 0.18)",
                       },
                     }}
                   >
@@ -557,6 +719,7 @@ function MessageBubble({
 
 function MessageFlowPanel({
   generatingAssistant,
+  hasContinuationDraft,
   samplesLoading,
   sample,
   sampleTokenization,
@@ -569,6 +732,7 @@ function MessageFlowPanel({
   onUpdateSampleTitle,
 }: {
   generatingAssistant: boolean;
+  hasContinuationDraft: boolean;
   samplesLoading: boolean;
   sample: DatasetSample | null;
   sampleTokenization: DatasetSampleTokenization | null;
@@ -609,7 +773,7 @@ function MessageFlowPanel({
               size="small"
               startIcon={<SmartToyRoundedIcon />}
               onClick={onGenerateAssistantMessage}
-              disabled={generatingAssistant || !sample}
+              disabled={generatingAssistant || !sample || hasContinuationDraft}
               sx={{ color: "#e2e8f0", borderColor: "rgba(148, 163, 184, 0.28)" }}
             >
               {generatingAssistant ? "生成中..." : "生成 AI 消息"}
@@ -619,7 +783,7 @@ function MessageFlowPanel({
               size="small"
               startIcon={<SaveRoundedIcon />}
               onClick={onSaveSample}
-              disabled={savingSample || !sample}
+              disabled={savingSample || !sample || hasContinuationDraft}
               sx={{ color: "#e2e8f0", borderColor: "rgba(148, 163, 184, 0.28)" }}
             >
               {savingSample ? "保存中..." : "保存样本"}
@@ -646,7 +810,8 @@ function MessageFlowPanel({
             {sample.messages.map((message, messageIndex) => (
               <MessageBubble
                 key={`${sample.id}-${messageIndex}`}
-                edit={sample.edits.find((item) => item.message_index === messageIndex) ?? null}
+                edits={sample.edits.filter((item) => item.message_index === messageIndex)}
+                hasContinuationDraft={hasContinuationDraft}
                 isEditing={editingMessageIndex === messageIndex}
                 message={message}
                 messageIndex={messageIndex}
@@ -679,6 +844,7 @@ function MessageFlowPanel({
                   onUpdateSampleMessages((messages) => [...messages, { role: "user", content: "" }]);
                   setEditingMessageIndex(sample.messages.length);
                 }}
+                disabled={hasContinuationDraft}
                 sx={{ color: "#e2e8f0", borderColor: "rgba(148, 163, 184, 0.28)" }}
               >
                 添加用户消息
@@ -690,6 +856,7 @@ function MessageFlowPanel({
                   onUpdateSampleMessages((messages) => [...messages, { role: "assistant", content: "" }]);
                   setEditingMessageIndex(sample.messages.length);
                 }}
+                disabled={hasContinuationDraft}
                 sx={{ color: "#e2e8f0", borderColor: "rgba(148, 163, 184, 0.28)" }}
               >
                 添加助手消息
@@ -702,44 +869,30 @@ function MessageFlowPanel({
   );
 }
 
-function MetadataAndTokenPanel({
+function TokenActionPanel({
   candidatesLoading,
-  dataset,
-  draft,
-  fineTuneFiles,
   generating,
-  modelOptions,
-  modelOptionsError,
-  modelsLoading,
-  onChangeDraft,
+  hasContinuationDraft,
+  onAcceptContinuationDraft,
+  onDiscardContinuationDraft,
   onGenerateContinuation,
-  onLoadModelOptions,
-  onSaveDataset,
   onSaveSample,
   onSetReplacementToken,
   replacementToken,
-  saving,
   savingSample,
   selectedSample,
   selectedToken,
   tokenCandidates,
 }: {
   candidatesLoading: boolean;
-  dataset: DatasetRecord;
-  draft: DatasetDraft;
-  fineTuneFiles: UploadedFile[];
   generating: boolean;
-  modelOptions: string[];
-  modelOptionsError: string;
-  modelsLoading: boolean;
-  onChangeDraft: (draft: DatasetDraft | null) => void;
+  hasContinuationDraft: boolean;
+  onAcceptContinuationDraft: () => void;
+  onDiscardContinuationDraft: () => void;
   onGenerateContinuation: () => void;
-  onLoadModelOptions: () => void;
-  onSaveDataset: () => void;
   onSaveSample: () => void;
   onSetReplacementToken: (value: string) => void;
   replacementToken: string;
-  saving: boolean;
   savingSample: boolean;
   selectedSample: DatasetSample | null;
   selectedToken: TokenSelection | null;
@@ -749,143 +902,93 @@ function MetadataAndTokenPanel({
     <Box sx={{ minHeight: 0, bgcolor: "#111827", borderLeft: "1px solid rgba(148, 163, 184, 0.12)", display: "flex", flexDirection: "column" }}>
       <Box sx={{ px: 2, py: 1.5, borderBottom: "1px solid rgba(148, 163, 184, 0.12)" }}>
         <Typography variant="subtitle1" sx={{ color: "#f8fafc", fontWeight: 700 }}>
-          改写与保存
+          Token 改写
         </Typography>
       </Box>
 
       <Box sx={{ flex: 1, minHeight: 0, overflow: "auto", p: 2 }}>
-        <Stack spacing={2}>
-          <Paper variant="outlined" sx={panelCardSx}>
-            <Stack spacing={1.5}>
-              <Typography variant="subtitle2" fontWeight={700}>
-                Token 改写
-              </Typography>
-              {selectedToken ? (
-                <>
-                  <Typography variant="caption" sx={{ color: "#94a3b8" }}>
-                    当前样本: {selectedSample?.title}
-                  </Typography>
-                  <Typography variant="body2" sx={{ color: "#fca5a5" }}>
-                    原 token: {selectedToken.originalToken}
-                  </Typography>
-                  <TextField label="替换为" value={replacementToken} onChange={(event) => onSetReplacementToken(event.target.value)} fullWidth size="small" sx={darkFieldSx} />
-                  <Stack spacing={0.75}>
-                    <Typography variant="caption" sx={{ color: "#94a3b8" }}>
-                      候选 token
-                    </Typography>
-                    {candidatesLoading ? (
-                      <Typography variant="caption" sx={{ color: "#64748b" }}>
-                        加载候选中...
-                      </Typography>
-                    ) : tokenCandidates.length > 0 ? (
-                      <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.75 }}>
-                        {tokenCandidates.map((candidate) => (
-                          <Button
-                            key={`${candidate.text}-${candidate.logprob ?? "na"}`}
-                            size="small"
-                            variant={candidate.text === replacementToken ? "contained" : "outlined"}
-                            onClick={() => onSetReplacementToken(candidate.text)}
-                            sx={{
-                              minWidth: 0,
-                              px: 1,
-                              color: candidate.text === replacementToken ? "#0f172a" : "#e2e8f0",
-                              borderColor: "rgba(148, 163, 184, 0.28)",
-                              whiteSpace: "pre-wrap",
-                            }}
-                          >
-                            {formatCandidateLabel(candidate.text)}
-                          </Button>
-                        ))}
-                      </Box>
-                    ) : (
-                      <Typography variant="caption" sx={{ color: "#64748b" }}>
-                        暂无候选。
-                      </Typography>
-                    )}
-                  </Stack>
-                  <Button variant="contained" onClick={onGenerateContinuation} disabled={generating}>
-                    {generating ? "生成中..." : "替换并继续生成"}
-                  </Button>
-                  <Button
-                    variant="outlined"
-                    startIcon={<SaveRoundedIcon />}
-                    onClick={onSaveSample}
-                    disabled={savingSample}
-                    sx={{ color: "#e2e8f0", borderColor: "rgba(148, 163, 184, 0.28)" }}
-                  >
-                    {savingSample ? "保存中..." : "保存到数据集"}
-                  </Button>
-                </>
-              ) : (
-                <Typography variant="body2" sx={{ color: "#94a3b8" }}>
-                  点击 assistant 消息中的任意 token 后，可将它替换为新 token，并让模型从该位置继续生成。
+        <Paper variant="outlined" sx={panelCardSx}>
+          <Stack spacing={1.5}>
+            {selectedToken ? (
+              <>
+                <Typography variant="caption" sx={{ color: "#94a3b8" }}>
+                  当前样本: {selectedSample?.title}
                 </Typography>
-              )}
-            </Stack>
-          </Paper>
-
-          <Paper variant="outlined" sx={panelCardSx}>
-            <Stack spacing={2}>
-              <Typography variant="subtitle2" fontWeight={700}>
-                数据集元数据
-              </Typography>
-              <Typography variant="caption" sx={{ color: "#94a3b8" }}>
-                datasets/{dataset.id}/dataset.yaml
-              </Typography>
-              <TextField label="数据集名称" value={draft.name} onChange={(event) => onChangeDraft({ ...draft, name: event.target.value })} fullWidth size="small" sx={darkFieldSx} />
-              <Autocomplete
-                freeSolo
-                options={modelOptions}
-                value={draft.base_model}
-                inputValue={draft.base_model}
-                loading={modelsLoading}
-                onOpen={onLoadModelOptions}
-                onChange={(_, value) => onChangeDraft({ ...draft, base_model: typeof value === "string" ? value : value ?? "" })}
-                onInputChange={(_, value) => onChangeDraft({ ...draft, base_model: value })}
-                renderInput={(params) => (
-                  <TextField
-                    {...params}
-                    label="标注模型 / Base Model"
-                    helperText={modelOptionsError || "可从模型列表选择，也可直接输入本地模型目录路径。"}
-                    fullWidth
-                    size="small"
-                    sx={darkFieldSx}
-                    slotProps={{
-                      input: {
-                        ...params.InputProps,
-                        endAdornment: (
-                          <>
-                            {modelsLoading ? <CircularProgress color="inherit" size={16} /> : null}
-                            {params.InputProps.endAdornment}
-                          </>
-                        ),
-                      },
-                    }}
-                  />
+                <Typography variant="body2" sx={{ color: "#fca5a5" }}>
+                  原 token: {selectedToken.originalToken}
+                </Typography>
+                <TextField label="替换为" value={replacementToken} onChange={(event) => onSetReplacementToken(event.target.value)} fullWidth size="small" sx={darkFieldSx} />
+                <Stack spacing={0.75}>
+                  <Typography variant="caption" sx={{ color: "#94a3b8" }}>
+                    候选 token
+                  </Typography>
+                  {candidatesLoading ? (
+                    <Typography variant="caption" sx={{ color: "#64748b" }}>
+                      加载候选中...
+                    </Typography>
+                  ) : tokenCandidates.length > 0 ? (
+                    <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.75 }}>
+                      {tokenCandidates.map((candidate) => (
+                        <Button
+                          key={`${candidate.text}-${candidate.logprob ?? "na"}`}
+                          size="small"
+                          variant={candidate.text === replacementToken ? "contained" : "outlined"}
+                          onClick={() => onSetReplacementToken(candidate.text)}
+                          sx={{
+                            minWidth: 0,
+                            px: 1,
+                            color: candidate.text === replacementToken ? "#0f172a" : "#e2e8f0",
+                            borderColor: "rgba(148, 163, 184, 0.28)",
+                            whiteSpace: "pre-wrap",
+                          }}
+                        >
+                          {formatCandidateLabel(candidate.text)}
+                        </Button>
+                      ))}
+                    </Box>
+                  ) : (
+                    <Typography variant="caption" sx={{ color: "#64748b" }}>
+                      暂无候选。
+                    </Typography>
+                  )}
+                </Stack>
+                {hasContinuationDraft ? (
+                  <Stack direction="row" spacing={1}>
+                    <Button variant="contained" onClick={onAcceptContinuationDraft} sx={{ flex: 1 }}>
+                      接受改写
+                    </Button>
+                    <Button
+                      variant="outlined"
+                      onClick={onDiscardContinuationDraft}
+                      sx={{ flex: 1, color: "#e2e8f0", borderColor: "rgba(148, 163, 184, 0.28)" }}
+                    >
+                      放弃改写
+                    </Button>
+                  </Stack>
+                ) : (
+                  <>
+                    <Button variant="contained" onClick={onGenerateContinuation} disabled={generating}>
+                      {generating ? "生成中..." : "替换并继续生成"}
+                    </Button>
+                    <Button
+                      variant="outlined"
+                      startIcon={<SaveRoundedIcon />}
+                      onClick={onSaveSample}
+                      disabled={savingSample}
+                      sx={{ color: "#e2e8f0", borderColor: "rgba(148, 163, 184, 0.28)" }}
+                    >
+                      {savingSample ? "保存中..." : "保存到数据集"}
+                    </Button>
+                  </>
                 )}
-              />
-              <FormControl fullWidth size="small" sx={darkFieldSx}>
-                <InputLabel id={`dataset-training-file-label-${dataset.id}`}>训练文件</InputLabel>
-                <Select
-                  labelId={`dataset-training-file-label-${dataset.id}`}
-                  label="训练文件"
-                  value={draft.training_file_id}
-                  onChange={(event) => onChangeDraft({ ...draft, training_file_id: event.target.value })}
-                >
-                  <MenuItem value="">未绑定</MenuItem>
-                  {fineTuneFiles.map((file) => (
-                    <MenuItem key={file.id} value={file.id}>
-                      {file.filename}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-              <Button variant="outlined" onClick={onSaveDataset} disabled={saving}>
-                {saving ? "保存中..." : "保存数据集配置"}
-              </Button>
-            </Stack>
-          </Paper>
-        </Stack>
+              </>
+            ) : (
+              <Typography variant="body2" sx={{ color: "#94a3b8" }}>
+                点击 assistant 消息中的任意 token 后，可将它替换为新 token，并让模型从该位置继续生成。
+              </Typography>
+            )}
+          </Stack>
+        </Paper>
       </Box>
     </Box>
   );
@@ -894,6 +997,9 @@ function MetadataAndTokenPanel({
 function TokenActionMiniPanel({
   candidatesLoading,
   generating,
+  hasContinuationDraft,
+  onAcceptContinuationDraft,
+  onDiscardContinuationDraft,
   onGenerateContinuation,
   onSaveSample,
   onSetReplacementToken,
@@ -905,6 +1011,9 @@ function TokenActionMiniPanel({
 }: {
   candidatesLoading: boolean;
   generating: boolean;
+  hasContinuationDraft: boolean;
+  onAcceptContinuationDraft: () => void;
+  onDiscardContinuationDraft: () => void;
   onGenerateContinuation: () => void;
   onSaveSample: () => void;
   onSetReplacementToken: (value: string) => void;
@@ -959,12 +1068,30 @@ function TokenActionMiniPanel({
         )}
       </Stack>
       <Stack direction="row" spacing={1}>
-        <Button variant="contained" size="small" onClick={onGenerateContinuation} disabled={generating} sx={{ flex: 1 }}>
-          {generating ? "生成中..." : "继续生成"}
-        </Button>
-        <Button variant="outlined" size="small" onClick={onSaveSample} disabled={savingSample} sx={{ flex: 1, color: "#e2e8f0", borderColor: "rgba(148, 163, 184, 0.28)" }}>
-          {savingSample ? "保存中..." : "保存"}
-        </Button>
+        {hasContinuationDraft ? (
+          <>
+            <Button variant="contained" size="small" onClick={onAcceptContinuationDraft} sx={{ flex: 1 }}>
+              接受
+            </Button>
+            <Button
+              variant="outlined"
+              size="small"
+              onClick={onDiscardContinuationDraft}
+              sx={{ flex: 1, color: "#e2e8f0", borderColor: "rgba(148, 163, 184, 0.28)" }}
+            >
+              放弃
+            </Button>
+          </>
+        ) : (
+          <>
+            <Button variant="contained" size="small" onClick={onGenerateContinuation} disabled={generating} sx={{ flex: 1 }}>
+              {generating ? "生成中..." : "继续生成"}
+            </Button>
+            <Button variant="outlined" size="small" onClick={onSaveSample} disabled={savingSample} sx={{ flex: 1, color: "#e2e8f0", borderColor: "rgba(148, 163, 184, 0.28)" }}>
+              {savingSample ? "保存中..." : "保存"}
+            </Button>
+          </>
+        )}
       </Stack>
     </Stack>
   );
@@ -1193,14 +1320,17 @@ export function WorkspaceShell({
   selectedToken,
   tokenCandidates,
   candidatesLoading,
+  hasContinuationDraft,
   replacementToken,
   generating,
   generatingAssistant,
   saving,
   savingSample,
   onCreateSample,
+  onAcceptContinuationDraft,
   onGenerateAssistantMessage,
   onGenerateContinuation,
+  onDiscardContinuationDraft,
   onSaveSample,
   onUpdateSelectedSampleTitle,
   onUpdateSelectedSampleMessages,
@@ -1208,28 +1338,36 @@ export function WorkspaceShell({
   onSelectToken,
   onSetReplacementToken,
 }: WorkspaceShellProps) {
-  const metadataPanel = activeDataset && draft ? (
-    <MetadataAndTokenPanel
-      dataset={activeDataset}
-      draft={draft}
-      fineTuneFiles={fineTuneFiles}
+  const tokenPanel = activeDataset && draft ? (
+    <TokenActionPanel
       generating={generating}
-      modelOptions={modelOptions}
-      modelOptionsError={modelOptionsError}
-      modelsLoading={modelsLoading}
-      onChangeDraft={onChangeDraft}
+      hasContinuationDraft={hasContinuationDraft}
+      onAcceptContinuationDraft={onAcceptContinuationDraft}
+      onDiscardContinuationDraft={onDiscardContinuationDraft}
       onGenerateContinuation={onGenerateContinuation}
-      onLoadModelOptions={onLoadModelOptions}
-      onSaveDataset={onSaveDataset}
       onSaveSample={onSaveSample}
       onSetReplacementToken={onSetReplacementToken}
       replacementToken={replacementToken}
-      saving={saving}
       savingSample={savingSample}
       selectedSample={selectedSample}
       selectedToken={selectedToken}
       tokenCandidates={tokenCandidates}
       candidatesLoading={candidatesLoading}
+    />
+  ) : null;
+
+  const metadataSection = activeDataset && draft ? (
+    <DatasetMetadataSection
+      dataset={activeDataset}
+      draft={draft}
+      fineTuneFiles={fineTuneFiles}
+      modelOptions={modelOptions}
+      modelOptionsError={modelOptionsError}
+      modelsLoading={modelsLoading}
+      onChangeDraft={onChangeDraft}
+      onLoadModelOptions={onLoadModelOptions}
+      onSaveDataset={onSaveDataset}
+      saving={saving}
     />
   ) : null;
 
@@ -1279,6 +1417,7 @@ export function WorkspaceShell({
       <Box sx={{ flex: 1, minHeight: 0 }}>
         <MessageFlowPanel
           generatingAssistant={generatingAssistant}
+          hasContinuationDraft={hasContinuationDraft}
           samplesLoading={samplesLoading}
           sample={selectedSample}
           sampleTokenization={selectedSampleTokenization}
@@ -1295,6 +1434,9 @@ export function WorkspaceShell({
       <Paper elevation={0} sx={{ borderTop: "1px solid rgba(148, 163, 184, 0.12)", bgcolor: "#111827", p: 1.5, flexShrink: 0 }}>
         <TokenActionMiniPanel
           generating={generating}
+          hasContinuationDraft={hasContinuationDraft}
+          onAcceptContinuationDraft={onAcceptContinuationDraft}
+          onDiscardContinuationDraft={onDiscardContinuationDraft}
           onGenerateContinuation={onGenerateContinuation}
           onSaveSample={onSaveSample}
           onSetReplacementToken={onSetReplacementToken}
@@ -1355,7 +1497,27 @@ export function WorkspaceShell({
         onClose={() => onSetMobileMetadataOpen(false)}
         PaperProps={{ sx: { height: "72dvh", borderTopLeftRadius: 18, borderTopRightRadius: 18, bgcolor: "#111827", color: "#e2e8f0", overflow: "hidden" } }}
       >
-        {metadataPanel}
+        {activeDataset && draft ? (
+          <Box sx={{ height: "100%", minHeight: 0, overflow: "auto", p: 2 }}>
+            <Paper variant="outlined" sx={panelCardSx}>
+              <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 2 }}>
+                数据集元数据
+              </Typography>
+              <DatasetMetadataForm
+                dataset={activeDataset}
+                draft={draft}
+                fineTuneFiles={fineTuneFiles}
+                modelOptions={modelOptions}
+                modelOptionsError={modelOptionsError}
+                modelsLoading={modelsLoading}
+                onChangeDraft={onChangeDraft}
+                onLoadModelOptions={onLoadModelOptions}
+                onSaveDataset={onSaveDataset}
+                saving={saving}
+              />
+            </Paper>
+          </Box>
+        ) : null}
       </Drawer>
     </Box>
   ) : (
@@ -1401,6 +1563,7 @@ export function WorkspaceShell({
         <Box sx={{ flex: 1, minHeight: 0, display: "grid", gridTemplateColumns: "260px minmax(0, 1fr) 360px" }}>
           <SampleListPane
             dirtySampleIds={dirtySampleIds}
+            metadataSection={metadataSection}
             onCreateSample={onCreateSample}
             onSelectSample={onSelectSample}
             samples={samples}
@@ -1410,6 +1573,7 @@ export function WorkspaceShell({
           />
           <MessageFlowPanel
             generatingAssistant={generatingAssistant}
+            hasContinuationDraft={hasContinuationDraft}
             samplesLoading={samplesLoading}
             sample={selectedSample}
             sampleTokenization={selectedSampleTokenization}
@@ -1421,7 +1585,7 @@ export function WorkspaceShell({
             onUpdateSampleMessages={onUpdateSelectedSampleMessages}
             onUpdateSampleTitle={onUpdateSelectedSampleTitle}
           />
-          {metadataPanel}
+          {tokenPanel}
         </Box>
       </Box>
     </Box>

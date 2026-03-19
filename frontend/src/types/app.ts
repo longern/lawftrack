@@ -51,7 +51,7 @@ export interface DatasetTokenEdit {
   token_index: number;
   original_token: string;
   replacement_token: string;
-  regenerated_from_token_index: number;
+  regenerated_from_token_index: number | null;
   created_at: number;
 }
 

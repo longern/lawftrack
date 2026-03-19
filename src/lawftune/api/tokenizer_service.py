@@ -44,10 +44,12 @@ def tokenize_text(*, model: str, text: str) -> list[dict[str, Any]]:
     tokens: list[dict[str, Any]] = []
     for token_index, (token_id, offset_pair) in enumerate(zip(input_ids, offsets)):
         start, end = int(offset_pair[0]), int(offset_pair[1])
-        rendered = text[start:end] if end > start else tokenizer.decode(
+        rendered = tokenizer.decode(
             [int(token_id)],
             clean_up_tokenization_spaces=False,
         )
+        if not rendered and end > start:
+            rendered = text[start:end]
         tokens.append(
             {
                 "token_index": token_index,

@@ -21,6 +21,13 @@ export const appTheme = createTheme({
     },
   },
   components: {
+    MuiButton: {
+      styleOverrides: {
+        root: {
+          textTransform: "none",
+        },
+      },
+    },
     MuiCard: {
       styleOverrides: {
         root: {

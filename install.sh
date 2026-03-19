@@ -78,6 +78,11 @@ prompt_yes_no() {
 }
 
 
+is_interactive_terminal() {
+  [ -t 0 ] && [ -t 1 ]
+}
+
+
 detect_rc_file() {
   shell_name="$(basename "${SHELL:-}")"
   case "$shell_name" in
@@ -230,6 +235,11 @@ ensure_bin_dir_on_path() {
     return
   fi
 
+  if ! is_interactive_terminal; then
+    printf 'Non-interactive install detected. Add %s to your PATH manually to use `%s` directly.\n' "$bin_dir" "$APP_NAME"
+    return
+  fi
+
   rc_file="$(detect_rc_file)"
   if [ -z "$rc_file" ]; then
     printf 'Add %s to your PATH to use `%s` directly.\n' "$bin_dir" "$APP_NAME"
@@ -327,6 +337,8 @@ fi
 
 if [ "$SKIP_WIZARD" -eq 1 ]; then
   printf 'Skipping `%s wizard`. Run `%s wizard` later when you are ready.\n' "$APP_NAME" "$APP_NAME"
+elif ! is_interactive_terminal; then
+  printf 'Non-interactive install detected. Skipping `%s wizard`. Run `%s wizard` later in an interactive terminal.\n' "$APP_NAME" "$APP_NAME"
 else
   printf 'Starting `%s wizard`...\n' "$APP_NAME"
   "$EXECUTABLE" wizard

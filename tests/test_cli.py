@@ -111,6 +111,21 @@ class CliTests(unittest.TestCase):
                 },
             )
 
+    def test_wizard_exits_cleanly_when_input_stream_is_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            result = subprocess.run(
+                [sys.executable, "-m", "lawftune", "wizard"],
+                cwd=ROOT,
+                env=make_env(LAWFTUNE_HOME=temp_dir),
+                input="",
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Wizard requires interactive input", result.stderr)
+
     def test_wizard_can_install_gateway_service(self) -> None:
         sys.path.insert(0, str(ROOT / "src"))
         try:

@@ -27,6 +27,10 @@ import { appTheme } from "./theme/appTheme";
 import type { AppSnapshot, DataSummaryItem, NavView, ServiceRecord } from "./types/app";
 
 function App() {
+  const dataViewportHeight = {
+    xs: "calc(100dvh - 72px - 92px)",
+    md: "calc(100dvh - 72px)",
+  } as const;
   const isMobile = useMediaQuery(appTheme.breakpoints.down("md"));
   const [activeView, setActiveView] = useState<NavView>("data");
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
@@ -158,9 +162,6 @@ function App() {
               <Typography variant="h6" fontWeight={700}>
                 {activeNav.label}
               </Typography>
-              <Typography variant="body2" color="text.secondary">
-                {isMobile ? "移动端底部导航切换" : "PC 端侧边栏导航切换"}
-              </Typography>
             </Box>
             <Chip
               color={healthLabel === "正常" ? "success" : "default"}
@@ -205,19 +206,30 @@ function App() {
             sx={{
               flex: 1,
               width: { md: `calc(100% - ${DRAWER_WIDTH}px)` },
-              pb: { xs: 10, md: 0 },
+              pb: { xs: activeView === "data" ? 0 : 10, md: 0 },
+              overflow: activeView === "data" ? "hidden" : "visible",
             }}
           >
             <Toolbar sx={{ minHeight: 72 }} />
 
             {activeView === "data" ? (
-              <Box sx={{ minHeight: "calc(100vh - 72px)" }}>
+              <Box
+                sx={{
+                  height: dataViewportHeight,
+                  display: "flex",
+                  flexDirection: "column",
+                  minHeight: 0,
+                  overflow: "hidden",
+                }}
+              >
                 {error ? (
-                  <Box sx={{ p: 2 }}>
+                  <Box sx={{ p: 2, flexShrink: 0 }}>
                     <ErrorCard message={error} />
                   </Box>
                 ) : null}
-                <DataWorkspace dataSummary={dataSummary} isMobile={isMobile} />
+                <Box sx={{ flex: 1, minHeight: 0 }}>
+                  <DataWorkspace dataSummary={dataSummary} isMobile={isMobile} />
+                </Box>
               </Box>
             ) : (
               <Container maxWidth="xl" sx={{ py: { xs: 2, md: 4 } }}>

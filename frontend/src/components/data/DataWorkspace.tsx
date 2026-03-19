@@ -11,6 +11,10 @@ import {
   Alert,
   Box,
   Button,
+  Card,
+  CardActionArea,
+  CardContent,
+  Drawer,
   FormControl,
   IconButton,
   InputLabel,
@@ -51,6 +55,15 @@ interface DatasetDraft {
   training_file_id: string;
 }
 
+interface DatasetEditorSharedProps {
+  dataset: DatasetRecord;
+  draft: DatasetDraft;
+  fineTuneFiles: UploadedFile[];
+  onChangeDraft: (draft: DatasetDraft) => void;
+  onSaveDataset: () => void;
+  saving: boolean;
+}
+
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, init);
   if (!response.ok) {
@@ -73,11 +86,14 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
   const [files, setFiles] = useState<UploadedFile[]>([]);
   const [datasetTabs, setDatasetTabs] = useState<DatasetRecord[]>([]);
   const [activeDatasetId, setActiveDatasetId] = useState<string | null>(null);
+  const [recentDatasetIds, setRecentDatasetIds] = useState<string[]>([]);
   const [draft, setDraft] = useState<DatasetDraft | null>(null);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
+  const [mobileExplorerOpen, setMobileExplorerOpen] = useState(false);
+  const [mobileMetadataOpen, setMobileMetadataOpen] = useState(false);
   const untitledCountRef = useRef(1);
   const importInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -86,6 +102,13 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
     [files],
   );
   const activeDataset = datasetTabs.find((tab) => tab.id === activeDatasetId) ?? null;
+  const recentDatasets = useMemo(
+    () =>
+      recentDatasetIds
+        .map((id) => datasets.find((dataset) => dataset.id === id))
+        .filter((dataset): dataset is DatasetRecord => Boolean(dataset)),
+    [datasets, recentDatasetIds],
+  );
 
   useEffect(() => {
     void refreshWorkspace();
@@ -94,6 +117,7 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
   useEffect(() => {
     if (!activeDataset) {
       setDraft(null);
+      setMobileMetadataOpen(false);
       return;
     }
     setDraft({
@@ -121,14 +145,15 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
   }
 
   function openDataset(dataset: DatasetRecord) {
+    setRecentDatasetIds((current) => [dataset.id, ...current.filter((id) => id !== dataset.id)].slice(0, 6));
+    setMobileExplorerOpen(false);
     setDatasetTabs((currentTabs) => {
       if (currentTabs.some((tab) => tab.id === dataset.id)) {
         setActiveDatasetId(dataset.id);
         return currentTabs;
       }
-      const nextTabs = [...currentTabs, dataset];
       setActiveDatasetId(dataset.id);
-      return nextTabs;
+      return [...currentTabs, dataset];
     });
   }
 
@@ -227,42 +252,82 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
     <Paper
       elevation={0}
       sx={{
-        minHeight: "calc(100vh - 72px)",
+        height: "100%",
+        minHeight: 0,
         borderRadius: 0,
         overflow: "hidden",
         border: 0,
         bgcolor: "#0f172a",
       }}
     >
-      <Box sx={{ display: "flex", minHeight: "calc(100vh - 72px)", flexDirection: { xs: "column", md: "row" } }}>
-        {!isMobile ? <ActivityRail /> : null}
-        <ExplorerPane
-          activeDatasetId={activeDatasetId}
+      {datasetTabs.length === 0 ? (
+        <DatasetHome
           creating={creating}
           dataSummary={dataSummary}
           datasets={datasets}
           importInputRef={importInputRef}
+          isMobile={isMobile}
           loading={loading}
           onCreateDataset={() => void handleCreateDataset()}
           onImportDataset={handleImportDataset}
           onOpenDataset={openDataset}
-          onOpenNextDataset={handleOpenNextDataset}
+          recentDatasets={recentDatasets}
         />
-        <EditorArea
+      ) : isMobile ? (
+        <MobileWorkspace
           activeDataset={activeDataset}
+          creating={creating}
+          dataSummary={dataSummary}
+          datasets={datasets}
           datasetTabs={datasetTabs}
           draft={draft}
           error={error}
           fineTuneFiles={fineTuneFiles}
+          importInputRef={importInputRef}
+          loading={loading}
+          mobileExplorerOpen={mobileExplorerOpen}
+          mobileMetadataOpen={mobileMetadataOpen}
           onChangeDraft={setDraft}
           onCloseDataset={handleCloseDataset}
           onCreateDataset={() => void handleCreateDataset()}
+          onImportDataset={handleImportDataset}
+          onOpenDataset={openDataset}
           onOpenNextDataset={handleOpenNextDataset}
           onSaveDataset={() => void handleSaveDataset()}
           onSelectDataset={setActiveDatasetId}
+          onSetMobileExplorerOpen={setMobileExplorerOpen}
+          onSetMobileMetadataOpen={setMobileMetadataOpen}
           saving={saving}
         />
-      </Box>
+      ) : (
+        <Box sx={{ display: "flex", height: "100%", minHeight: 0 }}>
+          <ActivityRail />
+          <ExplorerPane
+            activeDatasetId={activeDatasetId}
+            creating={creating}
+            dataSummary={dataSummary}
+            datasets={datasets}
+            importInputRef={importInputRef}
+            loading={loading}
+            onCreateDataset={() => void handleCreateDataset()}
+            onImportDataset={handleImportDataset}
+            onOpenDataset={openDataset}
+            onOpenNextDataset={handleOpenNextDataset}
+          />
+          <DesktopEditorArea
+            activeDataset={activeDataset}
+            datasetTabs={datasetTabs}
+            draft={draft}
+            error={error}
+            fineTuneFiles={fineTuneFiles}
+            onChangeDraft={setDraft}
+            onCloseDataset={handleCloseDataset}
+            onSaveDataset={() => void handleSaveDataset()}
+            onSelectDataset={setActiveDatasetId}
+            saving={saving}
+          />
+        </Box>
+      )}
     </Paper>
   );
 }
@@ -294,6 +359,306 @@ function ActivityRail() {
   );
 }
 
+interface DatasetHomeProps {
+  creating: boolean;
+  dataSummary: DataSummaryItem[];
+  datasets: DatasetRecord[];
+  importInputRef: RefObject<HTMLInputElement | null>;
+  isMobile: boolean;
+  loading: boolean;
+  onCreateDataset: () => void;
+  onImportDataset: (event: ChangeEvent<HTMLInputElement>) => void;
+  onOpenDataset: (dataset: DatasetRecord) => void;
+  recentDatasets: DatasetRecord[];
+}
+
+function DatasetHome({
+  creating,
+  dataSummary,
+  datasets,
+  importInputRef,
+  isMobile,
+  loading,
+  onCreateDataset,
+  onImportDataset,
+  onOpenDataset,
+  recentDatasets,
+}: DatasetHomeProps) {
+  return (
+    <Box
+      sx={{
+        height: "100%",
+        minHeight: 0,
+        px: { xs: 2, md: 4 },
+        py: { xs: 2, md: 3 },
+        display: "flex",
+        flexDirection: "column",
+        gap: 2,
+        color: "#e2e8f0",
+        overflow: "hidden",
+      }}
+    >
+      <Typography variant={isMobile ? "h5" : "h4"} fontWeight={700}>
+        数据集
+      </Typography>
+
+      <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} sx={{ flexShrink: 0 }}>
+        <Button
+          variant="contained"
+          size="large"
+          startIcon={<AddRoundedIcon />}
+          onClick={onCreateDataset}
+          disabled={creating}
+        >
+          {creating ? "创建中..." : "新建数据集"}
+        </Button>
+        <Button
+          variant="outlined"
+          size="large"
+          startIcon={<CloudUploadRoundedIcon />}
+          onClick={() => importInputRef.current?.click()}
+          sx={{ color: "#e2e8f0", borderColor: "rgba(148, 163, 184, 0.28)" }}
+        >
+          上传数据集
+        </Button>
+        <input
+          ref={importInputRef}
+          hidden
+          type="file"
+          accept=".yaml,.yml,.json,.jsonl"
+          onChange={onImportDataset}
+        />
+      </Stack>
+
+      <Box
+        sx={{
+          flex: 1,
+          minHeight: 0,
+          display: "grid",
+          gap: 2,
+          gridTemplateColumns: { xs: "1fr", lg: "minmax(0,1fr) 280px" },
+          overflow: "hidden",
+        }}
+      >
+        <Stack spacing={2} sx={{ minHeight: 0, overflow: "hidden" }}>
+          {recentDatasets.length > 0 ? (
+            <Box sx={{ flexShrink: 0 }}>
+              <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 1.25 }}>
+                最近打开
+              </Typography>
+              <Box sx={{ display: "flex", gap: 1.5, overflowX: "auto", pb: 0.5 }}>
+                {recentDatasets.slice(0, 6).map((dataset) => (
+                  <Card
+                    key={dataset.id}
+                    variant="outlined"
+                    sx={{
+                      minWidth: isMobile ? 220 : 260,
+                      bgcolor: "#111827",
+                      borderColor: "rgba(148, 163, 184, 0.12)",
+                      flexShrink: 0,
+                    }}
+                  >
+                    <CardActionArea onClick={() => onOpenDataset(dataset)}>
+                      <CardContent>
+                        <Stack spacing={1}>
+                          <Typography variant="subtitle1" fontWeight={700} noWrap>
+                            {dataset.name}
+                          </Typography>
+                          <Typography variant="body2" sx={{ color: "#94a3b8" }} noWrap>
+                            {dataset.base_model ?? "未设置模型"}
+                          </Typography>
+                        </Stack>
+                      </CardContent>
+                    </CardActionArea>
+                  </Card>
+                ))}
+              </Box>
+            </Box>
+          ) : null}
+
+          <Paper
+            variant="outlined"
+            sx={{
+              flex: 1,
+              minHeight: 0,
+              bgcolor: "#111827",
+              borderColor: "rgba(148, 163, 184, 0.12)",
+              display: "flex",
+              flexDirection: "column",
+              overflow: "hidden",
+            }}
+          >
+            <Box sx={{ px: 2, py: 1.5, borderBottom: "1px solid rgba(148, 163, 184, 0.12)" }}>
+              <Typography variant="subtitle1" fontWeight={700}>
+                所有数据集
+              </Typography>
+            </Box>
+
+            <Box sx={{ flex: 1, minHeight: 0, overflow: "auto", p: 1.5 }}>
+              {loading ? (
+                <Typography variant="body2" sx={{ color: "#94a3b8" }}>
+                  加载中...
+                </Typography>
+              ) : datasets.length === 0 ? (
+                <Typography variant="body2" sx={{ color: "#94a3b8" }}>
+                  还没有数据集。
+                </Typography>
+              ) : isMobile ? (
+                <List sx={{ p: 0 }}>
+                  {datasets.map((dataset) => (
+                    <ListItemButton
+                      key={dataset.id}
+                      onClick={() => onOpenDataset(dataset)}
+                      sx={{
+                        borderRadius: 2,
+                        color: "#e2e8f0",
+                        mb: 0.75,
+                        bgcolor: "#0f172a",
+                      }}
+                    >
+                      <ListItemIcon sx={{ minWidth: 36, color: "#93c5fd" }}>
+                        <StorageRoundedIcon fontSize="small" />
+                      </ListItemIcon>
+                      <ListItemText
+                        primary={dataset.name}
+                        secondary={dataset.base_model ?? dataset.training_filename ?? "未绑定模型"}
+                        slotProps={{
+                          primary: { fontSize: 14 },
+                          secondary: { sx: { color: "#94a3b8" } },
+                        }}
+                      />
+                    </ListItemButton>
+                  ))}
+                </List>
+              ) : (
+                <Box
+                  sx={{
+                    display: "grid",
+                    gap: 2,
+                    gridTemplateColumns: {
+                      md: "repeat(2, minmax(0, 1fr))",
+                      xl: "repeat(3, minmax(0, 1fr))",
+                    },
+                  }}
+                >
+                  {datasets.map((dataset) => (
+                    <Card
+                      key={dataset.id}
+                      variant="outlined"
+                      sx={{
+                        bgcolor: "#0f172a",
+                        borderColor: "rgba(148, 163, 184, 0.12)",
+                      }}
+                    >
+                      <CardActionArea onClick={() => onOpenDataset(dataset)}>
+                        <CardContent>
+                          <Stack spacing={1.5}>
+                            <Stack direction="row" justifyContent="space-between" spacing={1.5}>
+                              <Typography variant="subtitle1" fontWeight={700} noWrap>
+                                {dataset.name}
+                              </Typography>
+                              <StorageRoundedIcon sx={{ color: "#93c5fd" }} />
+                            </Stack>
+                            <Typography variant="body2" sx={{ color: "#94a3b8" }} noWrap>
+                              {dataset.base_model ?? "未设置模型"}
+                            </Typography>
+                            <Typography variant="caption" sx={{ color: "#64748b" }} noWrap>
+                              {dataset.training_filename ?? "未绑定训练文件"}
+                            </Typography>
+                          </Stack>
+                        </CardContent>
+                      </CardActionArea>
+                    </Card>
+                  ))}
+                </Box>
+              )}
+            </Box>
+          </Paper>
+        </Stack>
+
+        <SummaryPanel dataSummary={dataSummary} mobile={isMobile} />
+      </Box>
+    </Box>
+  );
+}
+
+interface SummaryPanelProps {
+  dataSummary: DataSummaryItem[];
+  mobile: boolean;
+}
+
+function SummaryPanel({ dataSummary, mobile }: SummaryPanelProps) {
+  if (mobile) {
+    return (
+      <Box sx={{ display: "flex", gap: 1.5, overflowX: "auto", pb: 0.5 }}>
+        {dataSummary.map((item) => (
+          <Paper
+            key={item.title}
+            variant="outlined"
+            sx={{
+              minWidth: 140,
+              p: 1.5,
+              bgcolor: "#111827",
+              borderColor: "rgba(148, 163, 184, 0.12)",
+              color: "#e2e8f0",
+              flexShrink: 0,
+            }}
+          >
+            <Stack spacing={1}>
+              <Stack direction="row" spacing={1} alignItems="center">
+                <Box sx={{ display: "flex", color: "#7dd3fc" }}>{renderSummaryIcon(item.icon)}</Box>
+                <Typography variant="caption">{item.title}</Typography>
+              </Stack>
+              <Typography variant="caption" sx={{ color: "#94a3b8" }}>
+                {item.value}
+              </Typography>
+            </Stack>
+          </Paper>
+        ))}
+      </Box>
+    );
+  }
+
+  return (
+    <Paper
+      variant="outlined"
+      sx={{
+        bgcolor: "#111827",
+        borderColor: "rgba(148, 163, 184, 0.12)",
+        p: 2,
+        overflow: "auto",
+      }}
+    >
+      <Typography variant="subtitle1" fontWeight={700} sx={{ color: "#f8fafc", mb: 1.5 }}>
+        状态
+      </Typography>
+      <Stack spacing={1.25}>
+        {dataSummary.map((item) => (
+          <Stack
+            key={item.title}
+            direction="row"
+            alignItems="center"
+            justifyContent="space-between"
+            spacing={1.5}
+            sx={{ color: "#cbd5e1" }}
+          >
+            <Stack direction="row" spacing={1} alignItems="center">
+              <Box sx={{ display: "flex", color: "#7dd3fc" }}>{renderSummaryIcon(item.icon)}</Box>
+              <Typography variant="body2">{item.title}</Typography>
+            </Stack>
+            <Typography
+              variant="caption"
+              sx={{ maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", color: "#94a3b8" }}
+            >
+              {item.value}
+            </Typography>
+          </Stack>
+        ))}
+      </Stack>
+    </Paper>
+  );
+}
+
 interface ExplorerPaneProps {
   activeDatasetId: string | null;
   creating: boolean;
@@ -322,9 +687,9 @@ function ExplorerPane({
   return (
     <Box
       sx={{
-        width: { xs: "100%", md: 320 },
-        borderRight: { md: "1px solid rgba(148, 163, 184, 0.12)" },
-        borderBottom: { xs: "1px solid rgba(148, 163, 184, 0.12)", md: 0 },
+        width: 320,
+        minHeight: 0,
+        borderRight: "1px solid rgba(148, 163, 184, 0.12)",
         bgcolor: "#111827",
         display: "flex",
         flexDirection: "column",
@@ -355,10 +720,7 @@ function ExplorerPane({
           size="small"
           startIcon={<CloudUploadRoundedIcon />}
           onClick={() => importInputRef.current?.click()}
-          sx={{
-            color: "#e2e8f0",
-            borderColor: "rgba(148, 163, 184, 0.28)",
-          }}
+          sx={{ color: "#e2e8f0", borderColor: "rgba(148, 163, 184, 0.28)" }}
         >
           上传
         </Button>
@@ -367,11 +729,7 @@ function ExplorerPane({
           size="small"
           startIcon={<FolderOpenRoundedIcon />}
           onClick={onOpenNextDataset}
-          sx={{
-            flex: 1,
-            color: "#e2e8f0",
-            borderColor: "rgba(148, 163, 184, 0.28)",
-          }}
+          sx={{ flex: 1, color: "#e2e8f0", borderColor: "rgba(148, 163, 184, 0.28)" }}
         >
           打开
         </Button>
@@ -384,7 +742,7 @@ function ExplorerPane({
         />
       </Stack>
 
-      <Box sx={{ px: 1.5, pb: 1.5, flex: 1, overflow: "auto" }}>
+      <Box sx={{ px: 1.5, pb: 1.5, flex: 1, minHeight: 0, overflow: "auto" }}>
         <Typography variant="caption" sx={{ px: 1, color: "#94a3b8" }}>
           数据集
         </Typography>
@@ -424,7 +782,7 @@ function ExplorerPane({
         </List>
       </Box>
 
-      <Box sx={{ p: 1.5, borderTop: "1px solid rgba(148, 163, 184, 0.12)" }}>
+      <Box sx={{ p: 1.5, borderTop: "1px solid rgba(148, 163, 184, 0.12)", flexShrink: 0 }}>
         <Stack spacing={1}>
           {dataSummary.map((item) => (
             <Stack
@@ -452,7 +810,7 @@ function ExplorerPane({
   );
 }
 
-interface EditorAreaProps {
+interface DesktopEditorAreaProps {
   activeDataset: DatasetRecord | null;
   datasetTabs: DatasetRecord[];
   draft: DatasetDraft | null;
@@ -460,14 +818,12 @@ interface EditorAreaProps {
   fineTuneFiles: UploadedFile[];
   onChangeDraft: (draft: DatasetDraft | null) => void;
   onCloseDataset: (datasetId: string) => void;
-  onCreateDataset: () => void;
-  onOpenNextDataset: () => void;
   onSaveDataset: () => void;
   onSelectDataset: (datasetId: string | null) => void;
   saving: boolean;
 }
 
-function EditorArea({
+function DesktopEditorArea({
   activeDataset,
   datasetTabs,
   draft,
@@ -475,280 +831,546 @@ function EditorArea({
   fineTuneFiles,
   onChangeDraft,
   onCloseDataset,
-  onCreateDataset,
-  onOpenNextDataset,
   onSaveDataset,
   onSelectDataset,
   saving,
-}: EditorAreaProps) {
+}: DesktopEditorAreaProps) {
   return (
-    <Box sx={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
-      <Box
-        sx={{
-          minHeight: 48,
-          bgcolor: "#0b1220",
-          borderBottom: "1px solid rgba(148, 163, 184, 0.12)",
-          display: "flex",
-          alignItems: "center",
-        }}
-      >
-        {datasetTabs.length > 0 ? (
-          <Tabs
-            value={activeDataset?.id ?? false}
-            onChange={(_: SyntheticEvent, value: string) => onSelectDataset(value)}
-            variant="scrollable"
-            scrollButtons="auto"
-            sx={{
-              minHeight: 48,
-              "& .MuiTabs-indicator": {
-                backgroundColor: "#60a5fa",
-              },
-            }}
-          >
-            {datasetTabs.map((tab) => (
-              <Tab
-                key={tab.id}
-                value={tab.id}
-                disableRipple
-                sx={{
-                  minHeight: 48,
-                  textTransform: "none",
-                  color: "#cbd5e1",
-                  alignItems: "stretch",
-                  px: 0,
-                }}
-                label={
-                  <Stack direction="row" spacing={1} alignItems="center" sx={{ px: 1.5, minWidth: 0 }}>
-                    <Typography
-                      variant="body2"
-                      sx={{ maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis" }}
-                    >
-                      {tab.name}
-                    </Typography>
-                    <IconButton
-                      size="small"
-                      sx={{ color: "#94a3b8" }}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        onCloseDataset(tab.id);
-                      }}
-                    >
-                      <CloseRoundedIcon sx={{ fontSize: 16 }} />
-                    </IconButton>
-                  </Stack>
-                }
-              />
-            ))}
-          </Tabs>
-        ) : (
-          <Typography variant="body2" sx={{ px: 2, color: "#94a3b8" }}>
-            Welcome
-          </Typography>
-        )}
-      </Box>
+    <Box sx={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0, minHeight: 0 }}>
+      <EditorTabs
+        activeDatasetId={activeDataset?.id ?? null}
+        datasetTabs={datasetTabs}
+        onCloseDataset={onCloseDataset}
+        onSelectDataset={onSelectDataset}
+      />
 
       {error ? (
-        <Box sx={{ p: 2, borderBottom: "1px solid rgba(148, 163, 184, 0.12)", bgcolor: "#111827" }}>
+        <Box sx={{ p: 2, borderBottom: "1px solid rgba(148, 163, 184, 0.12)", bgcolor: "#111827", flexShrink: 0 }}>
           <Alert severity="error">{error}</Alert>
         </Box>
       ) : null}
 
-      <Box sx={{ flex: 1, bgcolor: "#0f172a", display: "flex" }}>
+      <Box sx={{ flex: 1, minHeight: 0, bgcolor: "#0f172a", display: "flex" }}>
         {activeDataset && draft ? (
-          <EditorPane
-            dataset={activeDataset}
-            draft={draft}
-            fineTuneFiles={fineTuneFiles}
-            onChangeDraft={onChangeDraft}
-            onSaveDataset={onSaveDataset}
-            saving={saving}
-          />
-        ) : (
-          <WelcomeEditor onCreateDataset={onCreateDataset} onOpenNextDataset={onOpenNextDataset} />
-        )}
+          <Box sx={{ flex: 1, display: "flex", minWidth: 0, minHeight: 0 }}>
+            <EditorSurface dataset={activeDataset} draft={draft} />
+            <Box
+              sx={{
+                width: 360,
+                borderLeft: "1px solid rgba(148, 163, 184, 0.12)",
+                bgcolor: "#111827",
+                minHeight: 0,
+              }}
+            >
+              <DatasetMetadataPanel
+                dataset={activeDataset}
+                draft={draft}
+                fineTuneFiles={fineTuneFiles}
+                onChangeDraft={(nextDraft) => onChangeDraft(nextDraft)}
+                onSaveDataset={onSaveDataset}
+                saving={saving}
+              />
+            </Box>
+          </Box>
+        ) : null}
       </Box>
     </Box>
   );
 }
 
-interface EditorPaneProps {
-  dataset: DatasetRecord;
-  draft: DatasetDraft;
-  fineTuneFiles: UploadedFile[];
-  onChangeDraft: (draft: DatasetDraft) => void;
-  onSaveDataset: () => void;
-  saving: boolean;
+interface MobileWorkspaceProps extends DesktopEditorAreaProps {
+  creating: boolean;
+  dataSummary: DataSummaryItem[];
+  datasets: DatasetRecord[];
+  importInputRef: RefObject<HTMLInputElement | null>;
+  loading: boolean;
+  mobileExplorerOpen: boolean;
+  mobileMetadataOpen: boolean;
+  onCreateDataset: () => void;
+  onImportDataset: (event: ChangeEvent<HTMLInputElement>) => void;
+  onOpenDataset: (dataset: DatasetRecord) => void;
+  onOpenNextDataset: () => void;
+  onSetMobileExplorerOpen: (open: boolean) => void;
+  onSetMobileMetadataOpen: (open: boolean) => void;
 }
 
-function EditorPane({
+function MobileWorkspace({
+  activeDataset,
+  creating,
+  dataSummary,
+  datasets,
+  datasetTabs,
+  draft,
+  error,
+  fineTuneFiles,
+  importInputRef,
+  loading,
+  mobileExplorerOpen,
+  mobileMetadataOpen,
+  onChangeDraft,
+  onCloseDataset,
+  onCreateDataset,
+  onImportDataset,
+  onOpenDataset,
+  onOpenNextDataset,
+  onSaveDataset,
+  onSelectDataset,
+  onSetMobileExplorerOpen,
+  onSetMobileMetadataOpen,
+  saving,
+}: MobileWorkspaceProps) {
+  return (
+    <Box sx={{ height: "100%", minHeight: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+      <Box
+        sx={{
+          px: 1.5,
+          py: 1,
+          bgcolor: "#111827",
+          borderBottom: "1px solid rgba(148, 163, 184, 0.12)",
+          display: "flex",
+          gap: 1,
+          flexShrink: 0,
+        }}
+      >
+        <Button
+          size="small"
+          variant="outlined"
+          startIcon={<StorageRoundedIcon />}
+          onClick={() => onSetMobileExplorerOpen(true)}
+          sx={{ flex: 1, color: "#e2e8f0", borderColor: "rgba(148, 163, 184, 0.24)" }}
+        >
+          数据集
+        </Button>
+        <Button
+          size="small"
+          variant="outlined"
+          startIcon={<TuneRoundedIcon />}
+          disabled={!draft}
+          onClick={() => onSetMobileMetadataOpen(true)}
+          sx={{ flex: 1, color: "#e2e8f0", borderColor: "rgba(148, 163, 184, 0.24)" }}
+        >
+          元数据
+        </Button>
+      </Box>
+
+      <EditorTabs
+        activeDatasetId={activeDataset?.id ?? null}
+        datasetTabs={datasetTabs}
+        onCloseDataset={onCloseDataset}
+        onSelectDataset={onSelectDataset}
+      />
+
+      {error ? (
+        <Box sx={{ p: 1.5, borderBottom: "1px solid rgba(148, 163, 184, 0.12)", bgcolor: "#111827", flexShrink: 0 }}>
+          <Alert severity="error">{error}</Alert>
+        </Box>
+      ) : null}
+
+      <Box sx={{ flex: 1, minHeight: 0, bgcolor: "#0f172a", display: "flex", overflow: "hidden" }}>
+        {activeDataset && draft ? <EditorSurface dataset={activeDataset} draft={draft} mobile /> : null}
+      </Box>
+
+      <Drawer
+        anchor="bottom"
+        open={mobileExplorerOpen}
+        onClose={() => onSetMobileExplorerOpen(false)}
+        PaperProps={{
+          sx: {
+            height: "72dvh",
+            borderTopLeftRadius: 18,
+            borderTopRightRadius: 18,
+            bgcolor: "#111827",
+            color: "#e2e8f0",
+            overflow: "hidden",
+          },
+        }}
+      >
+        <MobileDatasetSheet
+          activeDatasetId={activeDataset?.id ?? null}
+          creating={creating}
+          dataSummary={dataSummary}
+          datasets={datasets}
+          importInputRef={importInputRef}
+          loading={loading}
+          onCreateDataset={onCreateDataset}
+          onImportDataset={onImportDataset}
+          onOpenDataset={onOpenDataset}
+          onOpenNextDataset={onOpenNextDataset}
+        />
+      </Drawer>
+
+      <Drawer
+        anchor="bottom"
+        open={mobileMetadataOpen}
+        onClose={() => onSetMobileMetadataOpen(false)}
+        PaperProps={{
+          sx: {
+            height: "72dvh",
+            borderTopLeftRadius: 18,
+            borderTopRightRadius: 18,
+            bgcolor: "#111827",
+            color: "#e2e8f0",
+            overflow: "hidden",
+          },
+        }}
+      >
+        {activeDataset && draft ? (
+          <DatasetMetadataPanel
+            dataset={activeDataset}
+            draft={draft}
+            fineTuneFiles={fineTuneFiles}
+            onChangeDraft={(nextDraft) => onChangeDraft(nextDraft)}
+            onSaveDataset={onSaveDataset}
+            saving={saving}
+          />
+        ) : null}
+      </Drawer>
+    </Box>
+  );
+}
+
+interface MobileDatasetSheetProps {
+  activeDatasetId: string | null;
+  creating: boolean;
+  dataSummary: DataSummaryItem[];
+  datasets: DatasetRecord[];
+  importInputRef: RefObject<HTMLInputElement | null>;
+  loading: boolean;
+  onCreateDataset: () => void;
+  onImportDataset: (event: ChangeEvent<HTMLInputElement>) => void;
+  onOpenDataset: (dataset: DatasetRecord) => void;
+  onOpenNextDataset: () => void;
+}
+
+function MobileDatasetSheet({
+  activeDatasetId,
+  creating,
+  dataSummary,
+  datasets,
+  importInputRef,
+  loading,
+  onCreateDataset,
+  onImportDataset,
+  onOpenDataset,
+  onOpenNextDataset,
+}: MobileDatasetSheetProps) {
+  return (
+    <Box sx={{ height: "100%", minHeight: 0, display: "flex", flexDirection: "column" }}>
+      <Box sx={{ px: 2, py: 1.5, borderBottom: "1px solid rgba(148, 163, 184, 0.12)", flexShrink: 0 }}>
+        <Typography variant="subtitle1" fontWeight={700}>
+          数据集
+        </Typography>
+      </Box>
+
+      <Stack direction="row" spacing={1} sx={{ p: 2, flexShrink: 0 }}>
+        <Button
+          variant="contained"
+          size="small"
+          startIcon={<AddRoundedIcon />}
+          onClick={onCreateDataset}
+          disabled={creating}
+          sx={{ flex: 1 }}
+        >
+          {creating ? "创建中" : "新建"}
+        </Button>
+        <Button
+          variant="outlined"
+          size="small"
+          startIcon={<CloudUploadRoundedIcon />}
+          onClick={() => importInputRef.current?.click()}
+          sx={{ color: "#e2e8f0", borderColor: "rgba(148, 163, 184, 0.28)" }}
+        >
+          上传
+        </Button>
+        <Button
+          variant="outlined"
+          size="small"
+          startIcon={<FolderOpenRoundedIcon />}
+          onClick={onOpenNextDataset}
+          sx={{ color: "#e2e8f0", borderColor: "rgba(148, 163, 184, 0.28)" }}
+        >
+          打开
+        </Button>
+        <input
+          ref={importInputRef}
+          hidden
+          type="file"
+          accept=".yaml,.yml,.json,.jsonl"
+          onChange={onImportDataset}
+        />
+      </Stack>
+
+      <Box sx={{ px: 1.5, flex: 1, minHeight: 0, overflow: "auto" }}>
+        <List sx={{ p: 0 }}>
+          {datasets.map((dataset) => (
+            <ListItemButton
+              key={dataset.id}
+              selected={activeDatasetId === dataset.id}
+              onClick={() => onOpenDataset(dataset)}
+              sx={{
+                borderRadius: 2,
+                color: "#e2e8f0",
+                mb: 0.75,
+                "&.Mui-selected": {
+                  bgcolor: "rgba(59, 130, 246, 0.18)",
+                },
+              }}
+            >
+              <ListItemIcon sx={{ minWidth: 34, color: "#93c5fd" }}>
+                <StorageRoundedIcon fontSize="small" />
+              </ListItemIcon>
+              <ListItemText
+                primary={dataset.name}
+                secondary={dataset.base_model ?? dataset.training_filename ?? "未绑定模型"}
+                slotProps={{
+                  primary: { fontSize: 14 },
+                  secondary: { sx: { color: "#94a3b8" } },
+                }}
+              />
+            </ListItemButton>
+          ))}
+          {!loading && datasets.length === 0 ? (
+            <Typography variant="body2" sx={{ px: 1, py: 2, color: "#94a3b8" }}>
+              还没有数据集。
+            </Typography>
+          ) : null}
+        </List>
+      </Box>
+
+      <Box sx={{ p: 1.5, borderTop: "1px solid rgba(148, 163, 184, 0.12)", flexShrink: 0 }}>
+        <Box sx={{ display: "flex", gap: 1, overflowX: "auto" }}>
+          {dataSummary.map((item) => (
+            <Paper
+              key={item.title}
+              variant="outlined"
+              sx={{
+                minWidth: 120,
+                p: 1.25,
+                bgcolor: "#0f172a",
+                borderColor: "rgba(148, 163, 184, 0.12)",
+                color: "#e2e8f0",
+                flexShrink: 0,
+              }}
+            >
+              <Stack spacing={0.75}>
+                <Stack direction="row" spacing={1} alignItems="center">
+                  <Box sx={{ display: "flex", color: "#7dd3fc" }}>{renderSummaryIcon(item.icon)}</Box>
+                  <Typography variant="caption">{item.title}</Typography>
+                </Stack>
+                <Typography variant="caption" sx={{ color: "#94a3b8" }}>
+                  {item.value}
+                </Typography>
+              </Stack>
+            </Paper>
+          ))}
+        </Box>
+      </Box>
+    </Box>
+  );
+}
+
+interface EditorTabsProps {
+  activeDatasetId: string | null;
+  datasetTabs: DatasetRecord[];
+  onCloseDataset: (datasetId: string) => void;
+  onSelectDataset: (datasetId: string | null) => void;
+}
+
+function EditorTabs({ activeDatasetId, datasetTabs, onCloseDataset, onSelectDataset }: EditorTabsProps) {
+  return (
+    <Box
+      sx={{
+        minHeight: 48,
+        bgcolor: "#0b1220",
+        borderBottom: "1px solid rgba(148, 163, 184, 0.12)",
+        display: "flex",
+        alignItems: "center",
+        flexShrink: 0,
+      }}
+    >
+      <Tabs
+        value={activeDatasetId ?? false}
+        onChange={(_: SyntheticEvent, value: string) => onSelectDataset(value)}
+        variant="scrollable"
+        scrollButtons="auto"
+        sx={{
+          minHeight: 48,
+          width: "100%",
+          "& .MuiTabs-indicator": {
+            backgroundColor: "#60a5fa",
+          },
+        }}
+      >
+        {datasetTabs.map((tab) => (
+          <Tab
+            key={tab.id}
+            value={tab.id}
+            disableRipple
+            sx={{
+              minHeight: 48,
+              textTransform: "none",
+              color: "#cbd5e1",
+              alignItems: "stretch",
+              px: 0,
+            }}
+            label={
+              <Stack direction="row" spacing={1} alignItems="center" sx={{ px: 1.5, minWidth: 0 }}>
+                <Typography
+                  variant="body2"
+                  sx={{ maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis" }}
+                >
+                  {tab.name}
+                </Typography>
+                <IconButton
+                  size="small"
+                  sx={{ color: "#94a3b8" }}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onCloseDataset(tab.id);
+                  }}
+                >
+                  <CloseRoundedIcon sx={{ fontSize: 16 }} />
+                </IconButton>
+              </Stack>
+            }
+          />
+        ))}
+      </Tabs>
+    </Box>
+  );
+}
+
+function EditorSurface({
+  dataset,
+  draft,
+  mobile = false,
+}: {
+  dataset: DatasetRecord;
+  draft: DatasetDraft;
+  mobile?: boolean;
+}) {
+  return (
+    <Box sx={{ flex: 1, minWidth: 0, minHeight: 0, display: "flex", flexDirection: "column" }}>
+      <Box
+        sx={{
+          px: 2,
+          py: 1,
+          borderBottom: "1px solid rgba(148, 163, 184, 0.12)",
+          color: "#94a3b8",
+          bgcolor: "#111827",
+          flexShrink: 0,
+        }}
+      >
+        <Typography variant="caption">datasets/{dataset.id}/dataset.yaml</Typography>
+      </Box>
+
+      <Box
+        sx={{
+          flex: 1,
+          minHeight: 0,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          p: mobile ? 2 : 4,
+          overflow: "hidden",
+        }}
+      >
+        <Stack spacing={1.5} sx={{ maxWidth: 540, textAlign: "center", color: "#e2e8f0" }}>
+          <Typography variant={mobile ? "h6" : "h5"} fontWeight={700}>
+            {draft.name}
+          </Typography>
+        </Stack>
+      </Box>
+    </Box>
+  );
+}
+
+function DatasetMetadataPanel({
   dataset,
   draft,
   fineTuneFiles,
   onChangeDraft,
   onSaveDataset,
   saving,
-}: EditorPaneProps) {
+}: DatasetEditorSharedProps) {
   return (
-    <Box sx={{ flex: 1, display: "flex", flexDirection: { xs: "column", xl: "row" }, minWidth: 0 }}>
-      <Box sx={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
-        <Box
-          sx={{
-            px: 2,
-            py: 1,
-            borderBottom: "1px solid rgba(148, 163, 184, 0.12)",
-            color: "#94a3b8",
-            bgcolor: "#111827",
-          }}
-        >
-          <Typography variant="caption">
-            datasets/{dataset.id}/dataset.yaml
-          </Typography>
-        </Box>
-        <Box
-          sx={{
-            flex: 1,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            p: 4,
-          }}
-        >
-          <Stack spacing={2} sx={{ maxWidth: 540, textAlign: "center", color: "#e2e8f0" }}>
-            <Typography variant="h5" fontWeight={700}>
-              {draft.name}
-            </Typography>
-            <Typography variant="body1" sx={{ color: "#94a3b8", lineHeight: 1.8 }}>
-              编辑器主体暂时留空。当前这一屏主要负责维护数据集 YAML 元数据，其中最关键的是
-              `base_model`，供 LAwF 训练页自动识别并回填。
-            </Typography>
-          </Stack>
-        </Box>
-      </Box>
-
-      <Box
-        sx={{
-          width: { xs: "100%", xl: 360 },
-          borderLeft: { xl: "1px solid rgba(148, 163, 184, 0.12)" },
-          borderTop: { xs: "1px solid rgba(148, 163, 184, 0.12)", xl: 0 },
-          bgcolor: "#111827",
-          p: 2,
-        }}
-      >
-        <Stack spacing={2}>
-          <Typography variant="subtitle1" sx={{ color: "#f8fafc", fontWeight: 700 }}>
-            数据集元数据
-          </Typography>
-          <TextField
-            label="数据集名称"
-            value={draft.name}
-            onChange={(event) => onChangeDraft({ ...draft, name: event.target.value })}
-            fullWidth
-            size="small"
-            sx={darkFieldSx}
-          />
-          <TextField
-            label="标注模型 / Base Model"
-            value={draft.base_model}
-            onChange={(event) => onChangeDraft({ ...draft, base_model: event.target.value })}
-            helperText="支持 Hugging Face 模型 ID，例如 Qwen/Qwen2.5-7B-Instruct，也支持本地模型目录路径。"
-            fullWidth
-            size="small"
-            sx={darkFieldSx}
-          />
-          <FormControl fullWidth size="small" sx={darkFieldSx}>
-            <InputLabel id="dataset-training-file-label">训练文件</InputLabel>
-            <Select
-              labelId="dataset-training-file-label"
-              label="训练文件"
-              value={draft.training_file_id}
-              onChange={(event) =>
-                onChangeDraft({ ...draft, training_file_id: event.target.value })
-              }
-            >
-              <MenuItem value="">未绑定</MenuItem>
-              {fineTuneFiles.map((file) => (
-                <MenuItem key={file.id} value={file.id}>
-                  {file.filename}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-          <Button
-            variant="contained"
-            startIcon={<SaveRoundedIcon />}
-            onClick={onSaveDataset}
-            disabled={saving}
+    <Box sx={{ height: "100%", minHeight: 0, overflow: "auto", p: 2 }}>
+      <Stack spacing={2}>
+        <Typography variant="subtitle1" sx={{ color: "#f8fafc", fontWeight: 700 }}>
+          数据集元数据
+        </Typography>
+        <Typography variant="caption" sx={{ color: "#94a3b8" }}>
+          datasets/{dataset.id}/dataset.yaml
+        </Typography>
+        <TextField
+          label="数据集名称"
+          value={draft.name}
+          onChange={(event) => onChangeDraft({ ...draft, name: event.target.value })}
+          fullWidth
+          size="small"
+          sx={darkFieldSx}
+        />
+        <TextField
+          label="标注模型 / Base Model"
+          value={draft.base_model}
+          onChange={(event) => onChangeDraft({ ...draft, base_model: event.target.value })}
+          helperText="支持 Hugging Face 模型 ID，也支持本地模型目录路径。"
+          fullWidth
+          size="small"
+          sx={darkFieldSx}
+        />
+        <FormControl fullWidth size="small" sx={darkFieldSx}>
+          <InputLabel id={`dataset-training-file-label-${dataset.id}`}>训练文件</InputLabel>
+          <Select
+            labelId={`dataset-training-file-label-${dataset.id}`}
+            label="训练文件"
+            value={draft.training_file_id}
+            onChange={(event) => onChangeDraft({ ...draft, training_file_id: event.target.value })}
           >
-            {saving ? "保存中..." : "保存到 dataset.yaml"}
-          </Button>
-          <Paper variant="outlined" sx={{ p: 2, bgcolor: "#0f172a", borderColor: "rgba(148, 163, 184, 0.12)" }}>
-            <Typography variant="caption" sx={{ color: "#94a3b8" }}>
-              当前 YAML 关键字段
-            </Typography>
-            <Box
-              component="pre"
-              sx={{
-                mt: 1,
-                mb: 0,
-                whiteSpace: "pre-wrap",
-                wordBreak: "break-word",
-                color: "#e2e8f0",
-                fontFamily: '"IBM Plex Mono", "SFMono-Regular", monospace',
-                fontSize: 12,
-              }}
-            >
-{`name: ${draft.name}
-base_model: ${draft.base_model || '""'}
-training_file_id: ${draft.training_file_id || 'null'}`}
-            </Box>
-          </Paper>
-        </Stack>
-      </Box>
-    </Box>
-  );
-}
-
-interface WelcomeEditorProps {
-  onCreateDataset: () => void;
-  onOpenNextDataset: () => void;
-}
-
-function WelcomeEditor({ onCreateDataset, onOpenNextDataset }: WelcomeEditorProps) {
-  return (
-    <Box
-      sx={{
-        flex: 1,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        p: 4,
-      }}
-    >
-      <Stack spacing={3} sx={{ maxWidth: 520, textAlign: "center", color: "#e2e8f0" }}>
-        <Typography variant="h4" fontWeight={700}>
-          Welcome to Data Workspace
-        </Typography>
-        <Typography variant="body1" sx={{ color: "#94a3b8", lineHeight: 1.8 }}>
-          先新建一个数据集，或者打开已有数据集。每个数据集都会在后端生成一个
-          `dataset.yaml`，用于保存强绑定的 `base_model` 和训练文件信息。
-        </Typography>
-        <Stack direction={{ xs: "column", sm: "row" }} spacing={2} justifyContent="center">
-          <Button variant="contained" size="large" startIcon={<AddRoundedIcon />} onClick={onCreateDataset}>
-            新建数据集
-          </Button>
-          <Button
-            variant="outlined"
-            size="large"
-            startIcon={<FolderOpenRoundedIcon />}
-            onClick={onOpenNextDataset}
+            <MenuItem value="">未绑定</MenuItem>
+            {fineTuneFiles.map((file) => (
+              <MenuItem key={file.id} value={file.id}>
+                {file.filename}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+        <Button
+          variant="contained"
+          startIcon={<SaveRoundedIcon />}
+          onClick={onSaveDataset}
+          disabled={saving}
+        >
+          {saving ? "保存中..." : "保存到 dataset.yaml"}
+        </Button>
+        <Paper
+          variant="outlined"
+          sx={{
+            p: 2,
+            bgcolor: "#0f172a",
+            borderColor: "rgba(148, 163, 184, 0.12)",
+          }}
+        >
+          <Typography variant="caption" sx={{ color: "#94a3b8" }}>
+            预览
+          </Typography>
+          <Box
+            component="pre"
             sx={{
+              mt: 1,
+              mb: 0,
+              whiteSpace: "pre-wrap",
+              wordBreak: "break-word",
               color: "#e2e8f0",
-              borderColor: "rgba(148, 163, 184, 0.28)",
+              fontFamily: '"IBM Plex Mono", "SFMono-Regular", monospace',
+              fontSize: 12,
             }}
           >
-            打开数据集
-          </Button>
-        </Stack>
+{`name: ${draft.name}
+base_model: ${draft.base_model || '""'}
+training_file_id: ${draft.training_file_id || "null"}`}
+          </Box>
+        </Paper>
       </Stack>
     </Box>
   );
@@ -770,14 +1392,28 @@ function renderSummaryIcon(icon: DataSummaryItem["icon"]) {
 }
 
 const darkFieldSx = {
-  "& .MuiInputLabel-root": { color: "#94a3b8" },
   "& .MuiOutlinedInput-root": {
-    color: "#e2e8f0",
-    "& fieldset": { borderColor: "rgba(148, 163, 184, 0.28)" },
-    "&:hover fieldset": { borderColor: "rgba(148, 163, 184, 0.5)" },
-    "&.Mui-focused fieldset": { borderColor: "#60a5fa" },
+    color: "#f8fafc",
+    bgcolor: "#0f172a",
+    "& fieldset": {
+      borderColor: "rgba(148, 163, 184, 0.2)",
+    },
+    "&:hover fieldset": {
+      borderColor: "rgba(148, 163, 184, 0.35)",
+    },
+    "&.Mui-focused fieldset": {
+      borderColor: "#60a5fa",
+    },
   },
-  "& .MuiFormHelperText-root": { color: "#94a3b8" },
+  "& .MuiInputLabel-root": {
+    color: "#94a3b8",
+  },
+  "& .MuiInputLabel-root.Mui-focused": {
+    color: "#93c5fd",
+  },
+  "& .MuiFormHelperText-root": {
+    color: "#94a3b8",
+  },
 };
 
 export default DataWorkspace;

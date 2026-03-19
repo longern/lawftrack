@@ -8,6 +8,9 @@ import {
   useState,
 } from "react";
 import {
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
   Alert,
   Box,
   Button,
@@ -34,6 +37,7 @@ import AddRoundedIcon from "@mui/icons-material/AddRounded";
 import AutorenewRoundedIcon from "@mui/icons-material/AutorenewRounded";
 import CancelRoundedIcon from "@mui/icons-material/CancelRounded";
 import CloudUploadRoundedIcon from "@mui/icons-material/CloudUploadRounded";
+import ExpandMoreRoundedIcon from "@mui/icons-material/ExpandMoreRounded";
 import type {
   ApiListResponse,
   DatasetRecord,
@@ -694,6 +698,8 @@ function CreateTrainingJobDialog({
   submitting,
   onClose,
 }: CreateTrainingJobDialogProps) {
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="md">
       <DialogTitle>创建训练任务</DialogTitle>
@@ -746,32 +752,23 @@ function CreateTrainingJobDialog({
                 </FormControl>
               </Grid>
               <Grid size={{ xs: 12, sm: 6 }}>
-                <TextField
-                  label="Epochs"
-                  type="number"
-                  value={form.nEpochs}
-                  onChange={(event) => onChangeForm("nEpochs", event.target.value)}
-                  inputProps={{ min: 1, step: 1 }}
-                  fullWidth
-                />
+                <FormControl fullWidth required>
+                  <InputLabel id="training-file-label">训练集文件</InputLabel>
+                  <Select
+                    labelId="training-file-label"
+                    label="训练集文件"
+                    value={form.trainingFileId}
+                    onChange={(event) => onChangeForm("trainingFileId", event.target.value)}
+                  >
+                    {fineTuneFiles.map((file) => (
+                      <MenuItem key={file.id} value={file.id}>
+                        {file.filename}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
               </Grid>
             </Grid>
-
-            <FormControl fullWidth required>
-              <InputLabel id="training-file-label">训练集文件</InputLabel>
-              <Select
-                labelId="training-file-label"
-                label="训练集文件"
-                value={form.trainingFileId}
-                onChange={(event) => onChangeForm("trainingFileId", event.target.value)}
-              >
-                {fineTuneFiles.map((file) => (
-                  <MenuItem key={file.id} value={file.id}>
-                    {file.filename}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
 
             <FormControl fullWidth>
               <InputLabel id="validation-file-label">验证集文件</InputLabel>
@@ -790,85 +787,115 @@ function CreateTrainingJobDialog({
               </Select>
             </FormControl>
 
-            <Grid container spacing={2}>
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <TextField
-                  label="Suffix"
-                  value={form.suffix}
-                  onChange={(event) => onChangeForm("suffix", event.target.value)}
-                  fullWidth
-                />
-              </Grid>
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <TextField
-                  label="Seed"
-                  type="number"
-                  value={form.seed}
-                  onChange={(event) => onChangeForm("seed", event.target.value)}
-                  fullWidth
-                />
-              </Grid>
-            </Grid>
+            <Accordion
+              disableGutters
+              elevation={0}
+              expanded={advancedOpen}
+              onChange={(_, expanded) => setAdvancedOpen(expanded)}
+              sx={{
+                border: "1px solid rgba(15, 23, 42, 0.12)",
+                borderRadius: 2,
+                "&:before": { display: "none" },
+              }}
+            >
+              <AccordionSummary expandIcon={<ExpandMoreRoundedIcon />}>
+                <Typography variant="subtitle2" fontWeight={700}>
+                  高级设置
+                </Typography>
+              </AccordionSummary>
+              <AccordionDetails>
+                <Stack spacing={2.5}>
+                  <Grid container spacing={2}>
+                    <Grid size={{ xs: 12, sm: 6 }}>
+                      <TextField
+                        label="Epochs"
+                        type="number"
+                        value={form.nEpochs}
+                        onChange={(event) => onChangeForm("nEpochs", event.target.value)}
+                        inputProps={{ min: 1, step: 1 }}
+                        fullWidth
+                      />
+                    </Grid>
+                    <Grid size={{ xs: 12, sm: 6 }}>
+                      <TextField
+                        label="Seed"
+                        type="number"
+                        value={form.seed}
+                        onChange={(event) => onChangeForm("seed", event.target.value)}
+                        fullWidth
+                      />
+                    </Grid>
+                    <Grid size={{ xs: 12, sm: 6 }}>
+                      <TextField
+                        label="Suffix"
+                        value={form.suffix}
+                        onChange={(event) => onChangeForm("suffix", event.target.value)}
+                        fullWidth
+                      />
+                    </Grid>
+                  </Grid>
 
-            {form.methodType === "lawf" ? (
-              <Grid container spacing={2}>
-                <Grid size={{ xs: 12, sm: 6 }}>
-                  <TextField
-                    label="Batch Size"
-                    type="number"
-                    value={form.batchSize}
-                    onChange={(event) => onChangeForm("batchSize", event.target.value)}
-                    fullWidth
-                  />
-                </Grid>
-                <Grid size={{ xs: 12, sm: 6 }}>
-                  <TextField
-                    label="Learning Rate"
-                    type="number"
-                    value={form.learningRate}
-                    onChange={(event) => onChangeForm("learningRate", event.target.value)}
-                    inputProps={{ step: "0.00001" }}
-                    fullWidth
-                  />
-                </Grid>
-                <Grid size={{ xs: 12, sm: 6 }}>
-                  <TextField
-                    label="Logging Steps"
-                    type="number"
-                    value={form.loggingSteps}
-                    onChange={(event) => onChangeForm("loggingSteps", event.target.value)}
-                    fullWidth
-                  />
-                </Grid>
-                <Grid size={{ xs: 12, sm: 6 }}>
-                  <TextField
-                    label="LoRA Rank"
-                    type="number"
-                    value={form.loraRank}
-                    onChange={(event) => onChangeForm("loraRank", event.target.value)}
-                    fullWidth
-                  />
-                </Grid>
-                <Grid size={{ xs: 12, sm: 6 }}>
-                  <TextField
-                    label="LoRA Alpha"
-                    type="number"
-                    value={form.loraAlpha}
-                    onChange={(event) => onChangeForm("loraAlpha", event.target.value)}
-                    fullWidth
-                  />
-                </Grid>
-                <Grid size={{ xs: 12, sm: 6 }}>
-                  <TextField
-                    label="LoRA Dropout"
-                    type="number"
-                    value={form.loraDropout}
-                    onChange={(event) => onChangeForm("loraDropout", event.target.value)}
-                    inputProps={{ step: "0.01" }}
-                    fullWidth
-                  />
-                </Grid>
-                <Grid size={{ xs: 12 }}>
+                  {form.methodType === "lawf" ? (
+                    <Grid container spacing={2}>
+                      <Grid size={{ xs: 12, sm: 6 }}>
+                        <TextField
+                          label="Batch Size"
+                          type="number"
+                          value={form.batchSize}
+                          onChange={(event) => onChangeForm("batchSize", event.target.value)}
+                          fullWidth
+                        />
+                      </Grid>
+                      <Grid size={{ xs: 12, sm: 6 }}>
+                        <TextField
+                          label="Learning Rate"
+                          type="number"
+                          value={form.learningRate}
+                          onChange={(event) => onChangeForm("learningRate", event.target.value)}
+                          inputProps={{ step: "0.00001" }}
+                          fullWidth
+                        />
+                      </Grid>
+                      <Grid size={{ xs: 12, sm: 6 }}>
+                        <TextField
+                          label="Logging Steps"
+                          type="number"
+                          value={form.loggingSteps}
+                          onChange={(event) => onChangeForm("loggingSteps", event.target.value)}
+                          fullWidth
+                        />
+                      </Grid>
+                      <Grid size={{ xs: 12, sm: 6 }}>
+                        <TextField
+                          label="LoRA Rank"
+                          type="number"
+                          value={form.loraRank}
+                          onChange={(event) => onChangeForm("loraRank", event.target.value)}
+                          fullWidth
+                        />
+                      </Grid>
+                      <Grid size={{ xs: 12, sm: 6 }}>
+                        <TextField
+                          label="LoRA Alpha"
+                          type="number"
+                          value={form.loraAlpha}
+                          onChange={(event) => onChangeForm("loraAlpha", event.target.value)}
+                          fullWidth
+                        />
+                      </Grid>
+                      <Grid size={{ xs: 12, sm: 6 }}>
+                        <TextField
+                          label="LoRA Dropout"
+                          type="number"
+                          value={form.loraDropout}
+                          onChange={(event) => onChangeForm("loraDropout", event.target.value)}
+                          inputProps={{ step: "0.01" }}
+                          fullWidth
+                        />
+                      </Grid>
+                    </Grid>
+                  ) : null}
+
                   <FormControlLabel
                     control={
                       <Checkbox
@@ -878,9 +905,9 @@ function CreateTrainingJobDialog({
                     }
                     label="启用 TensorBoard 集成"
                   />
-                </Grid>
-              </Grid>
-            ) : null}
+                </Stack>
+              </AccordionDetails>
+            </Accordion>
           </Stack>
         </DialogContent>
         <DialogActions>

@@ -9,6 +9,8 @@ import type {
   DataSummaryItem,
 } from "../../types/app";
 
+type YamlSegmentKind = "plain" | "bullet" | "key" | "string" | "number" | "keyword";
+
 export function describeSample(sample: DatasetSample): string {
   const userMessage = sample.messages.find((message) => message.role === "user");
   return userMessage?.content || sample.title;
@@ -69,4 +71,137 @@ export function renderSummaryIcon(icon: DataSummaryItem["icon"]) {
     default:
       return null;
   }
+}
+
+function indent(level: number): string {
+  return "  ".repeat(level);
+}
+
+function needsQuotedYaml(value: string): boolean {
+  return (
+    value.length === 0 ||
+    /^\s|\s$/.test(value) ||
+    /[:#[\]{}!,&*?|\-<>=@`'"]/.test(value) ||
+    /^(true|false|null|yes|no|on|off|~)$/i.test(value)
+  );
+}
+
+function formatYamlScalar(value: unknown): string {
+  if (typeof value === "number") {
+    return String(value);
+  }
+  if (typeof value === "boolean") {
+    return value ? "true" : "false";
+  }
+  if (value === null || value === undefined) {
+    return "null";
+  }
+
+  const text = String(value);
+  return needsQuotedYaml(text) ? JSON.stringify(text) : text;
+}
+
+function pushYamlStringField(lines: string[], level: number, key: string, value: string) {
+  if (value.includes("\n")) {
+    lines.push(`${indent(level)}${key}: |-`);
+    for (const line of value.split("\n")) {
+      lines.push(`${indent(level + 1)}${line}`);
+    }
+    return;
+  }
+
+  lines.push(`${indent(level)}${key}: ${formatYamlScalar(value)}`);
+}
+
+export function serializeSampleAsYaml(sample: DatasetSample): string {
+  const lines: string[] = [];
+
+  lines.push(`id: ${formatYamlScalar(sample.id)}`);
+  lines.push(`title: ${formatYamlScalar(sample.title)}`);
+  lines.push("messages:");
+  for (const message of sample.messages) {
+    lines.push(`${indent(1)}- role: ${formatYamlScalar(message.role)}`);
+    pushYamlStringField(lines, 2, "content", message.content);
+  }
+
+  lines.push("source_messages:");
+  for (const message of sample.source_messages) {
+    lines.push(`${indent(1)}- role: ${formatYamlScalar(message.role)}`);
+    pushYamlStringField(lines, 2, "content", message.content);
+  }
+
+  lines.push("edits:");
+  if (sample.edits.length === 0) {
+    lines.push(`${indent(1)}[]`);
+  } else {
+    for (const edit of sample.edits) {
+      lines.push(`${indent(1)}- message_index: ${formatYamlScalar(edit.message_index)}`);
+      lines.push(`${indent(2)}token_index: ${formatYamlScalar(edit.token_index)}`);
+      pushYamlStringField(lines, 2, "original_token", edit.original_token);
+      pushYamlStringField(lines, 2, "replacement_token", edit.replacement_token);
+      lines.push(
+        `${indent(2)}regenerated_from_token_index: ${formatYamlScalar(edit.regenerated_from_token_index)}`,
+      );
+      lines.push(`${indent(2)}created_at: ${formatYamlScalar(edit.created_at)}`);
+    }
+  }
+
+  return lines.join("\n");
+}
+
+export function highlightYamlLine(
+  line: string,
+): Array<{ text: string; kind: YamlSegmentKind }> {
+  const segments: Array<{ text: string; kind: YamlSegmentKind }> = [];
+  const listMatch = line.match(/^(\s*-\s)(.*)$/);
+
+  if (listMatch) {
+    segments.push({ text: listMatch[1], kind: "bullet" });
+    line = listMatch[2];
+  }
+
+  const keyMatch = line.match(/^([A-Za-z0-9_]+):(.*)$/);
+  if (!keyMatch) {
+    segments.push({ text: line, kind: "plain" });
+    return segments;
+  }
+
+  segments.push({ text: `${keyMatch[1]}:`, kind: "key" });
+  const value = keyMatch[2];
+  if (!value) {
+    return segments;
+  }
+
+  const leadingWhitespace = value.match(/^\s+/)?.[0] ?? "";
+  if (leadingWhitespace) {
+    segments.push({ text: leadingWhitespace, kind: "plain" });
+  }
+
+  const trimmed = value.trimStart();
+  if (!trimmed) {
+    return segments;
+  }
+
+  if (trimmed === "|-" || trimmed === "|" || trimmed === "[]") {
+    segments.push({ text: trimmed, kind: trimmed === "[]" ? "keyword" : "plain" });
+    return segments;
+  }
+
+  if (/^".*"$/.test(trimmed)) {
+    segments.push({ text: trimmed, kind: "string" });
+    return segments;
+  }
+
+  if (/^-?\d+(\.\d+)?$/.test(trimmed)) {
+    segments.push({ text: trimmed, kind: "number" });
+    return segments;
+  }
+
+  if (/^(true|false|null)$/i.test(trimmed)) {
+    segments.push({ text: trimmed, kind: "keyword" });
+    return segments;
+  }
+
+  segments.push({ text: trimmed, kind: "plain" });
+  return segments;
 }

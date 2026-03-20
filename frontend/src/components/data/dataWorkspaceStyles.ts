@@ -1,67 +1,70 @@
+import { alpha } from "@mui/material/styles";
+import type { Theme } from "@mui/material/styles";
+
 export const panelCardSx = {
   p: 2,
-  bgcolor: "#0f172a",
-  borderColor: "rgba(148, 163, 184, 0.12)",
+  bgcolor: (theme: Theme) => (theme.palette.mode === "dark" ? "#0f172a" : theme.palette.background.paper),
+  borderColor: (theme: Theme) => theme.palette.divider,
 };
 
 export const darkFieldSx = {
   "& .MuiOutlinedInput-root": {
-    color: "#f8fafc",
-    bgcolor: "#0f172a",
+    color: (theme: Theme) => theme.palette.text.primary,
+    bgcolor: (theme: Theme) => (theme.palette.mode === "dark" ? "#0f172a" : alpha(theme.palette.primary.main, 0.03)),
     "& fieldset": {
-      borderColor: "rgba(148, 163, 184, 0.2)",
+      borderColor: (theme: Theme) => alpha(theme.palette.text.secondary, theme.palette.mode === "dark" ? 0.24 : 0.18),
     },
     "&:hover fieldset": {
-      borderColor: "rgba(148, 163, 184, 0.35)",
+      borderColor: (theme: Theme) => alpha(theme.palette.text.secondary, theme.palette.mode === "dark" ? 0.38 : 0.28),
     },
     "&.Mui-focused fieldset": {
-      borderColor: "#60a5fa",
+      borderColor: (theme: Theme) => theme.palette.primary.main,
     },
   },
   "& .MuiInputLabel-root": {
-    color: "#94a3b8",
+    color: (theme: Theme) => theme.palette.text.secondary,
   },
   "& .MuiInputLabel-root.Mui-focused": {
-    color: "#93c5fd",
+    color: (theme: Theme) => theme.palette.primary.main,
   },
   "& .MuiFormHelperText-root": {
-    color: "#94a3b8",
+    color: (theme: Theme) => theme.palette.text.secondary,
   },
 };
 
 export const inlineFieldSx = {
   "& .MuiOutlinedInput-root": {
-    color: "#f8fafc",
-    bgcolor: "rgba(15, 23, 42, 0.22)",
+    color: (theme: Theme) => theme.palette.text.primary,
+    bgcolor: "transparent",
     backdropFilter: "blur(4px)",
     alignItems: "flex-start",
     "& fieldset": {
-      borderColor: "rgba(255, 255, 255, 0.12)",
+      borderColor: "transparent",
     },
     "&:hover fieldset": {
-      borderColor: "rgba(255, 255, 255, 0.2)",
+      borderColor: "transparent",
     },
     "&.Mui-focused fieldset": {
-      borderColor: "rgba(191, 219, 254, 0.85)",
+      borderColor: "transparent",
     },
   },
   "& .MuiInputBase-input": {
-    color: "#f8fafc",
+    color: (theme: Theme) => theme.palette.text.primary,
   },
   "& .MuiInputBase-input::placeholder": {
-    color: "rgba(248, 250, 252, 0.55)",
+    color: (theme: Theme) => alpha(theme.palette.text.primary, 0.55),
     opacity: 1,
   },
   "& .MuiInputBase-inputMultiline": {
     lineHeight: 1.8,
   },
   "& .MuiInputLabel-root": {
-    color: "rgba(226, 232, 240, 0.72)",
+    color: (theme: Theme) => alpha(theme.palette.text.primary, 0.72),
   },
   "& .MuiInputLabel-root.Mui-focused": {
-    color: "#dbeafe",
+    color: (theme: Theme) => theme.palette.primary.light,
   },
   "& .MuiSelect-icon": {
-    color: "rgba(248, 250, 252, 0.7)",
+    color: (theme: Theme) => alpha(theme.palette.text.primary, 0.7),
   },
 };

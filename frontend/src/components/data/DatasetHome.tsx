@@ -18,6 +18,7 @@ import {
   Stack,
   Typography,
 } from "@mui/material";
+import { alpha } from "@mui/material/styles";
 import type { DatasetRecord, DataSummaryItem } from "../../types/app";
 import { renderSummaryIcon } from "./dataWorkspaceUtils";
 
@@ -46,18 +47,18 @@ function SummaryPanel({ dataSummary, mobile }: { dataSummary: DataSummaryItem[];
             sx={{
               minWidth: 140,
               p: 1.5,
-              bgcolor: "#111827",
-              borderColor: "rgba(148, 163, 184, 0.12)",
-              color: "#e2e8f0",
+              bgcolor: (theme) => (theme.palette.mode === "dark" ? "#111827" : theme.palette.background.paper),
+              borderColor: (theme) => theme.palette.divider,
+              color: "text.primary",
               flexShrink: 0,
             }}
           >
             <Stack spacing={1}>
               <Stack direction="row" spacing={1} alignItems="center">
-                <Box sx={{ display: "flex", color: "#7dd3fc" }}>{renderSummaryIcon(item.icon)}</Box>
+                <Box sx={{ display: "flex", color: "primary.main" }}>{renderSummaryIcon(item.icon)}</Box>
                 <Typography variant="caption">{item.title}</Typography>
               </Stack>
-              <Typography variant="caption" sx={{ color: "#94a3b8" }}>
+              <Typography variant="caption" color="text.secondary">
                 {item.value}
               </Typography>
             </Stack>
@@ -71,13 +72,13 @@ function SummaryPanel({ dataSummary, mobile }: { dataSummary: DataSummaryItem[];
     <Paper
       variant="outlined"
       sx={{
-        bgcolor: "#111827",
-        borderColor: "rgba(148, 163, 184, 0.12)",
+        bgcolor: (theme) => (theme.palette.mode === "dark" ? "#111827" : theme.palette.background.paper),
+        borderColor: (theme) => theme.palette.divider,
         p: 2,
         overflow: "auto",
       }}
     >
-      <Typography variant="subtitle1" fontWeight={700} sx={{ color: "#f8fafc", mb: 1.5 }}>
+      <Typography variant="subtitle1" fontWeight={700} sx={{ color: "text.primary", mb: 1.5 }}>
         状态
       </Typography>
       <Stack spacing={1.25}>
@@ -88,15 +89,15 @@ function SummaryPanel({ dataSummary, mobile }: { dataSummary: DataSummaryItem[];
             alignItems="center"
             justifyContent="space-between"
             spacing={1.5}
-            sx={{ color: "#cbd5e1" }}
+            sx={{ color: "text.primary" }}
           >
             <Stack direction="row" spacing={1} alignItems="center">
-              <Box sx={{ display: "flex", color: "#7dd3fc" }}>{renderSummaryIcon(item.icon)}</Box>
+              <Box sx={{ display: "flex", color: "primary.main" }}>{renderSummaryIcon(item.icon)}</Box>
               <Typography variant="body2">{item.title}</Typography>
             </Stack>
             <Typography
               variant="caption"
-              sx={{ maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", color: "#94a3b8" }}
+              sx={{ maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", color: "text.secondary" }}
             >
               {item.value}
             </Typography>
@@ -130,7 +131,7 @@ export function DatasetHome({
         display: "flex",
         flexDirection: "column",
         gap: 2,
-        color: "#e2e8f0",
+        color: "text.primary",
         overflow: "hidden",
       }}
     >
@@ -147,7 +148,7 @@ export function DatasetHome({
           size="large"
           startIcon={<CloudUploadRoundedIcon />}
           onClick={() => importInputRef.current?.click()}
-          sx={{ color: "#e2e8f0", borderColor: "rgba(148, 163, 184, 0.28)" }}
+          sx={{ color: "text.primary", borderColor: "divider" }}
         >
           上传数据集
         </Button>
@@ -177,8 +178,8 @@ export function DatasetHome({
                     variant="outlined"
                     sx={{
                       minWidth: isMobile ? 220 : 260,
-                      bgcolor: "#111827",
-                      borderColor: "rgba(148, 163, 184, 0.12)",
+                      bgcolor: (theme) => (theme.palette.mode === "dark" ? "#111827" : theme.palette.background.paper),
+                      borderColor: (theme) => theme.palette.divider,
                       flexShrink: 0,
                     }}
                   >
@@ -188,10 +189,10 @@ export function DatasetHome({
                           <Typography variant="subtitle1" fontWeight={700} noWrap>
                             {dataset.name}
                           </Typography>
-                          <Typography variant="body2" sx={{ color: "#94a3b8" }} noWrap>
+                          <Typography variant="body2" color="text.secondary" noWrap>
                             {dataset.base_model ?? "未设置模型"}
                           </Typography>
-                          <Typography variant="caption" sx={{ color: "#64748b" }}>
+                          <Typography variant="caption" sx={{ color: "text.secondary", opacity: 0.75 }}>
                             {dataset.sample_count ?? 0} 条样本
                           </Typography>
                         </Stack>
@@ -208,14 +209,14 @@ export function DatasetHome({
             sx={{
               flex: 1,
               minHeight: 0,
-              bgcolor: "#111827",
-              borderColor: "rgba(148, 163, 184, 0.12)",
+              bgcolor: (theme) => (theme.palette.mode === "dark" ? "#111827" : theme.palette.background.paper),
+              borderColor: (theme) => theme.palette.divider,
               display: "flex",
               flexDirection: "column",
               overflow: "hidden",
             }}
           >
-            <Box sx={{ px: 2, py: 1.5, borderBottom: "1px solid rgba(148, 163, 184, 0.12)" }}>
+            <Box sx={{ px: 2, py: 1.5, borderBottom: (theme) => `1px solid ${theme.palette.divider}` }}>
               <Typography variant="subtitle1" fontWeight={700}>
                 所有数据集
               </Typography>
@@ -223,11 +224,11 @@ export function DatasetHome({
 
             <Box sx={{ flex: 1, minHeight: 0, overflow: "auto", p: 1.5 }}>
               {loading ? (
-                <Typography variant="body2" sx={{ color: "#94a3b8" }}>
+                <Typography variant="body2" color="text.secondary">
                   加载中...
                 </Typography>
               ) : datasets.length === 0 ? (
-                <Typography variant="body2" sx={{ color: "#94a3b8" }}>
+                <Typography variant="body2" color="text.secondary">
                   还没有数据集。
                 </Typography>
               ) : (
@@ -236,16 +237,24 @@ export function DatasetHome({
                     <ListItemButton
                       key={dataset.id}
                       onClick={() => onOpenDataset(dataset)}
-                      sx={{ borderRadius: 2, color: "#e2e8f0", mb: 0.75, bgcolor: "#0f172a" }}
+                      sx={{
+                        borderRadius: 2,
+                        color: "text.primary",
+                        mb: 0.75,
+                        bgcolor: (theme) =>
+                          theme.palette.mode === "dark"
+                            ? "#0f172a"
+                            : alpha(theme.palette.primary.main, 0.04),
+                      }}
                     >
-                      <ListItemIcon sx={{ minWidth: 36, color: "#93c5fd" }}>
+                      <ListItemIcon sx={{ minWidth: 36, color: "primary.main" }}>
                         <StorageRoundedIcon fontSize="small" />
                       </ListItemIcon>
                       <Box sx={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 1 }}>
                         <ListItemText
                           primary={dataset.name}
                           secondary={`${dataset.base_model ?? "未设置模型"} · ${dataset.sample_count ?? 0} 条样本`}
-                          slotProps={{ primary: { fontSize: 14 }, secondary: { sx: { color: "#94a3b8" } } }}
+                          slotProps={{ primary: { fontSize: 14 }, secondary: { sx: { color: "text.secondary" } } }}
                         />
                         <IconButton
                           size="small"
@@ -253,7 +262,7 @@ export function DatasetHome({
                             event.stopPropagation();
                             onDeleteDataset(dataset);
                           }}
-                          sx={{ color: "#94a3b8", flexShrink: 0 }}
+                          sx={{ color: "text.secondary", flexShrink: 0 }}
                         >
                           <DeleteOutlineRoundedIcon fontSize="small" />
                         </IconButton>

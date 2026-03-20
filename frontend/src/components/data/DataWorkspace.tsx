@@ -17,7 +17,6 @@ import type {
   DataSummaryItem,
   UploadedFile,
 } from "../../types/app";
-import { DatasetHome } from "./DatasetHome";
 import { WorkspaceShell } from "./DataWorkspaceShell";
 import type { ContinuationDraft, DatasetDraft, TokenCandidate, TokenSelection } from "./dataWorkspaceTypes";
 
@@ -82,6 +81,7 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
   const [mobileMetadataOpen, setMobileMetadataOpen] = useState(false);
   const [desktopExplorerCollapsed, setDesktopExplorerCollapsed] = useState(false);
   const [datasetToDelete, setDatasetToDelete] = useState<DatasetRecord | null>(null);
+  const [sampleToDelete, setSampleToDelete] = useState<DatasetSample | null>(null);
   const [modelOptions, setModelOptions] = useState<string[]>([]);
   const [modelsLoading, setModelsLoading] = useState(false);
   const [modelOptionsError, setModelOptionsError] = useState("");
@@ -104,6 +104,29 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
   const selectedSampleTokenization = selectedSample ? sampleTokenizations[selectedSample.id] ?? null : null;
   const visibleSample = continuationDraft?.sample ?? selectedSample;
   const visibleSampleTokenization = continuationDraft?.tokenization ?? selectedSampleTokenization;
+  const tokenSequence = useMemo(
+    () =>
+      (visibleSampleTokenization?.messages ?? []).flatMap((message) =>
+        message.role === "assistant"
+          ? message.tokens.map((token) => ({
+              messageIndex: message.message_index,
+              tokenIndex: token.token_index,
+            }))
+          : [],
+      ),
+    [visibleSampleTokenization],
+  );
+  const selectedTokenSequenceIndex = useMemo(
+    () =>
+      selectedToken
+        ? tokenSequence.findIndex(
+            (token) =>
+              token.messageIndex === selectedToken.messageIndex &&
+              token.tokenIndex === selectedToken.tokenIndex,
+          )
+        : -1,
+    [selectedToken, tokenSequence],
+  );
 
   useEffect(() => {
     void refreshWorkspace();
@@ -123,6 +146,7 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
       setTokenCandidates([]);
       setContinuationDraft(null);
       setCandidatesLoading(false);
+      setError("");
       tokenCandidatesRequestRef.current += 1;
       return;
     }
@@ -150,11 +174,11 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
   }, [selectedSample, selectedSampleId]);
 
   useEffect(() => {
-    if (!selectedSample || generatingAssistant) {
+    if (!activeDataset || !selectedSample || generatingAssistant) {
       return;
     }
     void ensureSampleTokenization(selectedSample);
-  }, [selectedSample, draft?.base_model, activeDataset?.id, generatingAssistant]);
+  }, [activeDataset, selectedSample, draft?.base_model, generatingAssistant]);
 
   async function refreshWorkspace() {
     setLoading(true);
@@ -277,6 +301,7 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
       }
       return nextTabs;
     });
+    setError("");
   }
 
   async function handleSaveDataset() {
@@ -440,20 +465,61 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
       return;
     }
     const tokenization = await ensureSampleTokenization(visibleSample);
-    const message = tokenization?.messages.find((item) => item.message_index === messageIndex);
+    if (!tokenization) {
+      return;
+    }
+    await selectResolvedToken(visibleSample, tokenization, messageIndex, tokenIndex);
+  }
+
+  async function selectResolvedToken(
+    sample: DatasetSample,
+    tokenization: DatasetSampleTokenization,
+    messageIndex: number,
+    tokenIndex: number,
+  ) {
+    const message = tokenization.messages.find((item) => item.message_index === messageIndex);
     const token = message?.tokens.find((item) => item.token_index === tokenIndex);
     if (!token) {
       return;
     }
+    const tokenText = token.text || token.token;
     setTokenCandidates([]);
     setSelectedToken({
       messageIndex,
       tokenIndex,
-      currentToken: token.text || token.token,
-      originalToken: token.text || token.token,
+      currentToken: tokenText,
+      originalToken: tokenText,
     });
-    setReplacementToken(token.text || token.token);
-    void loadTokenCandidates(visibleSample, tokenization, messageIndex, tokenIndex);
+    setReplacementToken(tokenText);
+    void loadTokenCandidates(sample, tokenization, messageIndex, tokenIndex);
+  }
+
+  async function handleSelectAdjacentToken(direction: -1 | 1) {
+    if (!visibleSample || continuationDraft || !selectedToken) {
+      return;
+    }
+    const tokenization = visibleSampleTokenization ?? (await ensureSampleTokenization(visibleSample));
+    if (!tokenization) {
+      return;
+    }
+    const currentIndex = tokenSequence.findIndex(
+      (token) =>
+        token.messageIndex === selectedToken.messageIndex &&
+        token.tokenIndex === selectedToken.tokenIndex,
+    );
+    const nextToken = tokenSequence[currentIndex + direction];
+    if (!nextToken) {
+      return;
+    }
+    await selectResolvedToken(visibleSample, tokenization, nextToken.messageIndex, nextToken.tokenIndex);
+  }
+
+  function clearSelectedToken() {
+    setSelectedToken(null);
+    setReplacementToken("");
+    setTokenCandidates([]);
+    setCandidatesLoading(false);
+    tokenCandidatesRequestRef.current += 1;
   }
 
   async function loadTokenCandidates(
@@ -601,9 +667,14 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
       [acceptedSample.id]: continuationDraft.tokenization,
     }));
     setContinuationDraft(null);
+    const activeEdit = acceptedSample.edits.find(
+      (edit) =>
+        edit.message_index === selectedToken.messageIndex &&
+        edit.token_index === selectedToken.tokenIndex,
+    );
     setSelectedToken({
       ...selectedToken,
-      currentToken: acceptedSample.edits[0]?.replacement_token ?? selectedToken.currentToken,
+      currentToken: activeEdit?.replacement_token ?? selectedToken.currentToken,
     });
     setTokenCandidates([]);
     setCandidatesLoading(false);
@@ -668,11 +739,7 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
       : [...selectedSample.messages, { role: "assistant", content: "" }];
 
     setGeneratingAssistant(true);
-    setSelectedToken(null);
-    setReplacementToken("");
-    setTokenCandidates([]);
-    setCandidatesLoading(false);
-    tokenCandidatesRequestRef.current += 1;
+    clearSelectedToken();
     const originalSample = selectedSample;
     let shouldRestoreOriginal = true;
     let latestSample = originalSample;
@@ -810,6 +877,44 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
     }
   }
 
+  async function handleDeleteSample() {
+    if (!activeDataset || !sampleToDelete) {
+      return;
+    }
+    const deletingSampleId = sampleToDelete.id;
+    setSavingSample(true);
+    try {
+      await fetchJson<{ deleted: boolean }>(
+        `/api/datasets/${activeDataset.id}/samples/${deletingSampleId}`,
+        { method: "DELETE" },
+      );
+      const nextSamples = samples.filter((sample) => sample.id !== deletingSampleId);
+      setSamples(nextSamples);
+      setSelectedSampleId((current) => {
+        if (current !== deletingSampleId) {
+          return current;
+        }
+        return nextSamples[0]?.id ?? null;
+      });
+      setDirtySampleIds((current) => current.filter((sampleId) => sampleId !== deletingSampleId));
+      setSampleTokenizations((current) => {
+        const next = { ...current };
+        delete next[deletingSampleId];
+        return next;
+      });
+      if (selectedSampleId === deletingSampleId) {
+        setContinuationDraft(null);
+        clearSelectedToken();
+      }
+      setSampleToDelete(null);
+      setError("");
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : "删除样本失败");
+    } finally {
+      setSavingSample(false);
+    }
+  }
+
   async function persistSample(sample: DatasetSample): Promise<DatasetSample> {
     if (!activeDataset) {
       throw new Error("当前没有打开的数据集。");
@@ -837,101 +942,87 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
         borderRadius: 0,
         overflow: "hidden",
         border: 0,
-        bgcolor: "#0f172a",
+        bgcolor: (theme) => theme.palette.mode === "dark" ? "#0f172a" : theme.palette.background.paper,
       }}
     >
-      {datasetTabs.length === 0 ? (
-        <DatasetHome
-          creating={creating}
-          dataSummary={dataSummary}
-          datasets={datasets}
-          importInputRef={importInputRef}
-          isMobile={isMobile}
-          loading={loading}
-          onCreateDataset={() => void handleCreateDataset()}
-          onDeleteDataset={(dataset) => setDatasetToDelete(dataset)}
-          onImportDataset={handleImportDataset}
-          onOpenDataset={openDataset}
-          recentDatasets={recentDatasets}
-        />
-      ) : (
-        <WorkspaceShell
-          activeDataset={activeDataset}
-          creating={creating}
-          dataSummary={dataSummary}
-          datasets={datasets}
-          datasetTabs={datasetTabs}
-          draft={draft}
-          error={error}
-          fineTuneFiles={fineTuneFiles}
-          importInputRef={importInputRef}
-          isMobile={isMobile}
-          loading={loading}
-          mobileExplorerOpen={mobileExplorerOpen}
-          mobileSamplesOpen={mobileSamplesOpen}
-          mobileMetadataOpen={mobileMetadataOpen}
-          desktopExplorerCollapsed={desktopExplorerCollapsed}
-          modelOptions={modelOptions}
-          modelOptionsError={modelOptionsError}
-          modelsLoading={modelsLoading}
-          onChangeDraft={setDraft}
-          onCloseDataset={handleCloseDataset}
-          onCreateDataset={() => void handleCreateDataset()}
-          onDeleteDataset={(dataset) => setDatasetToDelete(dataset)}
-          onImportDataset={handleImportDataset}
-          onOpenDataset={openDataset}
-          onOpenNextDataset={handleOpenNextDataset}
-          onLoadModelOptions={() => void loadModelOptions(true)}
-          onSaveDataset={() => void handleSaveDataset()}
-          onSelectDataset={setActiveDatasetId}
-          onSetDesktopExplorerCollapsed={setDesktopExplorerCollapsed}
-          onSetMobileExplorerOpen={setMobileExplorerOpen}
-          onSetMobileSamplesOpen={setMobileSamplesOpen}
-          onSetMobileMetadataOpen={setMobileMetadataOpen}
-          samples={samples}
-          samplesLoading={samplesLoading}
-          selectedSample={visibleSample}
-          selectedSampleTokenization={visibleSampleTokenization}
-          selectedSampleId={selectedSampleId}
-          dirtySampleIds={dirtySampleIds}
-          selectedToken={selectedToken}
-          tokenCandidates={tokenCandidates}
-          candidatesLoading={candidatesLoading}
-          hasContinuationDraft={Boolean(continuationDraft)}
-          replacementToken={replacementToken}
-          generating={generating}
-          generatingAssistant={generatingAssistant}
-          saving={saving}
-          savingSample={savingSample}
-          onCreateSample={() => void handleCreateSample()}
-          onGenerateAssistantMessage={() => void handleGenerateAssistantMessage()}
-          onGenerateContinuation={() => void handleGenerateContinuation()}
+      <WorkspaceShell
+        activeDataset={activeDataset}
+        creating={creating}
+        dataSummary={dataSummary}
+        datasets={datasets}
+        datasetTabs={datasetTabs}
+        draft={draft}
+        error={error}
+        fineTuneFiles={fineTuneFiles}
+        importInputRef={importInputRef}
+        isMobile={isMobile}
+        loading={loading}
+        mobileExplorerOpen={mobileExplorerOpen}
+        mobileSamplesOpen={mobileSamplesOpen}
+        mobileMetadataOpen={mobileMetadataOpen}
+        desktopExplorerCollapsed={desktopExplorerCollapsed}
+        recentDatasets={recentDatasets}
+        modelOptions={modelOptions}
+        modelOptionsError={modelOptionsError}
+        modelsLoading={modelsLoading}
+        onChangeDraft={setDraft}
+        onCloseDataset={handleCloseDataset}
+        onCreateDataset={() => void handleCreateDataset()}
+        onDeleteDataset={(dataset) => setDatasetToDelete(dataset)}
+        onImportDataset={handleImportDataset}
+        onOpenDataset={openDataset}
+        onOpenNextDataset={handleOpenNextDataset}
+        onLoadModelOptions={() => void loadModelOptions(true)}
+        onSaveDataset={() => void handleSaveDataset()}
+        onSelectDataset={setActiveDatasetId}
+        onSetDesktopExplorerCollapsed={setDesktopExplorerCollapsed}
+        onSetMobileExplorerOpen={setMobileExplorerOpen}
+        onSetMobileSamplesOpen={setMobileSamplesOpen}
+        onSetMobileMetadataOpen={setMobileMetadataOpen}
+        samples={samples}
+        samplesLoading={samplesLoading}
+        selectedSample={visibleSample}
+        selectedSampleTokenization={visibleSampleTokenization}
+        selectedSampleId={selectedSampleId}
+        dirtySampleIds={dirtySampleIds}
+        selectedToken={selectedToken}
+        tokenCandidates={tokenCandidates}
+        candidatesLoading={candidatesLoading}
+        hasContinuationDraft={Boolean(continuationDraft)}
+        replacementToken={replacementToken}
+        generating={generating}
+        generatingAssistant={generatingAssistant}
+        saving={saving}
+        savingSample={savingSample}
+        onCreateSample={() => void handleCreateSample()}
+        onDeleteSample={(sample) => setSampleToDelete(sample)}
+        onGenerateAssistantMessage={() => void handleGenerateAssistantMessage()}
+        onGenerateContinuation={() => void handleGenerateContinuation()}
           onAcceptContinuationDraft={handleAcceptContinuationDraft}
           onDiscardContinuationDraft={handleDiscardContinuationDraft}
           onSaveSample={() => void handleSaveSample()}
+          onClearSelectedToken={clearSelectedToken}
+          onSelectAdjacentToken={handleSelectAdjacentToken}
           onUpdateSelectedSampleTitle={updateSelectedSampleTitle}
           onUpdateSelectedSampleMessages={updateSelectedSampleMessages}
+          hasNextToken={selectedTokenSequenceIndex >= 0 && selectedTokenSequenceIndex < tokenSequence.length - 1}
+          hasPrevToken={selectedTokenSequenceIndex > 0}
           onSelectSample={(sampleId) => {
             setSelectedSampleId(sampleId);
             setContinuationDraft(null);
-            setSelectedToken(null);
-            setReplacementToken("");
-            setTokenCandidates([]);
-            setCandidatesLoading(false);
-            tokenCandidatesRequestRef.current += 1;
+            clearSelectedToken();
           }}
-          onSelectToken={handleSelectToken}
-          onSetReplacementToken={setReplacementToken}
-        />
-      )}
+        onSelectToken={handleSelectToken}
+        onSetReplacementToken={setReplacementToken}
+      />
 
       <Dialog
         open={Boolean(datasetToDelete)}
         onClose={() => setDatasetToDelete(null)}
         PaperProps={{
           sx: {
-            bgcolor: "#111827",
-            color: "#f8fafc",
+            bgcolor: "background.paper",
+            color: "text.primary",
             borderRadius: 3,
             minWidth: { xs: "auto", sm: 420 },
           },
@@ -939,16 +1030,44 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
       >
         <DialogTitle>删除数据集</DialogTitle>
         <DialogContent>
-          <DialogContentText sx={{ color: "#cbd5e1" }}>
+          <DialogContentText sx={{ color: "text.secondary" }}>
             {datasetToDelete ? `确认删除“${datasetToDelete.name}”吗？数据集元数据和已保存样本都会被移除。` : ""}
           </DialogContentText>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2.5 }}>
-          <Button onClick={() => setDatasetToDelete(null)} sx={{ color: "#cbd5e1" }}>
+          <Button onClick={() => setDatasetToDelete(null)} sx={{ color: "text.secondary" }}>
             取消
           </Button>
           <Button color="error" variant="contained" onClick={() => void handleDeleteDataset()} disabled={creating}>
             {creating ? "删除中..." : "确认删除"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(sampleToDelete)}
+        onClose={() => setSampleToDelete(null)}
+        PaperProps={{
+          sx: {
+            bgcolor: "background.paper",
+            color: "text.primary",
+            borderRadius: 3,
+            minWidth: { xs: "auto", sm: 420 },
+          },
+        }}
+      >
+        <DialogTitle>删除样本</DialogTitle>
+        <DialogContent>
+          <DialogContentText sx={{ color: "text.secondary" }}>
+            {sampleToDelete ? `确认删除“${sampleToDelete.title}”吗？此操作会移除该样本及其改写记录。` : ""}
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2.5 }}>
+          <Button onClick={() => setSampleToDelete(null)} sx={{ color: "text.secondary" }}>
+            取消
+          </Button>
+          <Button color="error" variant="contained" onClick={() => void handleDeleteSample()} disabled={savingSample}>
+            {savingSample ? "删除中..." : "确认删除"}
           </Button>
         </DialogActions>
       </Dialog>

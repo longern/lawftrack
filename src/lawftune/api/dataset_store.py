@@ -193,6 +193,20 @@ class DatasetStore:
 
         raise FileNotFoundError(sample_id)
 
+    def delete_sample(self, dataset_id: str, sample_id: str) -> None:
+        dataset = self._load_dataset(dataset_id)
+        samples = self._load_or_bootstrap_samples(dataset)
+
+        next_samples = [
+            sample
+            for sample in samples
+            if str(sample.get("id")) != sample_id
+        ]
+        if len(next_samples) == len(samples):
+            raise FileNotFoundError(sample_id)
+
+        self._write_samples(dataset_id, next_samples)
+
     def update_dataset(self, dataset_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         dataset = self._load_dataset(dataset_id)
         previous_training_file_id = dataset.get("training_file_id")

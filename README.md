@@ -1,6 +1,18 @@
 # lawftune
 
-`lawftune` is a Python CLI that stores vLLM connection settings locally and runs a local gateway service.
+`lawftune` is a low-friction fine-tuning platform for vLLM-compatible models. It includes:
+
+- a Python CLI for installation, configuration, updates, and service management
+- a local gateway that proxies OpenAI-compatible APIs and serves the web console
+- a browser console for dataset management, token-level editing, training jobs, and service status
+
+The current product flow is centered around:
+
+1. connect a vLLM-compatible backend
+2. import or create datasets
+3. edit samples in the web console, including token-level assistant rewrites
+4. launch and monitor fine-tuning jobs
+5. expose the resulting model through the local gateway
 
 ## Quick Start
 
@@ -76,6 +88,18 @@ lawftune gateway
 
 The default bind address is `127.0.0.1:5293`.
 
+## Web Console
+
+The packaged web console is the main end-user interface. It currently supports:
+
+- dataset import from `.yaml`, `.yml`, `.json`, `.jsonl`
+- dataset metadata management, including bound base model information
+- sample creation, deletion, and message-level editing
+- assistant token selection, replacement, and continuation
+- YAML preview for dataset samples
+- file upload and fine-tuning job management
+- local service and gateway status inspection
+
 ## Common Commands
 
 ```bash
@@ -118,12 +142,22 @@ npm run build
 
 That build outputs packaged assets into [src/lawftune/_frontend](/Users/longsiyu/workspace/lawftune/src/lawftune/_frontend).
 
-Available endpoints:
+The gateway exposes two kinds of HTTP surface:
+
+- `/api/...` local control-plane endpoints for the web console
+- `/v1/...` OpenAI-compatible data-plane endpoints proxied to the configured backend
+
+Common control-plane endpoints:
 
 - `GET /` serves the local gateway UI
-- `GET /status` returns a basic gateway status payload
-- `GET /healthz` returns a health check payload
-- `GET /config` returns the configured vLLM endpoint and whether an API key is set
+- `GET /api/status` returns local gateway status
+- `GET /api/healthz` returns a health check payload
+- `GET /api/config` returns the configured vLLM endpoint and whether an API key is set
+- `GET /api/datasets` manages dataset metadata and sample workspaces
+- `GET /api/files` lists uploaded fine-tuning files
+- `GET /api/fine_tuning/jobs` lists fine-tuning jobs
+
+The `/v1/...` surface is intended for model inference and OpenAI-compatible client traffic. The web console uses it directly for model generation where appropriate, for example streaming assistant generation and top-logprobs token candidate lookup.
 
 You can override runtime options when starting it in the foreground:
 

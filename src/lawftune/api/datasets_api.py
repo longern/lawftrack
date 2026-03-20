@@ -458,6 +458,20 @@ def build_router(config_dir: Path | None = None) -> APIRouter:
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+    @router.delete("/{dataset_id}/samples/{sample_id}")
+    def delete_dataset_sample(dataset_id: str, sample_id: str) -> dict[str, Any]:
+        try:
+            store.delete_sample(dataset_id, sample_id)
+        except FileNotFoundError as exc:
+            missing_key = sample_id if str(exc) == sample_id else dataset_id
+            detail = (
+                f"Dataset sample not found: {sample_id}"
+                if missing_key == sample_id
+                else f"Dataset not found: {dataset_id}"
+            )
+            raise HTTPException(status_code=404, detail=detail) from exc
+        return {"id": sample_id, "object": "dataset.sample.deleted", "deleted": True}
+
     @router.patch("/{dataset_id}")
     def update_dataset(dataset_id: str, payload: UpdateDatasetRequest) -> dict[str, Any]:
         serialized = serialize_model(payload)

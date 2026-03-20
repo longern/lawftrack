@@ -1,4 +1,5 @@
 import { Card, CardContent, Typography } from "@mui/material";
+import { alpha } from "@mui/material/styles";
 
 interface ErrorCardProps {
   message: string;
@@ -8,8 +9,8 @@ function ErrorCard({ message }: ErrorCardProps) {
   return (
     <Card
       sx={{
-        border: "1px solid rgba(211, 47, 47, 0.18)",
-        backgroundColor: "rgba(211, 47, 47, 0.04)",
+        border: (theme) => `1px solid ${alpha(theme.palette.error.main, 0.24)}`,
+        backgroundColor: (theme) => alpha(theme.palette.error.main, theme.palette.mode === "dark" ? 0.12 : 0.04),
       }}
     >
       <CardContent>

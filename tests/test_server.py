@@ -627,6 +627,29 @@ class ServerTests(unittest.TestCase):
             self.assertEqual(list_samples_response.status_code, 200)
             self.assertEqual(len(list_samples_response.json()["data"]), 1)
 
+    def test_datasets_api_can_delete_sample(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            client = self._create_client(temp_dir)
+            created_dataset = client.post(
+                "/api/datasets",
+                json={"name": "manual-samples", "base_model": "Qwen/Qwen2.5-7B-Instruct"},
+            ).json()
+
+            created_sample = client.post(
+                f"/api/datasets/{created_dataset['id']}/samples",
+                json={"title": "待删除样本"},
+            ).json()
+
+            delete_response = client.delete(
+                f"/api/datasets/{created_dataset['id']}/samples/{created_sample['id']}",
+            )
+            self.assertEqual(delete_response.status_code, 200)
+            self.assertTrue(delete_response.json()["deleted"])
+
+            list_samples_response = client.get(f"/api/datasets/{created_dataset['id']}/samples")
+            self.assertEqual(list_samples_response.status_code, 200)
+            self.assertEqual(list_samples_response.json()["data"], [])
+
     def test_dataset_metadata_update_does_not_clear_manual_samples(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             client = self._create_client(temp_dir)

@@ -23,15 +23,19 @@ import ErrorCard from "./components/shared/ErrorCard";
 import ServiceSection from "./sections/ServiceSection";
 import TrainingSection from "./sections/TrainingSection";
 import { DRAWER_WIDTH, NAV_ITEMS, SERVICE_COMMANDS } from "./constants/app";
-import { appTheme } from "./theme/appTheme";
+import { createAppTheme } from "./theme/appTheme";
 import type { AppSnapshot, DataSummaryItem, NavView, ServiceRecord } from "./types/app";
 
 function App() {
+  const APP_BAR_HEIGHT = 72;
+  const MOBILE_NAV_HEIGHT = 92;
   const dataViewportHeight = {
-    xs: "calc(100dvh - 72px - 92px)",
-    md: "calc(100dvh - 72px)",
+    xs: `calc(100dvh - ${APP_BAR_HEIGHT}px - ${MOBILE_NAV_HEIGHT}px)`,
+    md: `calc(100dvh - ${APP_BAR_HEIGHT}px)`,
   } as const;
-  const isMobile = useMediaQuery(appTheme.breakpoints.down("md"));
+  const prefersDarkMode = useMediaQuery("(prefers-color-scheme: dark)");
+  const theme = useMemo(() => createAppTheme(prefersDarkMode ? "dark" : "light"), [prefersDarkMode]);
+  const isMobile = useMediaQuery(theme.breakpoints.down("md"));
   const [activeView, setActiveView] = useState<NavView>("data");
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -131,13 +135,15 @@ function App() {
   ];
 
   return (
-    <ThemeProvider theme={appTheme}>
+    <ThemeProvider theme={theme}>
       <CssBaseline />
       <Box
         sx={{
           minHeight: "100vh",
           background:
-            "radial-gradient(circle at top, rgba(31, 75, 153, 0.16), transparent 32%), linear-gradient(180deg, #f6f9ff 0%, #eef3fb 100%)",
+            theme.palette.mode === "dark"
+              ? "radial-gradient(circle at top, rgba(126, 169, 255, 0.16), transparent 32%), linear-gradient(180deg, #08101d 0%, #0b1323 100%)"
+              : "radial-gradient(circle at top, rgba(31, 75, 153, 0.16), transparent 32%), linear-gradient(180deg, #f6f9ff 0%, #eef3fb 100%)",
         }}
       >
         <AppBar
@@ -147,12 +153,15 @@ function App() {
           sx={{
             width: { md: `calc(100% - ${DRAWER_WIDTH}px)` },
             ml: { md: `${DRAWER_WIDTH}px` },
-            borderBottom: "1px solid rgba(15, 23, 42, 0.08)",
+            borderBottom: `1px solid ${theme.palette.divider}`,
             backdropFilter: "blur(18px)",
-            backgroundColor: alpha("#f6f9ff", 0.85),
+            backgroundColor:
+              theme.palette.mode === "dark"
+                ? alpha("#08101d", 0.82)
+                : alpha("#f6f9ff", 0.85),
           }}
         >
-          <Toolbar sx={{ minHeight: 72 }}>
+          <Toolbar sx={{ minHeight: `${APP_BAR_HEIGHT}px !important`, height: APP_BAR_HEIGHT }}>
             {isMobile && (
               <IconButton edge="start" onClick={() => setMobileDrawerOpen(true)} sx={{ mr: 1 }}>
                 <MenuRoundedIcon />
@@ -210,7 +219,7 @@ function App() {
               overflow: activeView === "data" ? "hidden" : "visible",
             }}
           >
-            <Toolbar sx={{ minHeight: 72 }} />
+            <Toolbar sx={{ minHeight: `${APP_BAR_HEIGHT}px !important`, height: APP_BAR_HEIGHT }} />
 
             {activeView === "data" ? (
               <Box
@@ -256,6 +265,11 @@ function App() {
               zIndex: 1200,
               borderRadius: 4,
               overflow: "hidden",
+              border: `1px solid ${theme.palette.divider}`,
+              backgroundColor:
+                theme.palette.mode === "dark"
+                  ? alpha(theme.palette.background.paper, 0.94)
+                  : alpha(theme.palette.background.paper, 0.96),
             }}
           >
             <BottomNavigation

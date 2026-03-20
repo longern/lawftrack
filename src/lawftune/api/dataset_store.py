@@ -429,7 +429,7 @@ class DatasetStore:
 
     def _derive_sample_title(
         self,
-        messages: list[dict[str, str]],
+        messages: list[dict[str, Any]],
         index: int,
     ) -> str:
         for message in messages:
@@ -437,8 +437,8 @@ class DatasetStore:
                 return str(message["content"])[:24] or f"样本 {index + 1}"
         return f"样本 {index + 1}"
 
-    def _normalize_messages(self, payload: Any) -> list[dict[str, str]]:
-        messages: list[dict[str, str]] = []
+    def _normalize_messages(self, payload: Any) -> list[dict[str, Any]]:
+        messages: list[dict[str, Any]] = []
         if not isinstance(payload, list):
             return messages
         for item in payload:
@@ -446,9 +446,20 @@ class DatasetStore:
                 continue
             role = str(item.get("role") or "").strip()
             content = str(item.get("content") or "")
+            reasoning_value = item.get("reasoning")
+            if reasoning_value is None:
+                reasoning_value = item.get("reasoning_content")
+            reasoning = (
+                None
+                if reasoning_value is None
+                else str(reasoning_value)
+            )
             if not role:
                 continue
-            messages.append({"role": role, "content": content})
+            message: dict[str, Any] = {"role": role, "content": content}
+            if reasoning:
+                message["reasoning"] = reasoning
+            messages.append(message)
         return messages
 
     def _normalize_edits(self, payload: Any) -> list[dict[str, Any]]:
@@ -462,6 +473,11 @@ class DatasetStore:
                 {
                     "message_index": int(item.get("message_index", 0)),
                     "token_index": int(item.get("token_index", 0)),
+                    "target": (
+                        "reasoning"
+                        if str(item.get("target") or "content").strip().lower() == "reasoning"
+                        else "content"
+                    ),
                     "original_token": (
                         None if item.get("original_token") is None else str(item.get("original_token") or "")
                     ),
@@ -490,14 +506,14 @@ class DatasetStore:
         payload: Any,
         *,
         default_role: str,
-    ) -> list[dict[str, str]]:
+    ) -> list[dict[str, Any]]:
         if isinstance(payload, list):
             return self._normalize_messages(payload)
         if payload is None:
             return []
         return [{"role": default_role, "content": str(payload)}]
 
-    def _extract_messages_from_record(self, payload: dict[str, Any]) -> list[dict[str, str]]:
+    def _extract_messages_from_record(self, payload: dict[str, Any]) -> list[dict[str, Any]]:
         messages = self._normalize_messages(payload.get("messages"))
         if messages:
             return messages

@@ -99,7 +99,11 @@ export interface WorkspaceShellProps {
   hasNextToken: boolean;
   hasPrevToken: boolean;
   onSelectSample: (sampleId: string | null) => void;
-  onSelectToken: (messageIndex: number, tokenIndex: number) => void;
+  onSelectToken: (
+    messageIndex: number,
+    tokenIndex: number,
+    target: "content" | "reasoning",
+  ) => void;
   onSetReplacementToken: (value: string) => void;
 }
 

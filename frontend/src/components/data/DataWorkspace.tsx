@@ -47,6 +47,21 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
+function splitAssistantPrefill(text: string): { reasoning?: string; content: string } {
+  if (!text.startsWith("<think>")) {
+    return { content: text };
+  }
+  const closingTag = "</think>";
+  const closingIndex = text.indexOf(closingTag);
+  if (closingIndex < 0) {
+    const reasoning = text.slice("<think>".length);
+    return { reasoning: reasoning || undefined, content: "" };
+  }
+  const reasoning = text.slice("<think>".length, closingIndex) || undefined;
+  const content = text.slice(closingIndex + closingTag.length);
+  return { reasoning, content };
+}
+
 function decodeCandidateToken(token?: string, bytes?: number[]): string {
   if (Array.isArray(bytes) && bytes.length > 0) {
     try {
@@ -114,10 +129,18 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
     () =>
       (visibleSampleTokenization?.messages ?? []).flatMap((message) =>
         message.role === "assistant"
-          ? message.tokens.map((token) => ({
-              messageIndex: message.message_index,
-              tokenIndex: token.token_index,
-            }))
+          ? [
+              ...(message.reasoning_tokens ?? []).map((token) => ({
+                messageIndex: message.message_index,
+                tokenIndex: token.token_index,
+                target: "reasoning" as const,
+              })),
+              ...message.tokens.map((token) => ({
+                messageIndex: message.message_index,
+                tokenIndex: token.token_index,
+                target: "content" as const,
+              })),
+            ]
           : [],
       ),
     [visibleSampleTokenization],
@@ -128,7 +151,8 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
         ? tokenSequence.findIndex(
             (token) =>
               token.messageIndex === selectedToken.messageIndex &&
-              token.tokenIndex === selectedToken.tokenIndex,
+              token.tokenIndex === selectedToken.tokenIndex &&
+              token.target === selectedToken.target,
           )
         : -1,
     [selectedToken, tokenSequence],
@@ -217,6 +241,7 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
       sample.messages.map((message) => ({
         role: message.role,
         content: message.content,
+        reasoning: message.reasoning ?? "",
       })),
     );
   }
@@ -489,6 +514,14 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
   }
 
   async function handleSelectToken(messageIndex: number, tokenIndex: number) {
+    return handleSelectTokenTarget(messageIndex, tokenIndex, "content");
+  }
+
+  async function handleSelectTokenTarget(
+    messageIndex: number,
+    tokenIndex: number,
+    target: "content" | "reasoning",
+  ) {
     if (!visibleSample || continuationDraft) {
       return;
     }
@@ -496,7 +529,7 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
     if (!tokenization) {
       return;
     }
-    await selectResolvedToken(visibleSample, tokenization, messageIndex, tokenIndex);
+    await selectResolvedToken(visibleSample, tokenization, messageIndex, tokenIndex, target);
   }
 
   async function selectResolvedToken(
@@ -504,9 +537,11 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
     tokenization: DatasetSampleTokenization,
     messageIndex: number,
     tokenIndex: number,
+    target: "content" | "reasoning",
   ) {
     const message = tokenization.messages.find((item) => item.message_index === messageIndex);
-    const token = message?.tokens.find((item) => item.token_index === tokenIndex);
+    const tokenList = target === "reasoning" ? message?.reasoning_tokens : message?.tokens;
+    const token = tokenList?.find((item) => item.token_index === tokenIndex);
     if (!token) {
       return;
     }
@@ -515,11 +550,12 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
     setSelectedToken({
       messageIndex,
       tokenIndex,
+      target,
       currentToken: tokenText,
       originalToken: tokenText,
     });
     setReplacementToken(tokenText);
-    void loadTokenCandidates(sample, tokenization, messageIndex, tokenIndex);
+    void loadTokenCandidates(sample, tokenization, messageIndex, tokenIndex, target);
   }
 
   async function handleSelectAdjacentToken(direction: -1 | 1) {
@@ -533,13 +569,20 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
     const currentIndex = tokenSequence.findIndex(
       (token) =>
         token.messageIndex === selectedToken.messageIndex &&
-        token.tokenIndex === selectedToken.tokenIndex,
+        token.tokenIndex === selectedToken.tokenIndex &&
+        token.target === selectedToken.target,
     );
     const nextToken = tokenSequence[currentIndex + direction];
     if (!nextToken) {
       return;
     }
-    await selectResolvedToken(visibleSample, tokenization, nextToken.messageIndex, nextToken.tokenIndex);
+    await selectResolvedToken(
+      visibleSample,
+      tokenization,
+      nextToken.messageIndex,
+      nextToken.tokenIndex,
+      nextToken.target,
+    );
   }
 
   function clearSelectedToken() {
@@ -555,6 +598,7 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
     tokenization: DatasetSampleTokenization | null,
     messageIndex: number,
     tokenIndex: number,
+    target: "content" | "reasoning",
   ) {
     if (!draft || !activeDataset || !tokenization) {
       return;
@@ -566,55 +610,36 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
 
     const targetMessage = sample.messages[messageIndex];
     const messageTokenization = tokenization.messages.find((item) => item.message_index === messageIndex);
-    const targetToken = messageTokenization?.tokens.find((item) => item.token_index === tokenIndex);
+    const tokenList = target === "reasoning" ? messageTokenization?.reasoning_tokens : messageTokenization?.tokens;
+    const targetToken = tokenList?.find((item) => item.token_index === tokenIndex);
     if (!targetMessage || targetMessage.role !== "assistant" || !messageTokenization || !targetToken) {
       return;
     }
-
-    const requestMessages = sample.messages.slice(0, messageIndex).map((message) => ({
-      role: message.role,
-      content: message.content,
-    }));
-    requestMessages.push({
-      role: "assistant",
-      content: targetMessage.content.slice(0, targetToken.start),
-    });
 
     const requestId = tokenCandidatesRequestRef.current + 1;
     tokenCandidatesRequestRef.current = requestId;
     setCandidatesLoading(true);
     try {
       const payload = await fetchJson<{
-        choices?: Array<{
-          logprobs?: {
-            content?: Array<{
-              top_logprobs?: Array<{
-                token?: string;
-                logprob?: number | null;
-                bytes?: number[];
-              }>;
-            }>;
-          };
+        data?: Array<{
+          text?: string;
+          logprob?: number | null;
         }>;
-      }>("/v1/chat/completions", {
+      }>(`/api/datasets/${activeDataset.id}/samples/${sample.id}/candidate_tokens`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           model,
-          messages: requestMessages,
-          max_tokens: 1,
-          temperature: 0,
-          logprobs: true,
+          message_index: messageIndex,
+          token_index: tokenIndex,
+          target,
           top_logprobs: 10,
-          add_generation_prompt: false,
-          continue_final_message: true,
         }),
       });
-      const rawCandidates = payload.choices?.[0]?.logprobs?.content?.[0]?.top_logprobs ?? [];
       const seen = new Set<string>();
-      const nextCandidates = rawCandidates
+      const nextCandidates = (payload.data ?? [])
         .map((candidate) => ({
-          text: decodeCandidateToken(candidate.token, candidate.bytes),
+          text: decodeCandidateToken(candidate.text),
           logprob: typeof candidate.logprob === "number" ? candidate.logprob : null,
         }))
         .filter((candidate) => candidate.text)
@@ -665,6 +690,7 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
           model,
           message_index: selectedToken.messageIndex,
           token_index: selectedToken.tokenIndex,
+          target: selectedToken.target,
           replacement_token: replacementToken.trim() || selectedToken.currentToken,
         }),
       });
@@ -706,7 +732,8 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
     const activeEdit = acceptedSample.edits.find(
       (edit) =>
         edit.message_index === selectedToken.messageIndex &&
-        edit.token_index === selectedToken.tokenIndex,
+        edit.token_index === selectedToken.tokenIndex &&
+        (edit.target ?? "content") === selectedToken.target,
     );
     setSelectedToken({
       ...selectedToken,
@@ -771,11 +798,10 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
       setError("最后一条已经是完整的助手消息，请先添加用户消息或清空最后一条助手消息。");
       return;
     }
-    const requestMessages = (lastMessage?.role === "assistant" ? selectedSample.messages.slice(0, -1) : selectedSample.messages).map((message) => ({
-      role: message.role,
-      content: message.content,
-    }));
-    if (requestMessages.length === 0) {
+    const promptMessages = lastMessage?.role === "assistant"
+      ? selectedSample.messages.slice(0, -1)
+      : selectedSample.messages;
+    if (promptMessages.length === 0) {
       setError("请先添加至少一条有效消息。");
       return;
     }
@@ -797,14 +823,27 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
     });
 
     try {
-      const response = await fetch("/v1/chat/completions", {
+      const promptPayload = await fetchJson<{ prompt: string; suggested_max_tokens?: number | null }>(
+        "/api/datasets/render_completion_prompt",
+        {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           model,
-          messages: requestMessages,
+          messages: promptMessages,
+        }),
+      });
+      const response = await fetch("/v1/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model,
+          prompt: promptPayload.prompt,
           stream: true,
-          max_tokens: 512,
+          max_tokens:
+            typeof promptPayload.suggested_max_tokens === "number"
+              ? promptPayload.suggested_max_tokens
+              : 8192,
           temperature: 0.7,
         }),
       });
@@ -825,7 +864,7 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
       const decoder = new TextDecoder();
       const assistantIndex = optimisticMessages.length - 1;
       let buffer = "";
-      let assistantContent = "";
+      let rawAssistantText = "";
       let receivedDelta = false;
 
       while (true) {
@@ -848,37 +887,43 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
           }
 
           const payload = JSON.parse(data) as {
-            choices?: Array<{ delta?: { content?: string | Array<{ text?: string }> } }>;
+            choices?: Array<{
+              text?: string;
+            }>;
             error?: { message?: string };
           };
           if (payload.error?.message) {
             throw new Error(payload.error.message);
           }
 
-          const contentValue = payload.choices?.[0]?.delta?.content;
-          const delta =
-            typeof contentValue === "string"
-              ? contentValue
-              : Array.isArray(contentValue)
-                ? contentValue.map((item) => item.text || "").join("")
-                : "";
-
-          if (delta) {
-            shouldRestoreOriginal = false;
-            receivedDelta = true;
-            assistantContent += delta;
-            latestSample = {
-              ...originalSample,
-              messages: optimisticMessages.map((message, index) => (index === assistantIndex ? { ...message, content: assistantContent } : message)),
-              edits: [],
-              updated_at: Math.floor(Date.now() / 1000),
-            };
-            updateCurrentSample(latestSample);
+          const delta = payload.choices?.[0]?.text ?? "";
+          if (!delta) {
+            continue;
           }
+
+          shouldRestoreOriginal = false;
+          receivedDelta = true;
+          rawAssistantText += delta;
+          const parsed = splitAssistantPrefill(rawAssistantText);
+          latestSample = {
+            ...originalSample,
+            messages: optimisticMessages.map((message, index) =>
+              index === assistantIndex
+                ? {
+                    ...message,
+                    content: parsed.content,
+                    reasoning: parsed.reasoning,
+                  }
+                : message,
+            ),
+            edits: [],
+            updated_at: Math.floor(Date.now() / 1000),
+          };
+          updateCurrentSample(latestSample);
         }
       }
 
-      if (!receivedDelta && !assistantContent) {
+      if (!receivedDelta) {
         throw new Error("生成提前结束，未收到完整消息。");
       }
       const persisted = await persistSample(latestSample);
@@ -1079,7 +1124,7 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
             setContinuationDraft(null);
             clearSelectedToken();
           }}
-        onSelectToken={handleSelectToken}
+        onSelectToken={handleSelectTokenTarget}
         onSetReplacementToken={setReplacementToken}
       />
 

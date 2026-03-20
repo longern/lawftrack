@@ -17,6 +17,9 @@ setup(
     python_requires=">=3.10",
     package_dir={"": "src"},
     packages=find_packages(where="src"),
+    install_requires=[
+        "jinja2",
+    ],
     include_package_data=True,
     package_data={
         "lawftune": [

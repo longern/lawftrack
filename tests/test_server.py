@@ -978,6 +978,8 @@ class ServerTests(unittest.TestCase):
             def json(self):
                 return self._payload
 
+        captured_request: dict[str, object] = {}
+
         class DummyAsyncClient:
             async def __aenter__(self):
                 return self
@@ -986,16 +988,14 @@ class ServerTests(unittest.TestCase):
                 return False
 
             async def post(self, url, headers=None, json=None):
-                self.url = url
-                self.headers = headers
-                self.json_payload = json
+                captured_request["url"] = url
+                captured_request["headers"] = headers
+                captured_request["json"] = json
                 return DummyResponse(
                     {
                         "choices": [
                             {
-                                "message": {
-                                    "content": "，我是新的助手回答",
-                                }
+                                "text": "，我是新的助手回答",
                             }
                         ]
                     }
@@ -1014,7 +1014,7 @@ class ServerTests(unittest.TestCase):
                 files={
                     "file": (
                         "train.jsonl",
-                        b'{"messages":[{"role":"user","content":"hi"},{"role":"assistant","content":"\xe4\xbd\xa0\xe5\xa5\xbd\xef\xbc\x8c\xe5\x8a\xa9\xe6\x89\x8b"}]}\n',
+                        b'{"messages":[{"role":"user","content":"hi"},{"role":"assistant","content":"\xe4\xbd\xa0\xe5\xa5\xbd\xef\xbc\x8c\xe5\x8a\xa9\xe6\x89\x8b","reasoning":"\xe5\x8e\x9f\xe5\xa7\x8b\xe6\x8e\xa8\xe7\x90\x86"}]}\n',
                         "application/jsonl",
                     )
                 },
@@ -1042,30 +1042,44 @@ class ServerTests(unittest.TestCase):
                     with mock.patch.object(datasets_api_module.httpx, "AsyncClient", return_value=DummyAsyncClient()):
                         with mock.patch.object(
                             datasets_api_module,
-                            "tokenize_text",
-                            return_value=[
-                                {"token_index": 0, "token_id": 21, "token": "您好", "text": "您好", "start": 0, "end": 2},
-                                {"token_index": 1, "token_id": 12, "token": "，", "text": "，", "start": 2, "end": 3},
-                                {"token_index": 2, "token_id": 13, "token": "助手", "text": "助手", "start": 7, "end": 9},
-                            ],
+                            "build_completion_prompt",
+                            return_value="PROMPT:您好",
                         ):
-                            continue_response = client.post(
-                                f"/api/datasets/{created_dataset['id']}/samples/{sample['id']}/continue",
-                                json={
-                                    "model": "Qwen/Qwen2.5-7B-Instruct",
-                                    "message_index": 1,
-                                    "token_index": 0,
-                                    "replacement_token": "您好",
-                                },
-                            )
+                            with mock.patch.object(
+                                datasets_api_module,
+                                "suggest_completion_max_tokens",
+                                return_value=4096,
+                            ):
+                                with mock.patch.object(
+                                    datasets_api_module,
+                                    "tokenize_text",
+                                    return_value=[
+                                        {"token_index": 0, "token_id": 21, "token": "您好", "text": "您好", "start": 0, "end": 2},
+                                        {"token_index": 1, "token_id": 12, "token": "，", "text": "，", "start": 2, "end": 3},
+                                        {"token_index": 2, "token_id": 13, "token": "助手", "text": "助手", "start": 7, "end": 9},
+                                    ],
+                                ):
+                                    continue_response = client.post(
+                                        f"/api/datasets/{created_dataset['id']}/samples/{sample['id']}/continue",
+                                        json={
+                                            "model": "Qwen/Qwen2.5-7B-Instruct",
+                                            "message_index": 1,
+                                            "token_index": 0,
+                                            "replacement_token": "您好",
+                                        },
+                                    )
 
             self.assertEqual(continue_response.status_code, 200)
             continued_payload = continue_response.json()
             continued_sample = continued_payload["sample"]
             self.assertEqual(continued_sample["messages"][1]["content"], "您好，我是新的助手回答")
+            self.assertEqual(continued_sample["messages"][1]["reasoning"], "原始推理")
             self.assertEqual(continued_sample["edits"][0]["original_token"], "你好")
             self.assertEqual(continued_sample["edits"][0]["replacement_token"], "您好")
             self.assertEqual(continued_payload["tokenization"]["messages"][1]["tokens"][0]["text"], "您好")
+            self.assertEqual(captured_request["json"]["prompt"], "PROMPT:您好")
+            self.assertEqual(captured_request["json"]["max_tokens"], 4096)
+            self.assertTrue(str(captured_request["url"]).endswith("/v1/completions"))
 
             save_response = client.put(
                 f"/api/datasets/{created_dataset['id']}/samples/{sample['id']}",
@@ -1082,6 +1096,7 @@ class ServerTests(unittest.TestCase):
                 },
             )
             self.assertEqual(save_response.status_code, 200)
+            self.assertEqual(save_response.json()["messages"][1]["reasoning"], "原始推理")
 
     def test_continue_preserves_edits_before_current_token(self) -> None:
         sys.path.insert(0, str(ROOT / "src"))
@@ -1113,9 +1128,7 @@ class ServerTests(unittest.TestCase):
                     {
                         "choices": [
                             {
-                                "message": {
-                                    "content": " B X",
-                                }
+                                "text": " X",
                             }
                         ]
                     }
@@ -1171,22 +1184,32 @@ class ServerTests(unittest.TestCase):
                     with mock.patch.object(datasets_api_module.httpx, "AsyncClient", return_value=DummyAsyncClient()):
                         with mock.patch.object(
                             datasets_api_module,
-                            "tokenize_text",
-                            return_value=[
-                                {"token_index": 0, "token_id": 1, "token": "A", "text": "A", "start": 0, "end": 1},
-                                {"token_index": 1, "token_id": 2, "token": " B", "text": " B", "start": 1, "end": 3},
-                                {"token_index": 2, "token_id": 3, "token": " X", "text": " X", "start": 3, "end": 5},
-                            ],
+                            "build_completion_prompt",
+                            return_value="PROMPT:A b",
                         ):
-                            continue_response = client.post(
-                                f"/api/datasets/{created_dataset['id']}/samples/{created_sample['id']}/continue",
-                                json={
-                                    "model": "Qwen/Qwen2.5-7B-Instruct",
-                                    "message_index": 1,
-                                    "token_index": 1,
-                                    "replacement_token": "B",
-                                },
-                            )
+                            with mock.patch.object(
+                                datasets_api_module,
+                                "suggest_completion_max_tokens",
+                                return_value=4096,
+                            ):
+                                with mock.patch.object(
+                                    datasets_api_module,
+                                    "tokenize_text",
+                                    return_value=[
+                                        {"token_index": 0, "token_id": 1, "token": "A", "text": "A", "start": 0, "end": 1},
+                                        {"token_index": 1, "token_id": 2, "token": " B", "text": " B", "start": 1, "end": 3},
+                                        {"token_index": 2, "token_id": 3, "token": " X", "text": " X", "start": 3, "end": 5},
+                                    ],
+                                ):
+                                    continue_response = client.post(
+                                        f"/api/datasets/{created_dataset['id']}/samples/{created_sample['id']}/continue",
+                                        json={
+                                            "model": "Qwen/Qwen2.5-7B-Instruct",
+                                            "message_index": 1,
+                                            "token_index": 1,
+                                            "replacement_token": "B",
+                                        },
+                                    )
 
             self.assertEqual(continue_response.status_code, 200)
             continued_sample = continue_response.json()["sample"]
@@ -1196,7 +1219,7 @@ class ServerTests(unittest.TestCase):
             self.assertEqual(continued_sample["edits"][1]["token_index"], 1)
             self.assertEqual(continued_sample["edits"][1]["replacement_token"], "B")
 
-    def test_dataset_sample_can_generate_full_assistant_message(self) -> None:
+    def test_dataset_sample_reasoning_can_be_tokenized_and_continued(self) -> None:
         sys.path.insert(0, str(ROOT / "src"))
         try:
             import lawftune.api.datasets_api as datasets_api_module
@@ -1214,6 +1237,8 @@ class ServerTests(unittest.TestCase):
             def json(self):
                 return self._payload
 
+        captured_request: dict[str, object] = {}
+
         class DummyAsyncClient:
             async def __aenter__(self):
                 return self
@@ -1222,15 +1247,148 @@ class ServerTests(unittest.TestCase):
                 return False
 
             async def post(self, url, headers=None, json=None):
-                self.url = url
-                self.headers = headers
-                self.json_payload = json
+                captured_request["url"] = url
+                captured_request["json"] = json
                 return DummyResponse(
                     {
                         "choices": [
                             {
-                                "message": {
-                                    "content": "这是完整生成的助手消息",
+                                "text": "步骤二</think>最终回答",
+                            }
+                        ]
+                    }
+                )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "config.json"
+            config_path.write_text(
+                json.dumps({"vllm_endpoint": "http://localhost:8000/v1", "api_key": ""}),
+                encoding="utf-8",
+            )
+
+            client = self._create_client(temp_dir)
+            created_dataset = client.post(
+                "/api/datasets/import",
+                files={
+                    "file": (
+                        "train.jsonl",
+                        b'{"messages":[{"role":"user","content":"hi"},{"role":"assistant","reasoning":"\xe6\xad\xa5\xe9\xaa\xa4\xe4\xb8\x80","content":"\xe5\x8e\x9f\xe5\x9b\x9e\xe7\xad\x94"}]}\n',
+                        "application/jsonl",
+                    )
+                },
+            ).json()
+            sample = client.get(f"/api/datasets/{created_dataset['id']}/samples").json()["data"][0]
+
+            def fake_tokenize(model, text):
+                if text == "步骤一":
+                    return [
+                        {"token_index": 0, "token_id": 1, "token": "步骤", "text": "步骤", "start": 0, "end": 2},
+                        {"token_index": 1, "token_id": 2, "token": "一", "text": "一", "start": 2, "end": 3},
+                    ]
+                if text == "原回答":
+                    return [
+                        {"token_index": 0, "token_id": 3, "token": "原", "text": "原", "start": 0, "end": 1},
+                        {"token_index": 1, "token_id": 4, "token": "回答", "text": "回答", "start": 1, "end": 3},
+                    ]
+                if text == "新步骤二":
+                    return [
+                        {"token_index": 0, "token_id": 5, "token": "新", "text": "新", "start": 0, "end": 1},
+                        {"token_index": 1, "token_id": 1, "token": "步骤", "text": "步骤", "start": 1, "end": 3},
+                        {"token_index": 2, "token_id": 6, "token": "二", "text": "二", "start": 3, "end": 4},
+                    ]
+                if text == "最终回答":
+                    return [
+                        {"token_index": 0, "token_id": 7, "token": "最终", "text": "最终", "start": 0, "end": 2},
+                        {"token_index": 1, "token_id": 4, "token": "回答", "text": "回答", "start": 2, "end": 4},
+                    ]
+                raise AssertionError(text)
+
+            with mock.patch.object(datasets_api_module, "tokenize_text", side_effect=fake_tokenize):
+                tokenize_response = client.post(
+                    f"/api/datasets/{created_dataset['id']}/samples/{sample['id']}/tokenize",
+                    json={"model": "demo-model"},
+                )
+
+            self.assertEqual(tokenize_response.status_code, 200)
+            tokenization_payload = tokenize_response.json()
+            self.assertEqual(tokenization_payload["messages"][1]["reasoning_tokens"][0]["text"], "步骤")
+            self.assertEqual(tokenization_payload["messages"][1]["tokens"][0]["text"], "原")
+
+            with mock.patch.object(datasets_api_module, "build_continuation_prefix", return_value=("新", "步骤", "新")):
+                with mock.patch.object(server_module.httpx, "AsyncClient", return_value=DummyAsyncClient()):
+                    with mock.patch.object(datasets_api_module.httpx, "AsyncClient", return_value=DummyAsyncClient()):
+                        with mock.patch.object(
+                            datasets_api_module,
+                            "build_completion_prompt",
+                            return_value="PROMPT:<think>新",
+                        ):
+                            with mock.patch.object(
+                                datasets_api_module,
+                                "suggest_completion_max_tokens",
+                                return_value=4096,
+                            ):
+                                with mock.patch.object(datasets_api_module, "tokenize_text", side_effect=fake_tokenize):
+                                    continue_response = client.post(
+                                        f"/api/datasets/{created_dataset['id']}/samples/{sample['id']}/continue",
+                                        json={
+                                            "model": "demo-model",
+                                            "message_index": 1,
+                                            "token_index": 0,
+                                            "target": "reasoning",
+                                            "replacement_token": "新",
+                                        },
+                                    )
+
+            self.assertEqual(continue_response.status_code, 200)
+            continued_payload = continue_response.json()
+            self.assertEqual(continued_payload["sample"]["messages"][1]["reasoning"], "新步骤二")
+            self.assertEqual(continued_payload["sample"]["messages"][1]["content"], "最终回答")
+            self.assertEqual(continued_payload["sample"]["edits"][0]["target"], "reasoning")
+            self.assertEqual(
+                continued_payload["tokenization"]["messages"][1]["reasoning_tokens"][0]["text"],
+                "新",
+            )
+            self.assertEqual(captured_request["json"]["prompt"], "PROMPT:<think>新")
+            self.assertTrue(str(captured_request["url"]).endswith("/v1/completions"))
+
+    def test_dataset_sample_candidate_tokens_use_completions(self) -> None:
+        sys.path.insert(0, str(ROOT / "src"))
+        try:
+            import lawftune.api.datasets_api as datasets_api_module
+            import lawftune.server as server_module
+        finally:
+            sys.path.pop(0)
+
+        class DummyResponse:
+            def __init__(self, payload):
+                self._payload = payload
+                self.status_code = 200
+                self.is_success = True
+                self.text = json.dumps(payload)
+
+            def json(self):
+                return self._payload
+
+        captured_request: dict[str, object] = {}
+
+        class DummyAsyncClient:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            async def post(self, url, headers=None, json=None):
+                captured_request["url"] = url
+                captured_request["json"] = json
+                return DummyResponse(
+                    {
+                        "choices": [
+                            {
+                                "logprobs": {
+                                    "top_logprobs": [
+                                        {"新": -0.1, "旧": -0.9}
+                                    ]
                                 }
                             }
                         ]
@@ -1247,35 +1405,104 @@ class ServerTests(unittest.TestCase):
             client = self._create_client(temp_dir)
             created_dataset = client.post(
                 "/api/datasets",
-                json={
-                    "name": "full-generate",
-                    "base_model": "Qwen/Qwen2.5-7B-Instruct",
-                },
+                json={"name": "candidate-tokens", "base_model": "demo-model"},
             ).json()
             created_sample = client.post(
                 f"/api/datasets/{created_dataset['id']}/samples",
                 json={
-                    "title": "新样本",
+                    "title": "样本",
                     "messages": [
-                        {"role": "user", "content": "请介绍一下合同审查"},
+                        {"role": "user", "content": "hi"},
+                        {"role": "assistant", "reasoning": "步骤一", "content": "原回答"},
                     ],
                 },
             ).json()
 
             with mock.patch.object(server_module.httpx, "AsyncClient", return_value=DummyAsyncClient()):
                 with mock.patch.object(datasets_api_module.httpx, "AsyncClient", return_value=DummyAsyncClient()):
-                    generate_response = client.post(
-                        f"/api/datasets/{created_dataset['id']}/samples/{created_sample['id']}/generate",
+                    with mock.patch.object(
+                        datasets_api_module,
+                        "build_prefix_before_token",
+                        return_value="前缀",
+                    ):
+                        with mock.patch.object(
+                            datasets_api_module,
+                            "build_completion_prompt",
+                            return_value="PROMPT:CANDIDATES",
+                        ):
+                            response = client.post(
+                                f"/api/datasets/{created_dataset['id']}/samples/{created_sample['id']}/candidate_tokens",
+                                json={
+                                    "model": "demo-model",
+                                    "message_index": 1,
+                                    "token_index": 0,
+                                    "target": "reasoning",
+                                },
+                            )
+
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(
+                response.json()["data"],
+                [
+                    {"text": "新", "logprob": -0.1},
+                    {"text": "旧", "logprob": -0.9},
+                ],
+            )
+            self.assertEqual(captured_request["json"]["prompt"], "PROMPT:CANDIDATES")
+            self.assertTrue(str(captured_request["url"]).endswith("/v1/completions"))
+
+    def test_render_completion_prompt_uses_chat_template(self) -> None:
+        sys.path.insert(0, str(ROOT / "src"))
+        try:
+            import lawftune.api.datasets_api as datasets_api_module
+        finally:
+            sys.path.pop(0)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "config.json"
+            config_path.write_text(
+                json.dumps({"vllm_endpoint": "http://localhost:8000/v1", "api_key": ""}),
+                encoding="utf-8",
+            )
+
+            client = self._create_client(temp_dir)
+            with mock.patch.object(
+                datasets_api_module,
+                "build_completion_prompt",
+                return_value="PROMPT:CHAT_TEMPLATE",
+            ) as mocked_build_prompt:
+                with mock.patch.object(
+                    datasets_api_module,
+                    "suggest_completion_max_tokens",
+                    return_value=1234,
+                ):
+                    response = client.post(
+                        "/api/datasets/render_completion_prompt",
                         json={
-                            "model": "Qwen/Qwen2.5-7B-Instruct",
+                            "model": "demo-model",
+                            "messages": [
+                                {"role": "user", "content": "hi"},
+                                {"role": "assistant", "content": "hello", "reasoning": "think"},
+                            ],
                         },
                     )
 
-            self.assertEqual(generate_response.status_code, 200)
-            generated_sample = generate_response.json()["sample"]
-            self.assertEqual(len(generated_sample["messages"]), 2)
-            self.assertEqual(generated_sample["messages"][1]["role"], "assistant")
-            self.assertEqual(generated_sample["messages"][1]["content"], "这是完整生成的助手消息")
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(
+                response.json(),
+                {
+                    "object": "dataset.completion_prompt",
+                    "prompt": "PROMPT:CHAT_TEMPLATE",
+                    "suggested_max_tokens": 1234,
+                },
+            )
+            self.assertEqual(
+                mocked_build_prompt.call_args.kwargs["prompt_messages"],
+                [
+                    {"role": "user", "content": "hi"},
+                    {"role": "assistant", "content": "hello", "reasoning": "think"},
+                ],
+            )
 
     def test_v1_proxy_forwards_to_configured_vllm_endpoint(self) -> None:
         sys.path.insert(0, str(ROOT / "src"))

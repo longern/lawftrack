@@ -56,7 +56,7 @@ export const inlineFieldSx = {
     opacity: 1,
   },
   "& .MuiInputBase-inputMultiline": {
-    lineHeight: 1.8,
+    lineHeight: 1.6,
   },
   "& .MuiInputLabel-root": {
     color: (theme: Theme) => alpha(theme.palette.text.primary, 0.72),

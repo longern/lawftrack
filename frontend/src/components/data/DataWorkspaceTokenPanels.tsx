@@ -63,7 +63,7 @@ export function TokenActionPanel({
             {selectedToken ? (
               <>
                 <Typography variant="body2" sx={{ color: "#fca5a5" }}>
-                  原 token: {selectedToken.originalToken}
+                  原 {selectedToken.target === "reasoning" ? "reasoning" : "content"} token: {selectedToken.originalToken}
                 </Typography>
                 <TextField
                   label="替换为"
@@ -192,6 +192,8 @@ export function TokenActionMiniPanel({
       {showSelectionSummary ? (
         <Typography variant="caption" sx={{ color: "text.secondary" }}>
           {selectedSample?.title} · 原 token: {selectedToken.originalToken}
+          {" · "}
+          {selectedToken.target}
         </Typography>
       ) : null}
       <TextField

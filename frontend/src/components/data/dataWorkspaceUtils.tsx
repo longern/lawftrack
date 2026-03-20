@@ -3,8 +3,8 @@ import DnsRoundedIcon from "@mui/icons-material/DnsRounded";
 import KeyRoundedIcon from "@mui/icons-material/KeyRounded";
 import TuneRoundedIcon from "@mui/icons-material/TuneRounded";
 import type {
-  DatasetMessage,
   DatasetMessageTokenization,
+  DatasetMessageToken,
   DatasetSample,
   DataSummaryItem,
 } from "../../types/app";
@@ -17,16 +17,16 @@ export function describeSample(sample: DatasetSample): string {
 }
 
 export function buildTokenRenderSegments(
-  message: DatasetMessage,
-  tokenization: DatasetMessageTokenization | null,
+  text: string,
+  tokens: DatasetMessageToken[],
 ) {
-  if (!tokenization) {
-    return [{ kind: "text" as const, text: message.content }];
+  if (!tokens.length) {
+    return [{ kind: "text" as const, text }];
   }
 
-  const concatenatedTokens = tokenization.tokens.map((token) => token.text || "").join("");
-  if (concatenatedTokens === message.content) {
-    return tokenization.tokens.map((token) => ({
+  const concatenatedTokens = tokens.map((token) => token.text || "").join("");
+  if (concatenatedTokens === text) {
+    return tokens.map((token) => ({
       kind: "token" as const,
       tokenIndex: token.token_index,
       text: token.text,
@@ -39,9 +39,9 @@ export function buildTokenRenderSegments(
   > = [];
   let cursor = 0;
 
-  for (const token of tokenization.tokens) {
+  for (const token of tokens) {
     if (token.start > cursor) {
-      segments.push({ kind: "text", text: message.content.slice(cursor, token.start) });
+      segments.push({ kind: "text", text: text.slice(cursor, token.start) });
     }
     segments.push({
       kind: "token",
@@ -51,8 +51,8 @@ export function buildTokenRenderSegments(
     cursor = token.end;
   }
 
-  if (cursor < message.content.length) {
-    segments.push({ kind: "text", text: message.content.slice(cursor) });
+  if (cursor < text.length) {
+    segments.push({ kind: "text", text: text.slice(cursor) });
   }
 
   return segments;
@@ -122,12 +122,18 @@ export function serializeSampleAsYaml(sample: DatasetSample): string {
   lines.push("messages:");
   for (const message of sample.messages) {
     lines.push(`${indent(1)}- role: ${formatYamlScalar(message.role)}`);
+    if (message.reasoning) {
+      pushYamlStringField(lines, 2, "reasoning", message.reasoning);
+    }
     pushYamlStringField(lines, 2, "content", message.content);
   }
 
   lines.push("source_messages:");
   for (const message of sample.source_messages) {
     lines.push(`${indent(1)}- role: ${formatYamlScalar(message.role)}`);
+    if (message.reasoning) {
+      pushYamlStringField(lines, 2, "reasoning", message.reasoning);
+    }
     pushYamlStringField(lines, 2, "content", message.content);
   }
 
@@ -137,6 +143,7 @@ export function serializeSampleAsYaml(sample: DatasetSample): string {
   } else {
     for (const anchor of anchors) {
       lines.push(`${indent(1)}- message_index: ${formatYamlScalar(anchor.message_index)}`);
+      lines.push(`${indent(2)}target: ${formatYamlScalar(anchor.target ?? "content")}`);
       lines.push(`${indent(2)}token_index: ${formatYamlScalar(anchor.token_index)}`);
       pushYamlStringField(lines, 2, "replacement_token", anchor.replacement_token);
       lines.push(

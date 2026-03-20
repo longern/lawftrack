@@ -41,6 +41,7 @@ function MessageBubble({
   messageIndex,
   messageTokenization,
   onChangeContent,
+  onChangeReasoning,
   onChangeRole,
   onDelete,
   onSetEditing,
@@ -54,16 +55,170 @@ function MessageBubble({
   messageIndex: number;
   messageTokenization: DatasetMessageTokenization | null;
   onChangeContent: (content: string) => void;
+  onChangeReasoning: (reasoning: string) => void;
   onChangeRole: (role: string) => void;
   onDelete?: () => void;
   onSetEditing: (editing: boolean) => void;
   selectedToken: TokenSelection | null;
-  onSelectToken: (messageIndex: number, tokenIndex: number) => void;
+  onSelectToken: (
+    messageIndex: number,
+    tokenIndex: number,
+    target: "content" | "reasoning",
+  ) => void;
 }) {
   const isAssistant = message.role === "assistant";
   const isUser = message.role === "user";
-  const renderSegments = buildTokenRenderSegments(message, messageTokenization);
+  const reasoning = message.reasoning?.trim() ?? "";
+  const reasoningSegments = buildTokenRenderSegments(
+    message.reasoning ?? "",
+    messageTokenization?.reasoning_tokens ?? [],
+  );
+  const contentSegments = buildTokenRenderSegments(
+    message.content,
+    messageTokenization?.tokens ?? [],
+  );
   const sortedEdits = [...edits].sort((left, right) => left.token_index - right.token_index);
+
+  function renderLineBreakableText(text: string, keyPrefix: string) {
+    return text.split("\n").flatMap((part, partIndex, parts) => {
+      const items = [
+        <Box
+          component="span"
+          key={`${keyPrefix}-text-${partIndex}`}
+          sx={{ whiteSpace: "inherit", lineHeight: "inherit" }}
+        >
+          {part}
+        </Box>,
+      ];
+      if (partIndex < parts.length - 1) {
+        items.push(<br key={`${keyPrefix}-br-${partIndex}`} />);
+      }
+      return items;
+    });
+  }
+
+  function renderTokenizedSegments(
+    segments: ReturnType<typeof buildTokenRenderSegments>,
+    target: "content" | "reasoning",
+  ) {
+    return segments.map((segment, index) => {
+      if (segment.kind === "text") {
+        return renderLineBreakableText(segment.text, `${messageIndex}-${target}-gap-${index}`);
+      }
+
+      const tokenIndex = segment.tokenIndex;
+      const matchingEdit =
+        sortedEdits.find(
+          (item) =>
+            (item.target ?? "content") === target && tokenIndex === item.token_index,
+        ) ?? null;
+      const isChanged = Boolean(matchingEdit);
+      const isRegenerated = sortedEdits.some(
+        (item) =>
+          (item.target ?? "content") === target &&
+          item.regenerated_from_token_index !== null &&
+          tokenIndex >= item.regenerated_from_token_index,
+      );
+      const isSelected =
+        selectedToken?.messageIndex === messageIndex &&
+        selectedToken?.tokenIndex === tokenIndex &&
+        selectedToken?.target === target;
+
+      const tokenButtonSx = {
+        border: "none",
+        cursor: hasContinuationDraft ? "default" : "pointer",
+        display: "inline",
+        font: "inherit",
+        letterSpacing: "normal",
+        lineHeight: "inherit",
+        whiteSpace: "inherit",
+        verticalAlign: "baseline",
+        color: (theme: Parameters<typeof getWorkspaceColors>[0]) =>
+          isChanged
+            ? getWorkspaceColors(theme).tokenChangedText
+            : isUser
+              ? "#f8fafc"
+              : getWorkspaceColors(theme).textPrimary,
+        px: 0.18,
+        mx: 0,
+        borderRadius: 1,
+        backgroundColor: (theme: Parameters<typeof getWorkspaceColors>[0]) =>
+          isChanged
+            ? getWorkspaceColors(theme).tokenChangedBg
+            : isSelected
+              ? getWorkspaceColors(theme).tokenSelectedBg
+              : isRegenerated
+                ? getWorkspaceColors(theme).tokenRegeneratedBg
+                : "transparent",
+        boxShadow: (theme: Parameters<typeof getWorkspaceColors>[0]) =>
+          isSelected ? `0 0 0 1px ${alpha(theme.palette.primary.main, 0.75)} inset` : "none",
+        fontWeight: isChanged ? 800 : isSelected ? 700 : 500,
+        transition: "background-color 120ms ease",
+        "&:hover": {
+          backgroundColor: (theme: Parameters<typeof getWorkspaceColors>[0]) =>
+            hasContinuationDraft
+              ? isChanged
+                ? getWorkspaceColors(theme).tokenChangedBg
+                : isSelected
+                  ? getWorkspaceColors(theme).tokenSelectedBg
+                  : isRegenerated
+                    ? getWorkspaceColors(theme).tokenRegeneratedBg
+                    : "transparent"
+              : isChanged
+                ? "#fbbf24"
+                : getWorkspaceColors(theme).hoverBg,
+        },
+      };
+
+      return segment.text.split("\n").flatMap((part, partIndex, parts) => {
+        const items = [];
+        if (part) {
+          items.push(
+            <Box
+              key={`${messageIndex}-${target}-${tokenIndex}-${partIndex}`}
+              component="button"
+              type="button"
+              onClick={() => {
+                if (!hasContinuationDraft) {
+                  onSelectToken(messageIndex, tokenIndex, target);
+                }
+              }}
+              sx={tokenButtonSx}
+            >
+              {part}
+            </Box>,
+          );
+        }
+        if (partIndex < parts.length - 1) {
+          items.push(
+            <Box
+              key={`${messageIndex}-${target}-${tokenIndex}-newline-${partIndex}`}
+              component="button"
+              type="button"
+              title="换行 token"
+              aria-label="换行 token"
+              onClick={() => {
+                if (!hasContinuationDraft) {
+                  onSelectToken(messageIndex, tokenIndex, target);
+                }
+              }}
+              sx={{
+                ...tokenButtonSx,
+                px: 0.12,
+                minWidth: "0.9em",
+                opacity: 0.5,
+                fontFamily: '"IBM Plex Mono", "SFMono-Regular", monospace',
+              }}
+            >
+              ↵
+            </Box>,
+          );
+          items.push(<br key={`${messageIndex}-${target}-${tokenIndex}-br-${partIndex}`} />);
+        }
+        return items;
+      });
+    });
+  }
 
   return (
     <Box sx={{ display: "flex", justifyContent: isUser ? "flex-end" : "flex-start" }}>
@@ -194,11 +349,67 @@ function MessageBubble({
             sx={{
               width: isEditing ? "100%" : "auto",
               fontSize: 15,
-              lineHeight: 1.8,
+              lineHeight: 1.6,
               whiteSpace: "pre-wrap",
               wordBreak: "break-word",
             }}
           >
+            {isAssistant && (isEditing || reasoning) ? (
+              isEditing ? (
+                <TextField
+                  value={message.reasoning ?? ""}
+                  onChange={(event) => onChangeReasoning(event.target.value)}
+                  multiline
+                  minRows={3}
+                  fullWidth
+                  placeholder="Reasoning / 推理内容"
+                  variant="outlined"
+                  sx={{
+                    ...inlineFieldSx,
+                    mb: 1.25,
+                    "& .MuiOutlinedInput-root": {
+                      ...inlineFieldSx["& .MuiOutlinedInput-root"],
+                      bgcolor: (theme) => alpha(getWorkspaceColors(theme).hoverBg, 0.36),
+                    },
+                  }}
+                />
+              ) : (
+                <Box
+                  sx={{
+                    mb: 1.25,
+                    px: 1.25,
+                    py: 1,
+                    borderRadius: 2,
+                    border: (theme) => `1px dashed ${alpha(getWorkspaceColors(theme).accent, 0.42)}`,
+                    bgcolor: (theme) => alpha(getWorkspaceColors(theme).hoverBg, 0.5),
+                  }}
+                >
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      display: "block",
+                      mb: 0.5,
+                      color: (theme) => getWorkspaceColors(theme).textSecondary,
+                      textTransform: "uppercase",
+                      letterSpacing: 0.5,
+                    }}
+                  >
+                    reasoning
+                  </Typography>
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      color: (theme) => getWorkspaceColors(theme).textPrimary,
+                      whiteSpace: "pre-wrap",
+                      wordBreak: "break-word",
+                      lineHeight: 1.55,
+                    }}
+                  >
+                    {renderTokenizedSegments(reasoningSegments, "reasoning")}
+                  </Typography>
+                </Box>
+              )
+            ) : null}
             {isEditing ? (
               <TextField
                 value={message.content}
@@ -231,82 +442,7 @@ function MessageBubble({
                 }}
               />
             ) : isAssistant ? (
-              renderSegments.map((segment, index) => {
-                if (segment.kind === "text") {
-                  return (
-                    <Box component="span" key={`${messageIndex}-gap-${index}`}>
-                      {segment.text}
-                    </Box>
-                  );
-                }
-
-                const tokenIndex = segment.tokenIndex;
-                const matchingEdit = sortedEdits.find((item) => tokenIndex === item.token_index) ?? null;
-                const isChanged = Boolean(matchingEdit);
-                const isRegenerated = sortedEdits.some(
-                  (item) =>
-                    item.regenerated_from_token_index !== null &&
-                    tokenIndex >= item.regenerated_from_token_index,
-                );
-                const isSelected =
-                  selectedToken?.messageIndex === messageIndex && selectedToken?.tokenIndex === tokenIndex;
-
-                return (
-                  <Box
-                    key={`${messageIndex}-${tokenIndex}`}
-                    component="button"
-                    type="button"
-                    onClick={() => {
-                      if (!hasContinuationDraft) {
-                        onSelectToken(messageIndex, tokenIndex);
-                      }
-                    }}
-                    sx={{
-                      border: "none",
-                      cursor: hasContinuationDraft ? "default" : "pointer",
-                      display: "inline",
-                      font: "inherit",
-                      color: (theme) =>
-                        isChanged
-                          ? getWorkspaceColors(theme).tokenChangedText
-                          : isUser
-                            ? "#f8fafc"
-                            : getWorkspaceColors(theme).textPrimary,
-                      px: 0.35,
-                      mx: 0.05,
-                      borderRadius: 1,
-                      backgroundColor: (theme) =>
-                        isChanged
-                          ? getWorkspaceColors(theme).tokenChangedBg
-                          : isSelected
-                            ? getWorkspaceColors(theme).tokenSelectedBg
-                            : isRegenerated
-                              ? getWorkspaceColors(theme).tokenRegeneratedBg
-                              : "transparent",
-                      boxShadow: (theme) =>
-                        isSelected ? `0 0 0 1px ${alpha(theme.palette.primary.main, 0.75)} inset` : "none",
-                      fontWeight: isChanged ? 800 : isSelected ? 700 : 500,
-                      transition: "background-color 120ms ease",
-                      "&:hover": {
-                        backgroundColor: (theme) =>
-                          hasContinuationDraft
-                            ? isChanged
-                              ? getWorkspaceColors(theme).tokenChangedBg
-                              : isSelected
-                                ? getWorkspaceColors(theme).tokenSelectedBg
-                                : isRegenerated
-                                  ? getWorkspaceColors(theme).tokenRegeneratedBg
-                                  : "transparent"
-                            : isChanged
-                              ? "#fbbf24"
-                              : getWorkspaceColors(theme).hoverBg,
-                      },
-                    }}
-                  >
-                    {segment.text}
-                  </Box>
-                );
-              })
+              renderTokenizedSegments(contentSegments, "content")
             ) : (
               message.content
             )}
@@ -340,7 +476,11 @@ export function MessageFlowPanel({
   onGenerateAssistantMessage: () => void;
   selectedToken: TokenSelection | null;
   onSaveSample: () => void;
-  onSelectToken: (messageIndex: number, tokenIndex: number) => void;
+  onSelectToken: (
+    messageIndex: number,
+    tokenIndex: number,
+    target: "content" | "reasoning",
+  ) => void;
   onUpdateSampleMessages: (updater: (messages: DatasetMessage[]) => DatasetMessage[]) => void;
   onUpdateSampleTitle: (title: string) => void;
 }) {
@@ -566,6 +706,13 @@ export function MessageFlowPanel({
                 onChangeContent={(content) =>
                   onUpdateSampleMessages((messages) =>
                     messages.map((item, index) => (index === messageIndex ? { ...item, content } : item)),
+                  )
+                }
+                onChangeReasoning={(reasoning) =>
+                  onUpdateSampleMessages((messages) =>
+                    messages.map((item, index) =>
+                      index === messageIndex ? { ...item, reasoning } : item,
+                    ),
                   )
                 }
                 onChangeRole={(role) =>

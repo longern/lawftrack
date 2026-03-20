@@ -91,3 +91,36 @@ def build_continuation_prefix(
     prefix_ids = input_ids[:token_index] + replacement_ids
     prefix = tokenizer.decode(prefix_ids, clean_up_tokenization_spaces=False)
     return prefix, original_token, replacement_token
+
+
+def build_prefix_before_token(
+    *,
+    model: str,
+    text: str,
+    token_index: int,
+) -> str:
+    tokenizer = load_tokenizer(model)
+    encoded = tokenizer(text, add_special_tokens=False)
+    input_ids = list(encoded["input_ids"])
+    if token_index < 0 or token_index >= len(input_ids):
+        raise ValueError(f"Token index {token_index} is out of range.")
+
+    prefix_ids = input_ids[:token_index]
+    return tokenizer.decode(prefix_ids, clean_up_tokenization_spaces=False)
+
+
+def count_text_tokens(*, model: str, text: str) -> int:
+    tokenizer = load_tokenizer(model)
+    encoded = tokenizer(text, add_special_tokens=False)
+    return len(list(encoded["input_ids"]))
+
+
+def get_tokenizer_max_length(*, model: str) -> int | None:
+    tokenizer = load_tokenizer(model)
+    max_length = getattr(tokenizer, "model_max_length", None)
+    if not isinstance(max_length, int) or max_length <= 0:
+        return None
+    # Hugging Face uses extremely large sentinels when max length is unknown.
+    if max_length >= 1_000_000:
+        return None
+    return max_length

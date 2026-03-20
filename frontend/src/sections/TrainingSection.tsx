@@ -52,6 +52,11 @@ import type {
   FineTuningMethodConfig,
   UploadedFile,
 } from "../types/app";
+import {
+  FALLBACK_BASE_MODEL,
+  type RemoteModelRecord,
+  resolvePreferredBaseModel,
+} from "../utils/modelSelection";
 
 type TrainingMethodType = "sft" | "lawf";
 
@@ -72,22 +77,24 @@ interface TrainingFormState {
   tensorboard: boolean;
 }
 
-const DEFAULT_FORM: TrainingFormState = {
-  model: "Qwen/Qwen2.5-7B-Instruct",
-  methodType: "sft",
-  trainingFileId: "",
-  validationFileId: "",
-  suffix: "",
-  seed: "",
-  nEpochs: "3",
-  batchSize: "1",
-  learningRate: "0.00005",
-  loggingSteps: "1",
-  loraRank: "16",
-  loraAlpha: "32",
-  loraDropout: "0.05",
-  tensorboard: false,
-};
+function buildDefaultForm(model: string): TrainingFormState {
+  return {
+    model,
+    methodType: "sft",
+    trainingFileId: "",
+    validationFileId: "",
+    suffix: "",
+    seed: "",
+    nEpochs: "3",
+    batchSize: "1",
+    learningRate: "0.00005",
+    loggingSteps: "1",
+    loraRank: "16",
+    loraAlpha: "32",
+    loraDropout: "0.05",
+    tensorboard: false,
+  };
+}
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, init);
@@ -158,7 +165,8 @@ function formatBytes(bytes: number): string {
 }
 
 function TrainingSection() {
-  const [form, setForm] = useState<TrainingFormState>(DEFAULT_FORM);
+  const [preferredBaseModel, setPreferredBaseModel] = useState(FALLBACK_BASE_MODEL);
+  const [form, setForm] = useState<TrainingFormState>(() => buildDefaultForm(FALLBACK_BASE_MODEL));
   const [datasets, setDatasets] = useState<DatasetRecord[]>([]);
   const [selectedDatasetId, setSelectedDatasetId] = useState("");
   const [files, setFiles] = useState<UploadedFile[]>([]);
@@ -175,6 +183,7 @@ function TrainingSection() {
   const [loadingJobArtifacts, setLoadingJobArtifacts] = useState(false);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
+  const preferredBaseModelRef = useRef(FALLBACK_BASE_MODEL);
 
   const fineTuneFiles = useMemo(
     () => files.filter((file) => file.purpose === "fine-tune"),
@@ -188,6 +197,7 @@ function TrainingSection() {
 
   useEffect(() => {
     void refreshAll();
+    void loadPreferredBaseModel();
     const timer = window.setInterval(() => {
       void loadJobs(false);
       if (selectedJobId) {
@@ -198,6 +208,27 @@ function TrainingSection() {
       window.clearInterval(timer);
     };
   }, [selectedJobId]);
+
+  useEffect(() => {
+    const previousPreferredBaseModel = preferredBaseModelRef.current;
+    preferredBaseModelRef.current = preferredBaseModel;
+    if (selectedDataset?.base_model?.trim()) {
+      return;
+    }
+    setForm((current) => {
+      const currentModel = current.model.trim();
+      if (
+        currentModel !== "" &&
+        currentModel !== previousPreferredBaseModel
+      ) {
+        return current;
+      }
+      return {
+        ...current,
+        model: preferredBaseModel,
+      };
+    });
+  }, [preferredBaseModel, selectedDataset]);
 
   useEffect(() => {
     if (!selectedJobId && jobs.length > 0) {
@@ -270,6 +301,18 @@ function TrainingSection() {
     }
   }
 
+  async function loadPreferredBaseModel() {
+    try {
+      const payload = await fetchJson<ApiListResponse<RemoteModelRecord>>("/v1/models");
+      const resolvedBaseModel = resolvePreferredBaseModel(payload.data);
+      if (resolvedBaseModel) {
+        setPreferredBaseModel(resolvedBaseModel);
+      }
+    } catch {
+      // Keep the configured fallback when model discovery is unavailable.
+    }
+  }
+
   async function loadJobArtifacts(jobId: string, showSpinner = true) {
     if (showSpinner) {
       setLoadingJobArtifacts(true);
@@ -318,12 +361,9 @@ function TrainingSection() {
   function handleSelectDataset(datasetId: string) {
     setSelectedDatasetId(datasetId);
     const dataset = datasets.find((item) => item.id === datasetId);
-    if (!dataset) {
-      return;
-    }
     setForm((current) => ({
       ...current,
-      model: dataset.base_model?.trim() || current.model,
+      model: dataset?.base_model?.trim() || preferredBaseModel,
     }));
   }
 
@@ -756,6 +796,7 @@ function TrainingSection() {
         datasets={datasets}
         fineTuneFiles={fineTuneFiles}
         form={form}
+        preferredBaseModel={preferredBaseModel}
         onChangeForm={updateForm}
         onSelectDataset={handleSelectDataset}
         onSubmit={handleSubmitJob}
@@ -994,6 +1035,7 @@ interface CreateTrainingJobDialogProps {
   datasets: DatasetRecord[];
   fineTuneFiles: UploadedFile[];
   form: TrainingFormState;
+  preferredBaseModel: string;
   onChangeForm: <K extends keyof TrainingFormState>(
     key: K,
     value: TrainingFormState[K],
@@ -1013,6 +1055,7 @@ function CreateTrainingJobDialog({
   datasets,
   fineTuneFiles,
   form,
+  preferredBaseModel,
   onChangeForm,
   onSelectDataset,
   onSubmit,
@@ -1042,7 +1085,7 @@ function CreateTrainingJobDialog({
               label="Base Model"
               value={form.model}
               onChange={(event) => onChangeForm("model", event.target.value)}
-              placeholder="Qwen/Qwen2.5-7B-Instruct 或 /path/to/model"
+              placeholder={`${preferredBaseModel} 或 /path/to/model`}
               required
               fullWidth
             />

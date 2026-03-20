@@ -158,6 +158,8 @@ class LAwFRunnerTests(unittest.TestCase):
 
             tokenizer = FakeAutoTokenizer.last_tokenizer
             self.assertIsNotNone(tokenizer)
+            self.assertIs(trainer.kwargs["processing_class"], tokenizer)
+            self.assertNotIn("tokenizer", trainer.kwargs)
             self.assertEqual(tokenizer.pad_token, "</s>")
             self.assertEqual(tokenizer.saved_paths, [str(output_dir)])
 

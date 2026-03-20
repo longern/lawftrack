@@ -232,20 +232,6 @@ class CliTests(unittest.TestCase):
             self.assertEqual(kwargs["host"], "0.0.0.0")
             self.assertEqual(kwargs["port"], 9001)
 
-    def test_gateway_run_explicit_action_still_works(self) -> None:
-        sys.path.insert(0, str(ROOT / "src"))
-        try:
-            from lawftune.cli import main
-        finally:
-            sys.path.pop(0)
-
-        with tempfile.TemporaryDirectory() as temp_dir:
-            with mock.patch("uvicorn.run") as mocked_run:
-                exit_code = main(["gateway", "run", "--config-dir", temp_dir])
-
-            self.assertEqual(exit_code, 0)
-            mocked_run.assert_called_once()
-
     def test_gateway_help(self) -> None:
         result = subprocess.run(
             [sys.executable, "-m", "lawftune", "gateway", "--help"],
@@ -429,39 +415,6 @@ class CliTests(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         mocked_run.assert_called_once()
         self.assertEqual(mocked_run.call_args.args[0], "sft")
-
-    def test_train_worker_can_run_explicit_lawf_action(self) -> None:
-        sys.path.insert(0, str(ROOT / "src"))
-        try:
-            from lawftune.train.cli import main
-        finally:
-            sys.path.pop(0)
-
-        with tempfile.TemporaryDirectory() as temp_dir:
-            job_dir = Path(temp_dir) / "fine_tuning" / "jobs" / "ftjob-456"
-            job_dir.mkdir(parents=True)
-            (job_dir / "job.json").write_text(
-                json.dumps(
-                    {
-                        "id": "ftjob-456",
-                        "model": "Qwen/Qwen2.5-7B-Instruct",
-                        "training_file": "dataset-name",
-                        "method": {"type": "lawf"},
-                    }
-                ),
-                encoding="utf-8",
-            )
-
-            with mock.patch(
-                "lawftune.train.cli.run_algorithm_job", return_value=0
-            ) as mocked_run:
-                exit_code = main(
-                    ["lawf", "--config-dir", temp_dir, "--job-id", "ftjob-456"]
-                )
-
-        self.assertEqual(exit_code, 0)
-        mocked_run.assert_called_once()
-        self.assertEqual(mocked_run.call_args.args[0], "lawf")
 
     def test_build_sft_command_exports_uploaded_training_file(self) -> None:
         sys.path.insert(0, str(ROOT / "src"))

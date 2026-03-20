@@ -18,6 +18,12 @@ import type {
 } from "../../types/app";
 import { WorkspaceShell } from "./DataWorkspaceShell";
 import type { ContinuationDraft, DatasetDraft, TokenCandidate, TokenSelection } from "./dataWorkspaceTypes";
+import {
+  FALLBACK_BASE_MODEL,
+  type RemoteModelRecord,
+  listModelOptionIds,
+  resolvePreferredBaseModel,
+} from "../../utils/modelSelection";
 
 interface DataWorkspaceProps {
   dataSummary: DataSummaryItem[];
@@ -81,6 +87,7 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
   const [datasetToDelete, setDatasetToDelete] = useState<DatasetRecord | null>(null);
   const [sampleToDelete, setSampleToDelete] = useState<DatasetSample | null>(null);
   const [modelOptions, setModelOptions] = useState<string[]>([]);
+  const [preferredBaseModel, setPreferredBaseModel] = useState(FALLBACK_BASE_MODEL);
   const [modelsLoading, setModelsLoading] = useState(false);
   const [modelOptionsError, setModelOptionsError] = useState("");
   const [modelsLoaded, setModelsLoaded] = useState(false);
@@ -89,6 +96,7 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const tokenCandidatesRequestRef = useRef(0);
   const samplesRef = useRef<DatasetSample[]>([]);
+  const preferredBaseModelRef = useRef(FALLBACK_BASE_MODEL);
 
   const activeDataset = datasetTabs.find((tab) => tab.id === activeDatasetId) ?? null;
   const recentDatasets = useMemo(
@@ -154,10 +162,33 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
     }
     setDraft({
       name: activeDataset.name,
-      base_model: activeDataset.base_model ?? "Qwen/Qwen2.5-7B-Instruct",
+      base_model: activeDataset.base_model ?? preferredBaseModelRef.current,
     });
     void loadSamples(activeDataset.id);
   }, [activeDataset]);
+
+  useEffect(() => {
+    const previousPreferredBaseModel = preferredBaseModelRef.current;
+    preferredBaseModelRef.current = preferredBaseModel;
+    if (!activeDataset || activeDataset.base_model?.trim()) {
+      return;
+    }
+    setDraft((current) => {
+      if (!current) {
+        return current;
+      }
+      if (
+        current.base_model.trim() !== "" &&
+        current.base_model !== previousPreferredBaseModel
+      ) {
+        return current;
+      }
+      return {
+        ...current,
+        base_model: preferredBaseModel,
+      };
+    });
+  }, [activeDataset, preferredBaseModel]);
 
   useEffect(() => {
     if (!selectedSample) {
@@ -209,15 +240,10 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
     }
     setModelsLoading(true);
     try {
-      const payload = await fetchJson<ApiListResponse<{ id: string }>>("/v1/models");
-      const options = Array.from(
-        new Set(
-          payload.data
-            .map((model) => model.id?.trim())
-            .filter((modelId): modelId is string => Boolean(modelId)),
-        ),
-      );
+      const payload = await fetchJson<ApiListResponse<RemoteModelRecord>>("/v1/models");
+      const options = listModelOptionIds(payload.data);
       setModelOptions(options);
+      setPreferredBaseModel(resolvePreferredBaseModel(payload.data) ?? FALLBACK_BASE_MODEL);
       setModelOptionsError("");
       setModelsLoaded(true);
     } catch (loadError) {
@@ -279,7 +305,7 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: nextName,
-          base_model: "Qwen/Qwen2.5-7B-Instruct",
+          base_model: preferredBaseModel,
         }),
       });
       setDatasets((current) => [created, ...current]);
@@ -396,14 +422,6 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
     setSampleTokenizations((current) => {
       const next = { ...current };
       delete next[nextSample.id];
-      return next;
-    });
-  }
-
-  function clearSampleTokenization(sampleId: string) {
-    setSampleTokenizations((current) => {
-      const next = { ...current };
-      delete next[sampleId];
       return next;
     });
   }
@@ -631,6 +649,11 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
       setError("请先在右侧设置数据集绑定模型。");
       return;
     }
+    const baseTokenization =
+      visibleSampleTokenization ?? (await ensureSampleTokenization(selectedSample));
+    if (!baseTokenization) {
+      return;
+    }
     setGenerating(true);
     try {
       const continuation = await fetchJson<{ sample: DatasetSample; tokenization: DatasetSampleTokenization }>(
@@ -649,7 +672,10 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
         ...current,
         [selectedSample.id]: continuation.tokenization,
       }));
-      setContinuationDraft(continuation);
+      setContinuationDraft({
+        ...continuation,
+        baseTokenization,
+      });
       setSelectedToken({ ...selectedToken, currentToken: replacementToken.trim() || selectedToken.currentToken });
       setError("");
     } catch (generateError) {
@@ -695,13 +721,23 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
     if (!continuationDraft || !selectedSample) {
       return;
     }
+    setSampleTokenizations((current) => ({
+      ...current,
+      [selectedSample.id]: continuationDraft.baseTokenization,
+    }));
     setContinuationDraft(null);
+    setSelectedToken((current) =>
+      current
+        ? {
+            ...current,
+            currentToken: current.originalToken,
+          }
+        : null,
+    );
     setReplacementToken(selectedToken?.originalToken ?? "");
     setTokenCandidates([]);
     setCandidatesLoading(false);
     tokenCandidatesRequestRef.current += 1;
-    clearSampleTokenization(selectedSample.id);
-    void ensureSampleTokenization(selectedSample);
   }
 
   async function handleSaveSample() {

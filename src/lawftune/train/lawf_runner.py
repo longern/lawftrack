@@ -136,7 +136,7 @@ def run_lawf_training(job: dict[str, Any], config_dir: Path) -> None:
         args=training_args,
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
-        tokenizer=tokenizer,
+        processing_class=tokenizer,
         peft_config=lora_config,
     )
     trainer.train()

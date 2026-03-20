@@ -20,4 +20,5 @@ export interface TokenCandidate {
 export interface ContinuationDraft {
   sample: DatasetSample;
   tokenization: DatasetSampleTokenization;
+  baseTokenization: DatasetSampleTokenization;
 }

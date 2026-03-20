@@ -43,7 +43,7 @@ def sanitize_outbound_headers(headers: Request.headers, api_key: str) -> dict[st
         for key, value in headers.items()
         if key.lower() not in HOP_BY_HOP_HEADERS
     }
-    if api_key and "authorization" not in {key.lower() for key in outbound_headers}:
+    if api_key:
         outbound_headers["authorization"] = f"Bearer {api_key}"
     return outbound_headers
 

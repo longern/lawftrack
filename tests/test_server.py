@@ -1351,6 +1351,74 @@ class ServerTests(unittest.TestCase):
                 captured_request["headers"]["authorization"], "Bearer secret-key"
             )
 
+    def test_v1_proxy_overrides_incoming_authorization_header(self) -> None:
+        sys.path.insert(0, str(ROOT / "src"))
+        try:
+            from fastapi.testclient import TestClient
+            import lawftune.server as server_module
+        finally:
+            sys.path.pop(0)
+
+        class DummyResponse:
+            def __init__(self) -> None:
+                self.status_code = 200
+                self.headers = {"content-type": "application/json"}
+                self._chunks = [b'{"ok":true}']
+
+            async def aiter_raw(self):
+                for chunk in self._chunks:
+                    yield chunk
+
+            async def aclose(self):
+                return None
+
+        captured_request: dict[str, object] = {}
+
+        class DummyAsyncClient:
+            def build_request(self, **kwargs):
+                captured_request.update(kwargs)
+                return kwargs
+
+            async def send(self, request, stream=False):
+                captured_request["stream"] = stream
+                return DummyResponse()
+
+            async def aclose(self):
+                return None
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "config.json"
+            config_path.write_text(
+                json.dumps(
+                    {
+                        "vllm_endpoint": "http://localhost:8000/base/",
+                        "api_key": "secret-key",
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with mock.patch.object(
+                server_module.httpx, "AsyncClient", return_value=DummyAsyncClient()
+            ):
+                client = TestClient(server_module.create_app(Path(temp_dir)))
+                response = client.post(
+                    "/v1/chat/completions",
+                    headers={
+                        "content-type": "application/json",
+                        "authorization": "Bearer client-token",
+                    },
+                    json={
+                        "messages": [{"role": "user", "content": "hello"}],
+                        "stream": False,
+                    },
+                )
+
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(
+                captured_request["headers"]["authorization"], "Bearer secret-key"
+            )
+
     def test_v1_proxy_streams_sse_responses(self) -> None:
         sys.path.insert(0, str(ROOT / "src"))
         try:

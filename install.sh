@@ -16,6 +16,7 @@ NO_MODIFY_SHELL=0
 ASSUME_YES=0
 HEADLESS_MODE=0
 SKIP_WIZARD=0
+USE_SYSTEM_SITE_PACKAGES=1
 
 
 usage() {
@@ -29,6 +30,7 @@ Options:
   --bin-dir PATH       Directory where the launcher script will be created (default: ${DEFAULT_BIN_DIR})
   --headless           Install without bundling the frontend UI
   --skip-wizard        Do not automatically run \`${APP_NAME} wizard\` after installation
+  --isolated-venv      Create an isolated virtualenv without system site-packages
   --no-modify-shell    Do not offer to update your shell rc file
   --yes                Accept non-destructive prompts automatically
   -h, --help           Show this help message
@@ -170,7 +172,11 @@ create_virtualenv() {
   install_dir="$1"
   venv_dir="${install_dir}/.venv"
   mkdir -p "$install_dir"
-  python3 -m venv "$venv_dir"
+  if [ "$USE_SYSTEM_SITE_PACKAGES" -eq 1 ]; then
+    python3 -m venv --system-site-packages "$venv_dir"
+  else
+    python3 -m venv "$venv_dir"
+  fi
   printf '%s\n' "$venv_dir"
 }
 
@@ -287,6 +293,10 @@ while [ "$#" -gt 0 ]; do
       ;;
     --skip-wizard)
       SKIP_WIZARD=1
+      shift
+      ;;
+    --isolated-venv)
+      USE_SYSTEM_SITE_PACKAGES=0
       shift
       ;;
     --no-modify-shell)

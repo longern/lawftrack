@@ -36,8 +36,6 @@ export interface DatasetRecord {
   created_at: number;
   updated_at: number;
   base_model: string | null;
-  training_file_id: string | null;
-  training_filename: string | null;
   sample_count?: number;
 }
 
@@ -49,7 +47,7 @@ export interface DatasetMessage {
 export interface DatasetTokenEdit {
   message_index: number;
   token_index: number;
-  original_token: string;
+  original_token?: string | null;
   replacement_token: string;
   regenerated_from_token_index: number | null;
   created_at: number;
@@ -87,6 +85,7 @@ export interface DatasetSample {
   messages: DatasetMessage[];
   source_messages: DatasetMessage[];
   edits: DatasetTokenEdit[];
+  anchors?: DatasetTokenEdit[];
 }
 
 export interface NavItem {
@@ -129,6 +128,14 @@ export interface UploadedFile {
   status: string;
   status_details: string | null;
   content_type: string;
+}
+
+export interface DatasetTrainingFileExport {
+  object: "dataset.training_file";
+  dataset_id: string;
+  method: string;
+  record_count: number;
+  file: UploadedFile;
 }
 
 export interface FineTuningMethodConfig {
@@ -187,4 +194,36 @@ export interface FineTuningJob {
     };
   } | null;
   process?: FineTuningJobProcess;
+}
+
+export interface FineTuningJobEvent {
+  id: string;
+  object: "fine_tuning.job.event";
+  created_at: number;
+  level: string;
+  message: string;
+  data?: {
+    type?: string;
+    stream?: string;
+    step?: number | null;
+    metrics?: Record<string, number>;
+  };
+}
+
+export interface FineTuningJobCheckpoint {
+  id: string;
+  object: "fine_tuning.job.checkpoint";
+  created_at: number;
+  fine_tuning_job_id: string;
+  fine_tuned_model_checkpoint?: string | null;
+  step_number: number;
+  metrics: Record<string, number>;
+}
+
+export interface FineTuningJobLogs {
+  object: "fine_tuning.job.logs";
+  id: string;
+  stdout: string;
+  stderr: string;
+  status: string;
 }

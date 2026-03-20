@@ -16,16 +16,12 @@ import {
   Button,
   CircularProgress,
   Collapse,
-  FormControl,
   IconButton,
-  InputLabel,
   List,
   ListItemButton,
   ListItemIcon,
   ListItemText,
-  MenuItem,
   Paper,
-  Select,
   Stack,
   Tab,
   Tabs,
@@ -36,7 +32,6 @@ import type {
   DatasetRecord,
   DatasetSample,
   DataSummaryItem,
-  UploadedFile,
 } from "../../types/app";
 import { darkFieldSx, panelCardSx } from "./dataWorkspaceStyles";
 import type { DatasetDraft } from "./dataWorkspaceTypes";
@@ -427,7 +422,6 @@ export function SampleListPane({
 export function DatasetMetadataForm({
   dataset,
   draft,
-  fineTuneFiles,
   modelOptions,
   modelOptionsError,
   modelsLoading,
@@ -438,7 +432,6 @@ export function DatasetMetadataForm({
 }: {
   dataset: DatasetRecord;
   draft: DatasetDraft;
-  fineTuneFiles: UploadedFile[];
   modelOptions: string[];
   modelOptionsError: string;
   modelsLoading: boolean;
@@ -493,22 +486,6 @@ export function DatasetMetadataForm({
           />
         )}
       />
-      <FormControl fullWidth size="small" sx={darkFieldSx}>
-        <InputLabel id={`dataset-training-file-label-${dataset.id}`}>训练文件</InputLabel>
-        <Select
-          labelId={`dataset-training-file-label-${dataset.id}`}
-          label="训练文件"
-          value={draft.training_file_id}
-          onChange={(event) => onChangeDraft({ ...draft, training_file_id: event.target.value })}
-        >
-          <MenuItem value="">未绑定</MenuItem>
-          {fineTuneFiles.map((file) => (
-            <MenuItem key={file.id} value={file.id}>
-              {file.filename}
-            </MenuItem>
-          ))}
-        </Select>
-      </FormControl>
       <Button variant="outlined" onClick={onSaveDataset} disabled={saving}>
         {saving ? "保存中..." : "保存数据集配置"}
       </Button>
@@ -519,7 +496,6 @@ export function DatasetMetadataForm({
 export function DatasetMetadataSection(props: {
   dataset: DatasetRecord;
   draft: DatasetDraft;
-  fineTuneFiles: UploadedFile[];
   modelOptions: string[];
   modelOptionsError: string;
   modelsLoading: boolean;
@@ -729,6 +705,8 @@ export function EditorTabs({
   onCloseDataset: (datasetId: string) => void;
   onSelectDataset: (datasetId: string | null) => void;
 }) {
+  const tabValue = activeDatasetId ?? (hasWelcomeTab ? "__welcome__" : false);
+
   return (
     <Box
       sx={{
@@ -741,8 +719,8 @@ export function EditorTabs({
       }}
     >
       <Tabs
-        value={activeDatasetId ?? false}
-        onChange={(_, value: string | false) => onSelectDataset(value || null)}
+        value={tabValue}
+        onChange={(_, value: string | false) => onSelectDataset(value === "__welcome__" ? null : value || null)}
         variant="scrollable"
         scrollButtons="auto"
         sx={{
@@ -754,7 +732,7 @@ export function EditorTabs({
       >
         {hasWelcomeTab ? (
           <Tab
-            value={false}
+            value="__welcome__"
             disableRipple
             sx={{ minHeight: 48, textTransform: "none", color: "text.secondary", alignItems: "stretch", px: 0 }}
             label={

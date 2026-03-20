@@ -19,7 +19,6 @@ import type {
   DatasetSample,
   DatasetSampleTokenization,
   DataSummaryItem,
-  UploadedFile,
 } from "../../types/app";
 import { DatasetHome } from "./DatasetHome";
 import {
@@ -45,7 +44,7 @@ export interface WorkspaceShellProps {
   datasetTabs: DatasetRecord[];
   draft: DatasetDraft | null;
   error: string;
-  fineTuneFiles: UploadedFile[];
+  onClearError: () => void;
   importInputRef: RefObject<HTMLInputElement | null>;
   isMobile: boolean;
   loading: boolean;
@@ -112,7 +111,7 @@ export function WorkspaceShell({
   datasetTabs,
   draft,
   error,
-  fineTuneFiles,
+  onClearError,
   importInputRef,
   isMobile,
   loading,
@@ -194,7 +193,6 @@ export function WorkspaceShell({
       <DatasetMetadataSection
         dataset={activeDataset}
         draft={draft}
-        fineTuneFiles={fineTuneFiles}
         modelOptions={modelOptions}
         modelOptionsError={modelOptionsError}
         modelsLoading={modelsLoading}
@@ -264,7 +262,9 @@ export function WorkspaceShell({
               borderBottom: (theme) => `1px solid ${getWorkspaceColors(theme).border}`,
             }}
           >
-            <Alert severity="error">{error}</Alert>
+            <Alert severity="error" onClose={onClearError}>
+              {error}
+            </Alert>
           </Box>
         ) : null}
 
@@ -458,7 +458,6 @@ export function WorkspaceShell({
                 <DatasetMetadataForm
                   dataset={activeDataset}
                   draft={draft}
-                  fineTuneFiles={fineTuneFiles}
                   modelOptions={modelOptions}
                   modelOptionsError={modelOptionsError}
                   modelsLoading={modelsLoading}
@@ -526,7 +525,9 @@ export function WorkspaceShell({
               borderBottom: (theme) => `1px solid ${getWorkspaceColors(theme).border}`,
             }}
           >
-            <Alert severity="error">{error}</Alert>
+            <Alert severity="error" onClose={onClearError}>
+              {error}
+            </Alert>
           </Box>
         ) : null}
 

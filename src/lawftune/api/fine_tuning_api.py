@@ -99,6 +99,41 @@ def build_router(
                 status_code=404, detail=f"Fine-tuning job not found: {job_id}"
             ) from exc
 
+    @router.get("/jobs/{job_id}/events")
+    def list_fine_tuning_job_events(job_id: str) -> dict[str, Any]:
+        try:
+            return {
+                "object": "list",
+                "data": store.list_job_events(job_id),
+                "has_more": False,
+            }
+        except FileNotFoundError as exc:
+            raise HTTPException(
+                status_code=404, detail=f"Fine-tuning job not found: {job_id}"
+            ) from exc
+
+    @router.get("/jobs/{job_id}/checkpoints")
+    def list_fine_tuning_job_checkpoints(job_id: str) -> dict[str, Any]:
+        try:
+            return {
+                "object": "list",
+                "data": store.list_job_checkpoints(job_id),
+                "has_more": False,
+            }
+        except FileNotFoundError as exc:
+            raise HTTPException(
+                status_code=404, detail=f"Fine-tuning job not found: {job_id}"
+            ) from exc
+
+    @router.get("/jobs/{job_id}/logs")
+    def retrieve_fine_tuning_job_logs(job_id: str) -> dict[str, Any]:
+        try:
+            return store.get_job_logs(job_id)
+        except FileNotFoundError as exc:
+            raise HTTPException(
+                status_code=404, detail=f"Fine-tuning job not found: {job_id}"
+            ) from exc
+
     @router.post("/jobs/{job_id}/cancel")
     def cancel_fine_tuning_job(job_id: str) -> dict[str, Any]:
         try:

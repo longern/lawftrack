@@ -11,24 +11,22 @@ import httpx
 from pydantic import BaseModel
 
 from lawftune.api.dataset_store import DatasetStore
-from lawftune.api.files_store import FileStore
 from lawftune.api.tokenizer_service import TokenizerDependencyError
 from lawftune.api.tokenizer_service import build_continuation_prefix
 from lawftune.api.tokenizer_service import tokenize_text
 from lawftune.config import load_config
+from lawftune.train.algorithms import normalize_training_method
 from lawftune.vllm import build_vllm_url
 
 
 class CreateDatasetRequest(BaseModel):
     name: str
     base_model: str | None = None
-    training_file_id: str | None = None
 
 
 class UpdateDatasetRequest(BaseModel):
     name: str | None = None
     base_model: str | None = None
-    training_file_id: str | None = None
 
 
 class DatasetMessagePayload(BaseModel):
@@ -39,7 +37,7 @@ class DatasetMessagePayload(BaseModel):
 class DatasetTokenEditPayload(BaseModel):
     message_index: int
     token_index: int
-    original_token: str
+    original_token: str | None = None
     replacement_token: str
     regenerated_from_token_index: int | None = None
     created_at: int | None = None
@@ -50,12 +48,14 @@ class UpdateDatasetSampleRequest(BaseModel):
     messages: list[DatasetMessagePayload]
     source_messages: list[DatasetMessagePayload] | None = None
     edits: list[DatasetTokenEditPayload] | None = None
+    anchors: list[DatasetTokenEditPayload] | None = None
 
 
 class CreateDatasetSampleRequest(BaseModel):
     title: str | None = None
     messages: list[DatasetMessagePayload] | None = None
     source_messages: list[DatasetMessagePayload] | None = None
+    anchors: list[DatasetTokenEditPayload] | None = None
 
 
 class TokenizeDatasetSampleRequest(BaseModel):
@@ -75,6 +75,10 @@ class GenerateDatasetSampleRequest(BaseModel):
     model: str
     max_tokens: int = 512
     temperature: float = 0.7
+
+
+class ExportDatasetTrainingFileRequest(BaseModel):
+    method: dict[str, Any] | None = None
 
 
 def serialize_model(model: BaseModel) -> dict[str, Any]:
@@ -130,19 +134,6 @@ def build_sample_tokenization_payload(
 def build_router(config_dir: Path | None = None) -> APIRouter:
     router = APIRouter(prefix="/api/datasets", tags=["datasets"])
     store = DatasetStore(config_dir)
-    file_store = FileStore(config_dir)
-
-    def validate_training_file(file_id: str) -> None:
-        try:
-            metadata = file_store.get_file(file_id)
-        except FileNotFoundError as exc:
-            raise HTTPException(status_code=400, detail=f"Unknown training file: {file_id}") from exc
-
-        if metadata.get("purpose") != "fine-tune":
-            raise HTTPException(
-                status_code=400,
-                detail=f"Dataset training_file_id must reference a fine-tune file: {file_id}",
-            )
 
     @router.get("")
     def list_datasets() -> dict[str, Any]:
@@ -154,11 +145,7 @@ def build_router(config_dir: Path | None = None) -> APIRouter:
 
     @router.post("")
     def create_dataset(payload: CreateDatasetRequest) -> dict[str, Any]:
-        serialized = serialize_model(payload)
-        training_file_id = serialized.get("training_file_id")
-        if training_file_id:
-            validate_training_file(str(training_file_id))
-        return store.create_dataset(serialized)
+        return store.create_dataset(serialize_model(payload))
 
     @router.post("/import")
     async def import_dataset(file: UploadFile = File(...)) -> dict[str, Any]:
@@ -171,9 +158,6 @@ def build_router(config_dir: Path | None = None) -> APIRouter:
                 dataset = store.import_metadata_file(filename=filename, content=content)
             except ValueError as exc:
                 raise HTTPException(status_code=400, detail=str(exc)) from exc
-            training_file_id = dataset.get("training_file_id")
-            if training_file_id:
-                validate_training_file(str(training_file_id))
             return dataset
 
         if suffix in {".json", ".jsonl"}:
@@ -208,6 +192,38 @@ def build_router(config_dir: Path | None = None) -> APIRouter:
             "object": "list",
             "data": samples,
             "has_more": False,
+        }
+
+    @router.post("/{dataset_id}/training_file")
+    def export_dataset_training_file(
+        dataset_id: str,
+        payload: ExportDatasetTrainingFileRequest,
+    ) -> dict[str, Any]:
+        serialized = serialize_model(payload)
+        try:
+            method = normalize_training_method(serialized.get("method"))
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+        try:
+            created_file, record_count = store.export_training_file(
+                dataset_id,
+                method_type=str(method["type"]),
+            )
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=f"Dataset not found: {dataset_id}") from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+        if record_count <= 0:
+            raise HTTPException(status_code=400, detail="Dataset does not contain any exportable training samples.")
+
+        return {
+            "object": "dataset.training_file",
+            "dataset_id": dataset_id,
+            "method": method["type"],
+            "record_count": record_count,
+            "file": created_file,
         }
 
     @router.post("/{dataset_id}/samples")
@@ -347,6 +363,7 @@ def build_router(config_dir: Path | None = None) -> APIRouter:
             **sample,
             "messages": next_messages,
             "edits": next_edits,
+            "anchors": next_edits,
         }
 
         try:
@@ -436,6 +453,7 @@ def build_router(config_dir: Path | None = None) -> APIRouter:
             "sample": {
                 **sample,
                 "messages": next_messages,
+                "anchors": sample.get("anchors", sample.get("edits", [])),
             }
         }
 
@@ -474,12 +492,8 @@ def build_router(config_dir: Path | None = None) -> APIRouter:
 
     @router.patch("/{dataset_id}")
     def update_dataset(dataset_id: str, payload: UpdateDatasetRequest) -> dict[str, Any]:
-        serialized = serialize_model(payload)
-        training_file_id = serialized.get("training_file_id")
-        if training_file_id:
-            validate_training_file(str(training_file_id))
         try:
-            return store.update_dataset(dataset_id, serialized)
+            return store.update_dataset(dataset_id, serialize_model(payload))
         except FileNotFoundError as exc:
             raise HTTPException(status_code=404, detail=f"Dataset not found: {dataset_id}") from exc
 

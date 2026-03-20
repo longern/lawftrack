@@ -449,20 +449,11 @@ class ServerTests(unittest.TestCase):
     def test_datasets_api_persists_base_model_in_yaml_and_supports_update(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             client = self._create_client(temp_dir)
-            created_file = client.post(
-                "/v1/files",
-                data={"purpose": "fine-tune"},
-                files={
-                    "file": ("train.jsonl", b'{"messages": []}\n', "application/jsonl")
-                },
-            ).json()
-
             create_response = client.post(
                 "/api/datasets",
                 json={
                     "name": "civil-cases",
                     "base_model": "Qwen/Qwen2.5-7B-Instruct",
-                    "training_file_id": created_file["id"],
                 },
             )
 
@@ -470,8 +461,8 @@ class ServerTests(unittest.TestCase):
             created_dataset = create_response.json()
             self.assertEqual(created_dataset["name"], "civil-cases")
             self.assertEqual(created_dataset["base_model"], "Qwen/Qwen2.5-7B-Instruct")
-            self.assertEqual(created_dataset["training_file_id"], created_file["id"])
-            self.assertEqual(created_dataset["training_filename"], "train.jsonl")
+            self.assertNotIn("training_file_id", created_dataset)
+            self.assertNotIn("training_filename", created_dataset)
 
             dataset_yaml_path = (
                 Path(temp_dir)
@@ -515,14 +506,14 @@ class ServerTests(unittest.TestCase):
             yaml_dataset = yaml_response.json()
             self.assertEqual(yaml_dataset["name"], "imported-yaml")
             self.assertEqual(yaml_dataset["base_model"], "Qwen/Qwen2.5-7B-Instruct")
-            self.assertIsNone(yaml_dataset["training_file_id"])
+            self.assertNotIn("training_file_id", yaml_dataset)
 
             jsonl_response = client.post(
                 "/api/datasets/import",
                 files={
                     "file": (
                         "train.jsonl",
-                        b'{"messages": []}\n',
+                        b'{"messages":[{"role":"user","content":"hi"},{"role":"assistant","content":"hello"}],"anchors":[{"message_index":1,"token_index":0,"replacement_token":"hello"}]}\n',
                         "application/jsonl",
                     )
                 },
@@ -531,16 +522,231 @@ class ServerTests(unittest.TestCase):
             jsonl_dataset = jsonl_response.json()
             self.assertEqual(jsonl_dataset["name"], "train")
             self.assertIsNone(jsonl_dataset["base_model"])
-            self.assertIsNotNone(jsonl_dataset["training_file_id"])
-            self.assertEqual(jsonl_dataset["training_filename"], "train.jsonl")
+            self.assertNotIn("training_file_id", jsonl_dataset)
+            self.assertNotIn("training_filename", jsonl_dataset)
             self.assertEqual(jsonl_dataset["sample_count"], 1)
+            samples_response = client.get(f"/api/datasets/{jsonl_dataset['id']}/samples")
+            self.assertEqual(samples_response.status_code, 200)
+            imported_sample = samples_response.json()["data"][0]
+            self.assertEqual(imported_sample["anchors"][0]["message_index"], 1)
+            self.assertEqual(imported_sample["anchors"][0]["token_index"], 0)
+            self.assertEqual(imported_sample["anchors"][0]["replacement_token"], "hello")
+
+    def test_datasets_api_imports_prompt_completion_anchor_schema(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            client = self._create_client(temp_dir)
+
+            response = client.post(
+                "/api/datasets/import",
+                files={
+                    "file": (
+                        "train.jsonl",
+                        (
+                            b'{"prompt":[{"role":"user","content":"\xe4\xbd\xa0\xe5\xa5\xbd"}],"completion":[{"role":"assistant","content":"\xe6\x82\xa8\xe5\xa5\xbd"}],"anchors":[{"token_index":0,"replacement_token":"\xe6\x82\xa8\xe5\xa5\xbd"}]}\n'
+                        ),
+                        "application/jsonl",
+                    )
+                },
+            )
+            self.assertEqual(response.status_code, 200)
+            dataset = response.json()
+
+            samples_response = client.get(f"/api/datasets/{dataset['id']}/samples")
+            self.assertEqual(samples_response.status_code, 200)
+            sample = samples_response.json()["data"][0]
+            self.assertEqual(sample["messages"][0]["role"], "user")
+            self.assertEqual(sample["messages"][1]["role"], "assistant")
+            self.assertEqual(sample["messages"][1]["content"], "您好")
+            self.assertEqual(sample["anchors"][0]["token_index"], 0)
+            self.assertEqual(sample["anchors"][0]["replacement_token"], "您好")
+
+    def test_dataset_export_training_file_builds_method_specific_jsonl(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            client = self._create_client(temp_dir)
+            created_dataset = client.post(
+                "/api/datasets",
+                json={"name": "exportable", "base_model": "Qwen/Qwen2.5-7B-Instruct"},
+            ).json()
+
+            client.post(
+                f"/api/datasets/{created_dataset['id']}/samples",
+                json={
+                    "title": "多轮样本",
+                    "messages": [
+                        {"role": "user", "content": "问题一"},
+                        {"role": "assistant", "content": "回答一"},
+                        {"role": "user", "content": "问题二"},
+                        {"role": "assistant", "content": "回答二"},
+                    ],
+                    "anchors": [
+                        {
+                            "message_index": 1,
+                            "token_index": 0,
+                            "replacement_token": "改写一",
+                        },
+                        {
+                            "message_index": 3,
+                            "token_index": 1,
+                            "replacement_token": "改写二",
+                        },
+                    ],
+                },
+            )
+
+            sft_response = client.post(
+                f"/api/datasets/{created_dataset['id']}/training_file",
+                json={"method": {"type": "sft"}},
+            )
+            self.assertEqual(sft_response.status_code, 200)
+            sft_export = sft_response.json()
+            self.assertEqual(sft_export["method"], "sft")
+            self.assertEqual(sft_export["record_count"], 1)
+            sft_content = client.get(
+                f"/v1/files/{sft_export['file']['id']}/content"
+            ).content.decode("utf-8")
+            self.assertEqual(len([line for line in sft_content.splitlines() if line.strip()]), 1)
+            sft_record = json.loads(sft_content.splitlines()[0])
+            self.assertIn("messages", sft_record)
+            self.assertNotIn("anchors", sft_record)
+
+            lawf_response = client.post(
+                f"/api/datasets/{created_dataset['id']}/training_file",
+                json={"method": {"type": "lawf"}},
+            )
+            self.assertEqual(lawf_response.status_code, 200)
+            lawf_export = lawf_response.json()
+            self.assertEqual(lawf_export["method"], "lawf")
+            self.assertEqual(lawf_export["record_count"], 2)
+            lawf_content = client.get(
+                f"/v1/files/{lawf_export['file']['id']}/content"
+            ).content.decode("utf-8")
+            lawf_records = [
+                json.loads(line)
+                for line in lawf_content.splitlines()
+                if line.strip()
+            ]
+            self.assertEqual(len(lawf_records), 2)
+            self.assertEqual(lawf_records[0]["completion"][0]["content"], "回答一")
+            self.assertEqual(lawf_records[0]["anchors"][0]["token_index"], 0)
+            self.assertEqual(lawf_records[1]["completion"][0]["content"], "回答二")
+            self.assertEqual(lawf_records[1]["anchors"][0]["token_index"], 1)
+
+    def test_exported_dataset_file_can_be_used_for_fine_tuning_job(self) -> None:
+        sys.path.insert(0, str(ROOT / "src"))
+        try:
+            import lawftune.api.fine_tuning_jobs as jobs_module
+        finally:
+            sys.path.pop(0)
+
+        class DummyPopen:
+            def __init__(self, *args, **kwargs) -> None:
+                self.pid = 5252
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with mock.patch.object(jobs_module.subprocess, "Popen", DummyPopen):
+                client = self._create_client(temp_dir)
+                created_dataset = client.post(
+                    "/api/datasets",
+                    json={"name": "job-source", "base_model": "Qwen/Qwen2.5-7B-Instruct"},
+                ).json()
+                client.post(
+                    f"/api/datasets/{created_dataset['id']}/samples",
+                    json={
+                        "messages": [
+                            {"role": "user", "content": "你好"},
+                            {"role": "assistant", "content": "您好"},
+                        ],
+                    },
+                )
+
+                export_response = client.post(
+                    f"/api/datasets/{created_dataset['id']}/training_file",
+                    json={"method": {"type": "lawf"}},
+                )
+                self.assertEqual(export_response.status_code, 200)
+                exported_file = export_response.json()["file"]
+
+                job_response = client.post(
+                    "/v1/fine_tuning/jobs",
+                    json={
+                        "model": "Qwen/Qwen2.5-7B-Instruct",
+                        "training_file": exported_file["id"],
+                        "method": {"type": "lawf"},
+                    },
+                )
+
+            self.assertEqual(job_response.status_code, 200)
+            self.assertEqual(job_response.json()["training_file"], exported_file["id"])
+            self.assertEqual(job_response.json()["method"]["type"], "lawf")
+
+    def test_fine_tuning_job_events_checkpoints_and_logs_are_available(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            client = self._create_client(temp_dir)
+            job_dir = Path(temp_dir) / "fine_tuning" / "jobs" / "ftjob-demo"
+            job_dir.mkdir(parents=True, exist_ok=True)
+            (job_dir / "job.json").write_text(
+                json.dumps(
+                    {
+                        "id": "ftjob-demo",
+                        "object": "fine_tuning.job",
+                        "created_at": 1000,
+                        "error": None,
+                        "estimated_finish": None,
+                        "fine_tuned_model": "demo-adapter",
+                        "finished_at": None,
+                        "hyperparameters": {},
+                        "integrations": [],
+                        "metadata": {},
+                        "method": {"type": "lawf"},
+                        "model": "Qwen/Qwen2.5-7B-Instruct",
+                        "organization_id": "org-lawftune",
+                        "result_files": [],
+                        "seed": None,
+                        "status": "running",
+                        "trained_tokens": None,
+                        "training_file": "file-training",
+                        "validation_file": None,
+                        "suffix": None,
+                        "lora_adapter": None,
+                        "process": {"pid": None, "started_at": 1000, "exit_code": None},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (job_dir / "stdout.log").write_text(
+                "{'loss': 1.25, 'learning_rate': 5e-05, 'epoch': 1.0}\nstep: 2 loss: 0.92\ntraining finished\n",
+                encoding="utf-8",
+            )
+            (job_dir / "stderr.log").write_text(
+                "warning: fallback tokenizer path\n",
+                encoding="utf-8",
+            )
+
+            events_response = client.get("/api/fine_tuning/jobs/ftjob-demo/events")
+            self.assertEqual(events_response.status_code, 200)
+            events = events_response.json()["data"]
+            self.assertEqual(events[0]["object"], "fine_tuning.job.event")
+            metrics_event = next(
+                event for event in events if event["data"]["type"] == "metrics"
+            )
+            self.assertEqual(metrics_event["data"]["metrics"]["train_loss"], 1.25)
+
+            checkpoints_response = client.get("/api/fine_tuning/jobs/ftjob-demo/checkpoints")
+            self.assertEqual(checkpoints_response.status_code, 200)
+            checkpoints = checkpoints_response.json()["data"]
+            self.assertEqual(len(checkpoints), 2)
+            self.assertEqual(checkpoints[0]["metrics"]["train_loss"], 1.25)
+
+            logs_response = client.get("/api/fine_tuning/jobs/ftjob-demo/logs")
+            self.assertEqual(logs_response.status_code, 200)
+            self.assertIn("training finished", logs_response.json()["stdout"])
+            self.assertIn("fallback tokenizer", logs_response.json()["stderr"])
 
     def test_datasets_api_lists_and_updates_dataset_samples(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             client = self._create_client(temp_dir)
-            created_file = client.post(
-                "/v1/files",
-                data={"purpose": "fine-tune"},
+            created_dataset = client.post(
+                "/api/datasets/import",
                 files={
                     "file": (
                         "train.jsonl",
@@ -551,15 +757,10 @@ class ServerTests(unittest.TestCase):
                     )
                 },
             ).json()
-
-            created_dataset = client.post(
-                "/api/datasets",
-                json={
-                    "name": "chat-train",
-                    "base_model": "Qwen/Qwen2.5-7B-Instruct",
-                    "training_file_id": created_file["id"],
-                },
-            ).json()
+            client.patch(
+                f"/api/datasets/{created_dataset['id']}",
+                json={"base_model": "Qwen/Qwen2.5-7B-Instruct"},
+            )
 
             samples_response = client.get(f"/api/datasets/{created_dataset['id']}/samples")
             self.assertEqual(samples_response.status_code, 200)
@@ -674,7 +875,6 @@ class ServerTests(unittest.TestCase):
                 json={
                     "name": "manual-samples-v2",
                     "base_model": "/models/local-qwen",
-                    "training_file_id": None,
                 },
             )
             self.assertEqual(update_response.status_code, 200)
@@ -686,12 +886,11 @@ class ServerTests(unittest.TestCase):
             self.assertEqual(samples[0]["id"], created_sample["id"])
             self.assertEqual(samples[0]["messages"][1]["content"], "回答")
 
-    def test_dataset_metadata_update_does_not_reset_samples_when_training_file_is_unchanged(self) -> None:
+    def test_dataset_metadata_update_does_not_reset_existing_samples(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             client = self._create_client(temp_dir)
-            created_file = client.post(
-                "/v1/files",
-                data={"purpose": "fine-tune"},
+            created_dataset = client.post(
+                "/api/datasets/import",
                 files={
                     "file": (
                         "train.jsonl",
@@ -702,15 +901,10 @@ class ServerTests(unittest.TestCase):
                     )
                 },
             ).json()
-
-            created_dataset = client.post(
-                "/api/datasets",
-                json={
-                    "name": "chat-train",
-                    "base_model": "Qwen/Qwen2.5-7B-Instruct",
-                    "training_file_id": created_file["id"],
-                },
-            ).json()
+            client.patch(
+                f"/api/datasets/{created_dataset['id']}",
+                json={"base_model": "Qwen/Qwen2.5-7B-Instruct"},
+            )
 
             sample = client.get(f"/api/datasets/{created_dataset['id']}/samples").json()["data"][0]
             client.put(
@@ -730,7 +924,6 @@ class ServerTests(unittest.TestCase):
                 f"/api/datasets/{created_dataset['id']}",
                 json={
                     "base_model": "/models/local-qwen",
-                    "training_file_id": created_file["id"],
                 },
             )
             self.assertEqual(update_response.status_code, 200)
@@ -816,9 +1009,8 @@ class ServerTests(unittest.TestCase):
             )
 
             client = self._create_client(temp_dir)
-            created_file = client.post(
-                "/v1/files",
-                data={"purpose": "fine-tune"},
+            created_dataset = client.post(
+                "/api/datasets/import",
                 files={
                     "file": (
                         "train.jsonl",
@@ -827,14 +1019,10 @@ class ServerTests(unittest.TestCase):
                     )
                 },
             ).json()
-            created_dataset = client.post(
-                "/api/datasets",
-                json={
-                    "name": "token-edit",
-                    "base_model": "Qwen/Qwen2.5-7B-Instruct",
-                    "training_file_id": created_file["id"],
-                },
-            ).json()
+            client.patch(
+                f"/api/datasets/{created_dataset['id']}",
+                json={"base_model": "Qwen/Qwen2.5-7B-Instruct"},
+            )
             sample = client.get(f"/api/datasets/{created_dataset['id']}/samples").json()["data"][0]
 
             with mock.patch.object(datasets_api_module, "tokenize_text", side_effect=lambda model, text: [

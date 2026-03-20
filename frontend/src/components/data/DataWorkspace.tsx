@@ -15,7 +15,6 @@ import type {
   DatasetSample,
   DatasetSampleTokenization,
   DataSummaryItem,
-  UploadedFile,
 } from "../../types/app";
 import { WorkspaceShell } from "./DataWorkspaceShell";
 import type { ContinuationDraft, DatasetDraft, TokenCandidate, TokenSelection } from "./dataWorkspaceTypes";
@@ -55,7 +54,6 @@ function decodeCandidateToken(token?: string, bytes?: number[]): string {
 
 function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
   const [datasets, setDatasets] = useState<DatasetRecord[]>([]);
-  const [files, setFiles] = useState<UploadedFile[]>([]);
   const [datasetTabs, setDatasetTabs] = useState<DatasetRecord[]>([]);
   const [activeDatasetId, setActiveDatasetId] = useState<string | null>(null);
   const [recentDatasetIds, setRecentDatasetIds] = useState<string[]>([]);
@@ -79,7 +77,7 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
   const [mobileExplorerOpen, setMobileExplorerOpen] = useState(false);
   const [mobileSamplesOpen, setMobileSamplesOpen] = useState(false);
   const [mobileMetadataOpen, setMobileMetadataOpen] = useState(false);
-  const [desktopExplorerCollapsed, setDesktopExplorerCollapsed] = useState(false);
+  const [desktopExplorerCollapsed, setDesktopExplorerCollapsed] = useState(true);
   const [datasetToDelete, setDatasetToDelete] = useState<DatasetRecord | null>(null);
   const [sampleToDelete, setSampleToDelete] = useState<DatasetSample | null>(null);
   const [modelOptions, setModelOptions] = useState<string[]>([]);
@@ -90,8 +88,8 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
   const untitledCountRef = useRef(1);
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const tokenCandidatesRequestRef = useRef(0);
+  const samplesRef = useRef<DatasetSample[]>([]);
 
-  const fineTuneFiles = useMemo(() => files.filter((file) => file.purpose === "fine-tune"), [files]);
   const activeDataset = datasetTabs.find((tab) => tab.id === activeDatasetId) ?? null;
   const recentDatasets = useMemo(
     () =>
@@ -129,6 +127,10 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
   );
 
   useEffect(() => {
+    samplesRef.current = samples;
+  }, [samples]);
+
+  useEffect(() => {
     void refreshWorkspace();
   }, []);
 
@@ -153,7 +155,6 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
     setDraft({
       name: activeDataset.name,
       base_model: activeDataset.base_model ?? "Qwen/Qwen2.5-7B-Instruct",
-      training_file_id: activeDataset.training_file_id ?? "",
     });
     void loadSamples(activeDataset.id);
   }, [activeDataset]);
@@ -174,21 +175,26 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
   }, [selectedSample, selectedSampleId]);
 
   useEffect(() => {
-    if (!activeDataset || !selectedSample || generatingAssistant) {
+    if (!activeDataset || !selectedSample || generatingAssistant || dirtySampleIds.includes(selectedSample.id)) {
       return;
     }
     void ensureSampleTokenization(selectedSample);
-  }, [activeDataset, selectedSample, draft?.base_model, generatingAssistant]);
+  }, [activeDataset, selectedSample, draft?.base_model, generatingAssistant, dirtySampleIds]);
+
+  function buildSampleSignature(sample: DatasetSample) {
+    return JSON.stringify(
+      sample.messages.map((message) => ({
+        role: message.role,
+        content: message.content,
+      })),
+    );
+  }
 
   async function refreshWorkspace() {
     setLoading(true);
     try {
-      const [datasetsPayload, filesPayload] = await Promise.all([
-        fetchJson<ApiListResponse<DatasetRecord>>("/api/datasets"),
-        fetchJson<ApiListResponse<UploadedFile>>("/api/files"),
-      ]);
+      const datasetsPayload = await fetchJson<ApiListResponse<DatasetRecord>>("/api/datasets");
       setDatasets(datasetsPayload.data);
-      setFiles(filesPayload.data);
       setError("");
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "加载数据工作区失败");
@@ -316,7 +322,6 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
         body: JSON.stringify({
           name: draft.name.trim() || activeDataset.name,
           base_model: draft.base_model.trim(),
-          training_file_id: draft.training_file_id || null,
         }),
       });
       setDatasets((current) => current.map((item) => (item.id === updated.id ? updated : item)));
@@ -446,12 +451,17 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
     if (cached) {
       return cached;
     }
+    const signature = buildSampleSignature(sample);
     try {
       const tokenization = await fetchJson<DatasetSampleTokenization>(`/api/datasets/${activeDataset.id}/samples/${sample.id}/tokenize`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ model }),
       });
+      const latestSample = samplesRef.current.find((item) => item.id === sample.id);
+      if (!latestSample || buildSampleSignature(latestSample) !== signature) {
+        return null;
+      }
       setSampleTokenizations((current) => ({ ...current, [sample.id]: tokenization }));
       return tokenization;
     } catch (tokenizeError) {
@@ -915,6 +925,26 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
     }
   }
 
+  async function refreshPersistedSampleTokenization(sample: DatasetSample) {
+    const model = draft?.base_model.trim() || activeDataset?.base_model || "";
+    if (!activeDataset || !model) {
+      return;
+    }
+    try {
+      const tokenization = await fetchJson<DatasetSampleTokenization>(
+        `/api/datasets/${activeDataset.id}/samples/${sample.id}/tokenize`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ model }),
+        },
+      );
+      setSampleTokenizations((current) => ({ ...current, [sample.id]: tokenization }));
+    } catch (tokenizeError) {
+      setError(tokenizeError instanceof Error ? tokenizeError.message : "更新 token 失败");
+    }
+  }
+
   async function persistSample(sample: DatasetSample): Promise<DatasetSample> {
     if (!activeDataset) {
       throw new Error("当前没有打开的数据集。");
@@ -930,6 +960,7 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
       }),
     });
     setDirtySampleIds((current) => current.filter((sampleId) => sampleId !== updated.id));
+    await refreshPersistedSampleTokenization(updated);
     return updated;
   }
 
@@ -953,7 +984,7 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
         datasetTabs={datasetTabs}
         draft={draft}
         error={error}
-        fineTuneFiles={fineTuneFiles}
+        onClearError={() => setError("")}
         importInputRef={importInputRef}
         isMobile={isMobile}
         loading={loading}

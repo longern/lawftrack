@@ -115,6 +115,7 @@ function pushYamlStringField(lines: string[], level: number, key: string, value:
 
 export function serializeSampleAsYaml(sample: DatasetSample): string {
   const lines: string[] = [];
+  const anchors = sample.anchors ?? sample.edits;
 
   lines.push(`id: ${formatYamlScalar(sample.id)}`);
   lines.push(`title: ${formatYamlScalar(sample.title)}`);
@@ -130,19 +131,18 @@ export function serializeSampleAsYaml(sample: DatasetSample): string {
     pushYamlStringField(lines, 2, "content", message.content);
   }
 
-  lines.push("edits:");
-  if (sample.edits.length === 0) {
+  lines.push("anchors:");
+  if (anchors.length === 0) {
     lines.push(`${indent(1)}[]`);
   } else {
-    for (const edit of sample.edits) {
-      lines.push(`${indent(1)}- message_index: ${formatYamlScalar(edit.message_index)}`);
-      lines.push(`${indent(2)}token_index: ${formatYamlScalar(edit.token_index)}`);
-      pushYamlStringField(lines, 2, "original_token", edit.original_token);
-      pushYamlStringField(lines, 2, "replacement_token", edit.replacement_token);
+    for (const anchor of anchors) {
+      lines.push(`${indent(1)}- message_index: ${formatYamlScalar(anchor.message_index)}`);
+      lines.push(`${indent(2)}token_index: ${formatYamlScalar(anchor.token_index)}`);
+      pushYamlStringField(lines, 2, "replacement_token", anchor.replacement_token);
       lines.push(
-        `${indent(2)}regenerated_from_token_index: ${formatYamlScalar(edit.regenerated_from_token_index)}`,
+        `${indent(2)}regenerated_from_token_index: ${formatYamlScalar(anchor.regenerated_from_token_index)}`,
       );
-      lines.push(`${indent(2)}created_at: ${formatYamlScalar(edit.created_at)}`);
+      lines.push(`${indent(2)}created_at: ${formatYamlScalar(anchor.created_at)}`);
     }
   }
 

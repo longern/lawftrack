@@ -233,7 +233,7 @@ function App() {
               >
                 {error ? (
                   <Box sx={{ p: 2, flexShrink: 0 }}>
-                    <ErrorCard message={error} />
+                    <ErrorCard message={error} onClose={() => setError("")} />
                   </Box>
                 ) : null}
                 <Box sx={{ flex: 1, minHeight: 0 }}>
@@ -243,7 +243,7 @@ function App() {
             ) : (
               <Container maxWidth="xl" sx={{ py: { xs: 2, md: 4 } }}>
                 <Box sx={{ display: "grid", gap: 24 }}>
-                  {error ? <ErrorCard message={error} /> : null}
+                  {error ? <ErrorCard message={error} onClose={() => setError("")} /> : null}
                   {activeView === "training" ? <TrainingSection /> : null}
                   {activeView === "service" ? (
                     <ServiceSection commands={SERVICE_COMMANDS} records={serviceRecords} />

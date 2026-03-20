@@ -62,9 +62,6 @@ export function TokenActionPanel({
           <Stack spacing={1.5}>
             {selectedToken ? (
               <>
-                <Typography variant="caption" sx={{ color: "text.secondary" }}>
-                  当前样本: {selectedSample?.title}
-                </Typography>
                 <Typography variant="body2" sx={{ color: "#fca5a5" }}>
                   原 token: {selectedToken.originalToken}
                 </Typography>

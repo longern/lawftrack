@@ -3,7 +3,6 @@ import type { DatasetSample, DatasetSampleTokenization } from "../../types/app";
 export interface DatasetDraft {
   name: string;
   base_model: string;
-  training_file_id: string;
 }
 
 export interface TokenSelection {

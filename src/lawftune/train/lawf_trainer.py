@@ -18,30 +18,89 @@ def _get_anchor_token_index(anchor: dict[str, Any]) -> int | None:
     return None
 
 
+def _normalize_message_list(payload: Any) -> list[dict[str, str]]:
+    if not isinstance(payload, list):
+        return []
+
+    messages: list[dict[str, str]] = []
+    for item in payload:
+        if not isinstance(item, dict):
+            continue
+        role = str(item.get("role") or "").strip()
+        if not role:
+            continue
+        messages.append({"role": role, "content": str(item.get("content") or "")})
+    return messages
+
+
+def _resolve_prompt_completion_row(
+    row: dict[str, Any],
+) -> tuple[list[dict[str, str]] | str, list[dict[str, str]] | str, list[dict[str, Any]], Any]:
+    tools = row.get("tools")
+    prompt = row.get("prompt")
+    completion = row.get("completion")
+    anchors = row.get("anchors") or []
+
+    if prompt is not None and completion is not None:
+        return prompt, completion, anchors, tools
+
+    messages = _normalize_message_list(row.get("messages"))
+    if not messages:
+        raise ValueError("LAwF record must include messages or prompt/completion.")
+
+    raw_completion_index = row.get("completion_message_index")
+    completion_index = raw_completion_index if isinstance(raw_completion_index, int) else None
+    if completion_index is None or not (0 <= completion_index < len(messages)):
+        completion_index = next(
+            (
+                index
+                for index in range(len(messages) - 1, -1, -1)
+                if messages[index].get("role") == "assistant"
+            ),
+            None,
+        )
+    if completion_index is None:
+        raise ValueError("LAwF messages record must contain at least one assistant message.")
+
+    prompt_messages = messages[:completion_index]
+    completion_messages = [messages[completion_index]]
+    normalized_anchors = [
+        dict(anchor)
+        for anchor in anchors
+        if isinstance(anchor, dict)
+        and (
+            anchor.get("message_index") is None
+            or int(anchor.get("message_index", -1)) == completion_index
+        )
+    ]
+    for anchor in normalized_anchors:
+        anchor.pop("message_index", None)
+    return prompt_messages, completion_messages, normalized_anchors, tools
+
+
 class LAwFDataCollator:
     def __init__(self, model, tokenizer):
         self.model = model
         self.tokenizer = tokenizer
 
     def tokenize_row(self, row):
-        tools = row.get("tools")
-
-        is_conversational_format = isinstance(row["prompt"], list)
+        prompt, completion, anchor_records, tools = _resolve_prompt_completion_row(row)
+        is_conversational_format = isinstance(prompt, list)
         if is_conversational_format:
             prompt = self.tokenizer.apply_chat_template(
-                row["prompt"],
+                prompt,
                 tools=tools,
                 add_generation_prompt=True,
                 tokenize=False,
             )
             prompt_completion = self.tokenizer.apply_chat_template(
-                row["prompt"] + row["completion"],
+                prompt + completion,
                 tools=tools,
                 tokenize=False,
             )
         else:
-            prompt = row["prompt"]
-            prompt_completion = row["prompt"] + row["completion"]
+            prompt = str(prompt)
+            prompt_completion = prompt + str(completion)
 
         prompt_ids = (
             self.tokenizer(prompt, return_tensors="pt")
@@ -57,7 +116,6 @@ class LAwFDataCollator:
 
         anchors = torch.zeros_like(completion_ids)
         anchor_confidence = torch.zeros_like(completion_ids, dtype=torch.float)
-        anchor_records = row.get("anchors") or []
 
         token_indices = torch.tensor(
             [
@@ -184,6 +242,8 @@ class LAwFTrainer(SFTTrainer):
             self._signature_columns = [
                 "prompt",
                 "completion",
+                "messages",
+                "completion_message_index",
                 "tools",
                 "teacher_logits",
                 "anchors",

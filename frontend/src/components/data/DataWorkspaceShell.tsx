@@ -32,9 +32,16 @@ import {
   SampleListPane,
 } from "./DataWorkspacePanels";
 import { MessageFlowPanel } from "./DataWorkspaceMessageFlow";
-import { TokenActionMiniPanel, TokenActionPanel } from "./DataWorkspaceTokenPanels";
+import {
+  TokenActionMiniPanel,
+  TokenActionPanel,
+} from "./DataWorkspaceTokenPanels";
 import { panelCardSx } from "./dataWorkspaceStyles";
-import type { DatasetDraft, TokenCandidate, TokenSelection } from "./dataWorkspaceTypes";
+import type {
+  DatasetDraft,
+  TokenCandidate,
+  TokenSelection,
+} from "./dataWorkspaceTypes";
 import { getWorkspaceColors } from "./dataWorkspaceTheme";
 
 export interface WorkspaceShellProps {
@@ -96,7 +103,9 @@ export interface WorkspaceShellProps {
   onClearSelectedToken: () => void;
   onSelectAdjacentToken: (direction: -1 | 1) => void;
   onUpdateSelectedSampleTitle: (title: string) => void;
-  onUpdateSelectedSampleMessages: (updater: (messages: DatasetMessage[]) => DatasetMessage[]) => void;
+  onUpdateSelectedSampleMessages: (
+    updater: (messages: DatasetMessage[]) => DatasetMessage[],
+  ) => void;
   hasNextToken: boolean;
   hasPrevToken: boolean;
   onSelectSample: (sampleId: string | null) => void;
@@ -210,13 +219,21 @@ export function WorkspaceShell({
 
   if (isMobile) {
     return (
-      <Box sx={{ height: "100%", minHeight: 0, display: "flex", flexDirection: "column" }}>
+      <Box
+        sx={{
+          height: "100%",
+          minHeight: 0,
+          display: "flex",
+          flexDirection: "column",
+        }}
+      >
         <Box
           sx={{
             px: 1.5,
             py: 1,
             bgcolor: (theme) => getWorkspaceColors(theme).panelBg,
-            borderBottom: (theme) => `1px solid ${getWorkspaceColors(theme).border}`,
+            borderBottom: (theme) =>
+              `1px solid ${getWorkspaceColors(theme).border}`,
             display: "flex",
             gap: 1,
             flexShrink: 0,
@@ -264,7 +281,8 @@ export function WorkspaceShell({
             sx={{
               p: 1.5,
               bgcolor: (theme) => getWorkspaceColors(theme).panelBg,
-              borderBottom: (theme) => `1px solid ${getWorkspaceColors(theme).border}`,
+              borderBottom: (theme) =>
+                `1px solid ${getWorkspaceColors(theme).border}`,
             }}
           >
             <Alert severity="error" onClose={onClearError}>
@@ -385,12 +403,20 @@ export function WorkspaceShell({
             },
           }}
         >
-          <Box sx={{ height: "100%", minHeight: 0, display: "flex", flexDirection: "column" }}>
+          <Box
+            sx={{
+              height: "100%",
+              minHeight: 0,
+              display: "flex",
+              flexDirection: "column",
+            }}
+          >
             <Box
               sx={{
                 px: 1,
                 py: 1,
-                borderBottom: (theme) => `1px solid ${getWorkspaceColors(theme).border}`,
+                borderBottom: (theme) =>
+                  `1px solid ${getWorkspaceColors(theme).border}`,
                 display: "grid",
                 gridTemplateColumns: "40px minmax(0, 1fr) 40px",
                 alignItems: "center",
@@ -406,8 +432,18 @@ export function WorkspaceShell({
               >
                 <NavigateBeforeRoundedIcon />
               </IconButton>
-              <Typography variant="body2" sx={{ textAlign: "center", color: "text.primary", fontWeight: 700 }} noWrap>
-                {selectedToken?.currentToken || selectedToken?.originalToken || "Token"}
+              <Typography
+                variant="body2"
+                sx={{
+                  textAlign: "center",
+                  color: "text.primary",
+                  fontWeight: 700,
+                }}
+                noWrap
+              >
+                {selectedToken?.currentToken ||
+                  selectedToken?.originalToken ||
+                  "Token"}
               </Typography>
               <IconButton
                 size="small"
@@ -418,7 +454,15 @@ export function WorkspaceShell({
                 <NavigateNextRoundedIcon />
               </IconButton>
             </Box>
-            <Box sx={{ flex: 1, minHeight: 0, overflow: "auto", WebkitOverflowScrolling: "touch", p: 1.5 }}>
+            <Box
+              sx={{
+                flex: 1,
+                minHeight: 0,
+                overflow: "auto",
+                WebkitOverflowScrolling: "touch",
+                p: 1.5,
+              }}
+            >
               <TokenActionMiniPanel
                 generating={generating}
                 hasContinuationDraft={hasContinuationDraft}
@@ -482,7 +526,9 @@ export function WorkspaceShell({
     <Box sx={{ display: "flex", height: "100%", minHeight: 0 }}>
       <ActivityRail
         explorerCollapsed={desktopExplorerCollapsed}
-        onToggleExplorer={() => onSetDesktopExplorerCollapsed(!desktopExplorerCollapsed)}
+        onToggleExplorer={() =>
+          onSetDesktopExplorerCollapsed(!desktopExplorerCollapsed)
+        }
       />
       <Box
         sx={{
@@ -509,10 +555,20 @@ export function WorkspaceShell({
           onImportDataset={onImportDataset}
           onOpenDataset={onOpenDataset}
           onOpenNextDataset={onOpenNextDataset}
-          onToggleCollapse={() => onSetDesktopExplorerCollapsed(!desktopExplorerCollapsed)}
+          onToggleCollapse={() =>
+            onSetDesktopExplorerCollapsed(!desktopExplorerCollapsed)
+          }
         />
       </Box>
-      <Box sx={{ flex: 1, minWidth: 0, minHeight: 0, display: "flex", flexDirection: "column" }}>
+      <Box
+        sx={{
+          flex: 1,
+          minWidth: 0,
+          minHeight: 0,
+          display: "flex",
+          flexDirection: "column",
+        }}
+      >
         <EditorTabs
           activeDatasetId={activeDataset?.id ?? null}
           datasetTabs={datasetTabs}
@@ -526,7 +582,8 @@ export function WorkspaceShell({
             sx={{
               p: 1.5,
               bgcolor: (theme) => getWorkspaceColors(theme).panelBg,
-              borderBottom: (theme) => `1px solid ${getWorkspaceColors(theme).border}`,
+              borderBottom: (theme) =>
+                `1px solid ${getWorkspaceColors(theme).border}`,
             }}
           >
             <Alert severity="error" onClose={onClearError}>
@@ -552,7 +609,14 @@ export function WorkspaceShell({
             />
           </Box>
         ) : (
-          <Box sx={{ flex: 1, minHeight: 0, display: "grid", gridTemplateColumns: "260px minmax(0, 1fr) 360px" }}>
+          <Box
+            sx={{
+              flex: 1,
+              minHeight: 0,
+              display: "grid",
+              gridTemplateColumns: "260px minmax(0, 1fr) 360px",
+            }}
+          >
             <SampleListPane
               dirtySampleIds={dirtySampleIds}
               metadataSection={metadataSection}

@@ -42,8 +42,7 @@ const ZH_MESSAGES: Record<string, string> = {
   "Run gateway in foreground": "前台启动网关",
   "Check gateway status": "查看服务状态",
   "Start gateway service": "启动服务",
-  "Gateway data could not be loaded":
-    "网关数据加载失败",
+  "Gateway data could not be loaded": "网关数据加载失败",
   "Service details": "服务详情",
   "Common commands": "常用命令",
   Device: "设备",
@@ -58,7 +57,8 @@ const ZH_MESSAGES: Record<string, string> = {
   "GPU utilization": "GPU 利用率",
   Temperature: "温度",
   "No GPU detected": "未检测到 GPU",
-  "No NVIDIA GPU metrics available on the server yet.": "服务端暂时没有可用的 NVIDIA GPU 指标。",
+  "No NVIDIA GPU metrics available on the server yet.":
+    "服务端暂时没有可用的 NVIDIA GPU 指标。",
   Language: "语言",
   Unknown: "未知",
   "CPU threads": "CPU 线程",
@@ -84,8 +84,7 @@ const ZH_MESSAGES: Record<string, string> = {
   "Open training queue": "查看训练队列",
   "Recent dataset": "最近数据集",
   "No activity yet": "暂无记录",
-  "No recently opened dataset":
-    "还没有最近打开的数据集",
+  "No recently opened dataset": "还没有最近打开的数据集",
   "Create or open a dataset to see its latest configuration and timestamp here.":
     "创建或打开一个数据集后，这里会显示最近的配置和更新时间。",
   "Recent training job": "最近训练任务",
@@ -109,12 +108,10 @@ const ZH_MESSAGES: Record<string, string> = {
   New: "新建",
   Import: "上传",
   Open: "打开",
-  "No datasets yet. Create one to get started.":
-    "还没有数据集，先新建一个。",
+  "No datasets yet. Create one to get started.": "还没有数据集，先新建一个。",
   items: "条",
   "Loading samples...": "加载样本中...",
-  "This dataset has no samples yet.":
-    "当前数据集没有样本。",
+  "This dataset has no samples yet.": "当前数据集没有样本。",
   "Dataset name": "数据集名称",
   "Annotation model / Base model": "标注模型 / Base Model",
   "Choose from the model list or enter a local model path directly.":
@@ -145,11 +142,9 @@ const ZH_MESSAGES: Record<string, string> = {
   "Failed to delete dataset": "删除数据集失败",
   "Failed to delete sample": "删除样本失败",
   "Failed to refresh token data": "刷新 token 信息失败",
-  "Open a dataset before saving samples.":
-    "保存样本前需要先打开一个数据集。",
+  "Open a dataset before saving samples.": "保存样本前需要先打开一个数据集。",
   "Failed to load models": "加载模型列表失败",
-  "Failed to generate assistant message":
-    "生成 assistant 消息失败",
+  "Failed to generate assistant message": "生成 assistant 消息失败",
   "Delete dataset": "删除数据集",
   "Delete sample": "删除样本",
   'Are you sure you want to delete dataset "{name}"? This will remove the dataset and all of its samples permanently.':
@@ -171,16 +166,18 @@ const ZH_MESSAGES: Record<string, string> = {
   "Create training job": "创建训练任务",
   "Training files": "训练文件库",
   "Uploading...": "上传中...",
-  "No training files yet. Upload a JSON/JSONL/CSV/Parquet file first.": "还没有训练文件。先上传一个 JSON/JSONL/CSV/Parquet 文件。",
+  "No training files yet. Upload a JSON/JSONL/CSV/Parquet file first.":
+    "还没有训练文件。先上传一个 JSON/JSONL/CSV/Parquet 文件。",
   "Use as training file": "作为训练集",
   "Use as validation file": "作为验证集",
   "Training queue": "训练任务队列",
-  "No training jobs yet. Click \"Create training job\" to get started.": "还没有训练任务。点击右上角“创建训练任务”开始。",
+  'No training jobs yet. Click "Create training job" to get started.':
+    "还没有训练任务。点击右上角“创建训练任务”开始。",
   "Job details": "任务详情",
   "Cancel job": "取消任务",
   "Select a training job to view details.": "选择一个训练任务查看详情。",
   "Basic info": "基础信息",
-  "Method": "方法",
+  Method: "方法",
   "File references": "文件引用",
   "Training file": "训练集文件",
   "Validation file": "验证集文件",
@@ -190,7 +187,7 @@ const ZH_MESSAGES: Record<string, string> = {
   "Fine-tuned model": "微调模型",
   "Training curve": "训练曲线",
   "Logs and events": "日志与事件",
-  "Events": "事件",
+  Events: "事件",
   "Raw logs": "原始日志",
   "No events.": "暂无事件。",
   "No raw logs.": "暂无原始日志。",
@@ -215,7 +212,7 @@ const ZH_MESSAGES: Record<string, string> = {
   "Add user message": "添加用户消息",
   "Add assistant message": "添加助手消息",
   "Line break token": "换行 token",
-  "Reasoning": "推理内容",
+  Reasoning: "推理内容",
   "Token rewrite": "Token 改写",
   "Original {target} token: {token}": "原 {target} token: {token}",
   "Replace with": "替换为",
@@ -225,10 +222,12 @@ const ZH_MESSAGES: Record<string, string> = {
   "Accept and save": "接受并保存",
   "Discard rewrite": "放弃改写",
   "Replace and continue": "替换并继续生成",
-  "Click any token in an assistant message to replace it and continue generation from that point.": "点击 assistant 消息中的任意 token 后，可将它替换为新 token，并让模型从该位置继续生成。",
-  "Click a token in an assistant message to start rewriting.": "点击 assistant 消息里的 token 开始改写。",
+  "Click any token in an assistant message to replace it and continue generation from that point.":
+    "点击 assistant 消息中的任意 token 后，可将它替换为新 token，并让模型从该位置继续生成。",
+  "Click a token in an assistant message to start rewriting.":
+    "点击 assistant 消息里的 token 开始改写。",
   "Original token: {token}": "原 token: {token}",
-  "Discard": "放弃",
+  Discard: "放弃",
   "Continue generation": "继续生成",
   "Just now": "刚刚",
 };
@@ -339,16 +338,12 @@ export function I18nProvider({ children }: PropsWithChildren) {
           return t("Just now");
         }
         if (diffMinutes < 60) {
-          return isZh
-            ? `${diffMinutes} 分钟前`
-            : `${diffMinutes} min ago`;
+          return isZh ? `${diffMinutes} 分钟前` : `${diffMinutes} min ago`;
         }
 
         const diffHours = Math.round(diffMinutes / 60);
         if (diffHours < 24) {
-          return isZh
-            ? `${diffHours} 小时前`
-            : `${diffHours} hr ago`;
+          return isZh ? `${diffHours} 小时前` : `${diffHours} hr ago`;
         }
 
         const diffDays = Math.round(diffHours / 24);

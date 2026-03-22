@@ -3,19 +3,31 @@ import type { Theme } from "@mui/material/styles";
 
 export const panelCardSx = {
   p: 2,
-  bgcolor: (theme: Theme) => (theme.palette.mode === "dark" ? "#0f172a" : theme.palette.background.paper),
+  bgcolor: (theme: Theme) =>
+    theme.palette.mode === "dark" ? "#0f172a" : theme.palette.background.paper,
   borderColor: (theme: Theme) => theme.palette.divider,
 };
 
 export const darkFieldSx = {
   "& .MuiOutlinedInput-root": {
     color: (theme: Theme) => theme.palette.text.primary,
-    bgcolor: (theme: Theme) => (theme.palette.mode === "dark" ? "#0f172a" : alpha(theme.palette.primary.main, 0.03)),
+    bgcolor: (theme: Theme) =>
+      theme.palette.mode === "dark"
+        ? "#0f172a"
+        : alpha(theme.palette.primary.main, 0.03),
     "& fieldset": {
-      borderColor: (theme: Theme) => alpha(theme.palette.text.secondary, theme.palette.mode === "dark" ? 0.24 : 0.18),
+      borderColor: (theme: Theme) =>
+        alpha(
+          theme.palette.text.secondary,
+          theme.palette.mode === "dark" ? 0.24 : 0.18,
+        ),
     },
     "&:hover fieldset": {
-      borderColor: (theme: Theme) => alpha(theme.palette.text.secondary, theme.palette.mode === "dark" ? 0.38 : 0.28),
+      borderColor: (theme: Theme) =>
+        alpha(
+          theme.palette.text.secondary,
+          theme.palette.mode === "dark" ? 0.38 : 0.28,
+        ),
     },
     "&.Mui-focused fieldset": {
       borderColor: (theme: Theme) => theme.palette.primary.main,

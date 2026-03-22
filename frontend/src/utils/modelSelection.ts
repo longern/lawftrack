@@ -30,13 +30,17 @@ export function listModelOptionIds(models: RemoteModelRecord[]): string[] {
   );
 }
 
-export function resolvePreferredBaseModel(models: RemoteModelRecord[]): string | null {
+export function resolvePreferredBaseModel(
+  models: RemoteModelRecord[],
+): string | null {
   const normalizedModels = models
     .map((model) => ({
       id: normalizeModelId(model.id),
       parent: normalizeModelId(model.parent),
     }))
-    .filter((model): model is { id: string; parent: string | null } => Boolean(model.id));
+    .filter((model): model is { id: string; parent: string | null } =>
+      Boolean(model.id),
+    );
 
   if (normalizedModels.length === 0) {
     return null;
@@ -61,7 +65,9 @@ export function resolvePreferredBaseModel(models: RemoteModelRecord[]): string |
     return referencedParentIds[0];
   }
 
-  const nonAdapterIds = modelIds.filter((modelId) => !looksLikeAdapterId(modelId));
+  const nonAdapterIds = modelIds.filter(
+    (modelId) => !looksLikeAdapterId(modelId),
+  );
   if (nonAdapterIds.length === 1) {
     return nonAdapterIds[0];
   }

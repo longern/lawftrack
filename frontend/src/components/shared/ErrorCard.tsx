@@ -1,5 +1,11 @@
 import CloseRoundedIcon from "@mui/icons-material/CloseRounded";
-import { Card, CardContent, IconButton, Stack, Typography } from "@mui/material";
+import {
+  Card,
+  CardContent,
+  IconButton,
+  Stack,
+  Typography,
+} from "@mui/material";
 import { alpha } from "@mui/material/styles";
 import { useI18n } from "../../i18n";
 
@@ -15,16 +21,29 @@ function ErrorCard({ message, onClose }: ErrorCardProps) {
     <Card
       sx={{
         border: (theme) => `1px solid ${alpha(theme.palette.error.main, 0.24)}`,
-        backgroundColor: (theme) => alpha(theme.palette.error.main, theme.palette.mode === "dark" ? 0.12 : 0.04),
+        backgroundColor: (theme) =>
+          alpha(
+            theme.palette.error.main,
+            theme.palette.mode === "dark" ? 0.12 : 0.04,
+          ),
       }}
     >
       <CardContent>
-        <Stack direction="row" alignItems="flex-start" justifyContent="space-between" spacing={1}>
+        <Stack
+          direction="row"
+          alignItems="flex-start"
+          justifyContent="space-between"
+          spacing={1}
+        >
           <Typography variant="subtitle1" fontWeight={700} color="error.main">
             {t("Gateway data could not be loaded")}
           </Typography>
           {onClose ? (
-            <IconButton size="small" onClick={onClose} sx={{ mt: -0.5, mr: -0.5 }}>
+            <IconButton
+              size="small"
+              onClick={onClose}
+              sx={{ mt: -0.5, mr: -0.5 }}
+            >
               <CloseRoundedIcon fontSize="small" />
             </IconButton>
           ) : null}

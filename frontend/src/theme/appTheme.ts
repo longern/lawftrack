@@ -66,7 +66,9 @@ export function createAppTheme(mode: PaletteMode) {
       MuiBottomNavigation: {
         styleOverrides: {
           root: {
-            backgroundColor: isDark ? alpha("#0f1727", 0.94) : alpha("#ffffff", 0.96),
+            backgroundColor: isDark
+              ? alpha("#0f1727", 0.94)
+              : alpha("#ffffff", 0.96),
           },
         },
       },

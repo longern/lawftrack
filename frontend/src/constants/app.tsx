@@ -12,8 +12,16 @@ export function getNavItems(t: Translate): NavItem[] {
   return [
     { id: "overview", label: t("Overview"), icon: <DashboardRoundedIcon /> },
     { id: "data", label: t("Data"), icon: <DataObjectRoundedIcon /> },
-    { id: "training", label: t("Training"), icon: <ModelTrainingRoundedIcon /> },
-    { id: "service", label: t("Service"), icon: <SettingsEthernetRoundedIcon /> },
+    {
+      id: "training",
+      label: t("Training"),
+      icon: <ModelTrainingRoundedIcon />,
+    },
+    {
+      id: "service",
+      label: t("Service"),
+      icon: <SettingsEthernetRoundedIcon />,
+    },
   ];
 }
 

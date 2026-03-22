@@ -252,4 +252,3 @@ export interface DeviceInfoItem {
   label: string;
   value: string;
 }
-

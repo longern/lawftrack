@@ -9,10 +9,18 @@ import type {
   DataSummaryItem,
 } from "../../types/app";
 
-type YamlSegmentKind = "plain" | "bullet" | "key" | "string" | "number" | "keyword";
+type YamlSegmentKind =
+  | "plain"
+  | "bullet"
+  | "key"
+  | "string"
+  | "number"
+  | "keyword";
 
 export function describeSample(sample: DatasetSample): string {
-  const userMessage = sample.messages.find((message) => message.role === "user");
+  const userMessage = sample.messages.find(
+    (message) => message.role === "user",
+  );
   return userMessage?.content || sample.title;
 }
 
@@ -101,7 +109,12 @@ function formatYamlScalar(value: unknown): string {
   return needsQuotedYaml(text) ? JSON.stringify(text) : text;
 }
 
-function pushYamlStringField(lines: string[], level: number, key: string, value: string) {
+function pushYamlStringField(
+  lines: string[],
+  level: number,
+  key: string,
+  value: string,
+) {
   if (value.includes("\n")) {
     lines.push(`${indent(level)}${key}: |-`);
     for (const line of value.split("\n")) {
@@ -142,14 +155,27 @@ export function serializeSampleAsYaml(sample: DatasetSample): string {
     lines.push(`${indent(1)}[]`);
   } else {
     for (const anchor of anchors) {
-      lines.push(`${indent(1)}- message_index: ${formatYamlScalar(anchor.message_index)}`);
-      lines.push(`${indent(2)}target: ${formatYamlScalar(anchor.target ?? "content")}`);
-      lines.push(`${indent(2)}token_index: ${formatYamlScalar(anchor.token_index)}`);
-      pushYamlStringField(lines, 2, "replacement_token", anchor.replacement_token);
+      lines.push(
+        `${indent(1)}- message_index: ${formatYamlScalar(anchor.message_index)}`,
+      );
+      lines.push(
+        `${indent(2)}target: ${formatYamlScalar(anchor.target ?? "content")}`,
+      );
+      lines.push(
+        `${indent(2)}token_index: ${formatYamlScalar(anchor.token_index)}`,
+      );
+      pushYamlStringField(
+        lines,
+        2,
+        "replacement_token",
+        anchor.replacement_token,
+      );
       lines.push(
         `${indent(2)}regenerated_from_token_index: ${formatYamlScalar(anchor.regenerated_from_token_index)}`,
       );
-      lines.push(`${indent(2)}created_at: ${formatYamlScalar(anchor.created_at)}`);
+      lines.push(
+        `${indent(2)}created_at: ${formatYamlScalar(anchor.created_at)}`,
+      );
     }
   }
 
@@ -190,7 +216,10 @@ export function highlightYamlLine(
   }
 
   if (trimmed === "|-" || trimmed === "|" || trimmed === "[]") {
-    segments.push({ text: trimmed, kind: trimmed === "[]" ? "keyword" : "plain" });
+    segments.push({
+      text: trimmed,
+      kind: trimmed === "[]" ? "keyword" : "plain",
+    });
     return segments;
   }
 

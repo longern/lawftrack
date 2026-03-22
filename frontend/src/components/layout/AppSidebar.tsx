@@ -1,4 +1,13 @@
-import { Avatar, Box, Divider, List, ListItemButton, ListItemIcon, ListItemText, Typography } from "@mui/material";
+import {
+  Avatar,
+  Box,
+  Divider,
+  List,
+  ListItemButton,
+  ListItemIcon,
+  ListItemText,
+  Typography,
+} from "@mui/material";
 import type { NavItem, NavView } from "../../types/app";
 
 interface AppSidebarProps {
@@ -10,8 +19,12 @@ interface AppSidebarProps {
 function AppSidebar({ activeView, items, onSelect }: AppSidebarProps) {
   return (
     <Box sx={{ height: "100%", display: "flex", flexDirection: "column" }}>
-      <Box sx={{ px: 2.5, py: 3, display: "flex", alignItems: "center", gap: 1.5 }}>
-        <Avatar sx={{ bgcolor: "primary.main", width: 42, height: 42 }}>L</Avatar>
+      <Box
+        sx={{ px: 2.5, py: 3, display: "flex", alignItems: "center", gap: 1.5 }}
+      >
+        <Avatar sx={{ bgcolor: "primary.main", width: 42, height: 42 }}>
+          L
+        </Avatar>
         <Box>
           <Typography variant="subtitle1" fontWeight={700}>
             lawftune
@@ -28,7 +41,10 @@ function AppSidebar({ activeView, items, onSelect }: AppSidebarProps) {
             sx={{ mb: 0.75, minHeight: 52, borderRadius: 3 }}
           >
             <ListItemIcon sx={{ minWidth: 40 }}>{item.icon}</ListItemIcon>
-            <ListItemText primary={item.label} slotProps={{ primary: { fontWeight: 700 } }} />
+            <ListItemText
+              primary={item.label}
+              slotProps={{ primary: { fontWeight: 700 } }}
+            />
           </ListItemButton>
         ))}
       </List>

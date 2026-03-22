@@ -51,8 +51,21 @@ export function TokenActionPanel({
         flexDirection: "column",
       }}
     >
-      <Box sx={{ px: 2, py: 1.5, borderBottom: (theme) => `1px solid ${getWorkspaceColors(theme).border}` }}>
-        <Typography variant="subtitle1" sx={{ color: (theme) => getWorkspaceColors(theme).textPrimary, fontWeight: 700 }}>
+      <Box
+        sx={{
+          px: 2,
+          py: 1.5,
+          borderBottom: (theme) =>
+            `1px solid ${getWorkspaceColors(theme).border}`,
+        }}
+      >
+        <Typography
+          variant="subtitle1"
+          sx={{
+            color: (theme) => getWorkspaceColors(theme).textPrimary,
+            fontWeight: 700,
+          }}
+        >
           {t("Token rewrite")}
         </Typography>
       </Box>
@@ -63,22 +76,36 @@ export function TokenActionPanel({
             {selectedToken ? (
               <>
                 <Typography variant="body2" sx={{ color: "#fca5a5" }}>
-                  {t("Original {target} token: {token}", { target: selectedToken.target === "reasoning" ? "reasoning" : "content", token: selectedToken.originalToken })}
+                  {t("Original {target} token: {token}", {
+                    target:
+                      selectedToken.target === "reasoning"
+                        ? "reasoning"
+                        : "content",
+                    token: selectedToken.originalToken,
+                  })}
                 </Typography>
                 <TextField
                   label={t("Replace with")}
                   value={replacementToken}
-                  onChange={(event) => onSetReplacementToken(event.target.value)}
+                  onChange={(event) =>
+                    onSetReplacementToken(event.target.value)
+                  }
                   fullWidth
                   size="small"
                   sx={darkFieldSx}
                 />
                 <Stack spacing={0.75}>
-                  <Typography variant="caption" sx={{ color: "text.secondary" }}>
+                  <Typography
+                    variant="caption"
+                    sx={{ color: "text.secondary" }}
+                  >
                     {t("Candidate tokens")}
                   </Typography>
                   {candidatesLoading ? (
-                    <Typography variant="caption" sx={{ color: "text.secondary", opacity: 0.78 }}>
+                    <Typography
+                      variant="caption"
+                      sx={{ color: "text.secondary", opacity: 0.78 }}
+                    >
                       {t("Loading candidates...")}
                     </Typography>
                   ) : tokenCandidates.length > 0 ? (
@@ -87,7 +114,11 @@ export function TokenActionPanel({
                         <Button
                           key={`${candidate.text}-${candidate.logprob ?? "na"}`}
                           size="small"
-                          variant={candidate.text === replacementToken ? "contained" : "outlined"}
+                          variant={
+                            candidate.text === replacementToken
+                              ? "contained"
+                              : "outlined"
+                          }
                           onClick={() => onSetReplacementToken(candidate.text)}
                           sx={{
                             minWidth: 0,
@@ -105,7 +136,10 @@ export function TokenActionPanel({
                       ))}
                     </Box>
                   ) : (
-                    <Typography variant="caption" sx={{ color: "text.secondary", opacity: 0.78 }}>
+                    <Typography
+                      variant="caption"
+                      sx={{ color: "text.secondary", opacity: 0.78 }}
+                    >
                       {t("No candidates.")}
                     </Typography>
                   )}
@@ -124,7 +158,11 @@ export function TokenActionPanel({
                       variant="outlined"
                       onClick={onDiscardContinuationDraft}
                       disabled={savingSample}
-                      sx={{ flex: 1, color: "text.primary", borderColor: "divider" }}
+                      sx={{
+                        flex: 1,
+                        color: "text.primary",
+                        borderColor: "divider",
+                      }}
                     >
                       {t("Discard rewrite")}
                     </Button>
@@ -135,13 +173,17 @@ export function TokenActionPanel({
                     onClick={onGenerateContinuation}
                     disabled={generating || savingSample}
                   >
-                    {generating ? t("Generating...") : t("Replace and continue")}
+                    {generating
+                      ? t("Generating...")
+                      : t("Replace and continue")}
                   </Button>
                 )}
               </>
             ) : (
               <Typography variant="body2" sx={{ color: "text.secondary" }}>
-                {t("Click any token in an assistant message to replace it and continue generation from that point.")}
+                {t(
+                  "Click any token in an assistant message to replace it and continue generation from that point.",
+                )}
               </Typography>
             )}
           </Stack>
@@ -183,14 +225,19 @@ export function TokenActionMiniPanel({
   const { t } = useI18n();
 
   if (!selectedToken) {
-    return <Typography variant="body2" sx={{ color: "text.secondary" }}>{t("Click a token in an assistant message to start rewriting.")}</Typography>;
+    return (
+      <Typography variant="body2" sx={{ color: "text.secondary" }}>
+        {t("Click a token in an assistant message to start rewriting.")}
+      </Typography>
+    );
   }
 
   return (
     <Stack spacing={1.25}>
       {showSelectionSummary ? (
         <Typography variant="caption" sx={{ color: "text.secondary" }}>
-          {selectedSample?.title} | {t("Original token: {token}", { token: selectedToken.originalToken })}
+          {selectedSample?.title} |{" "}
+          {t("Original token: {token}", { token: selectedToken.originalToken })}
           {" | "}
           {selectedToken.target}
         </Typography>
@@ -208,7 +255,10 @@ export function TokenActionMiniPanel({
           {t("Candidate tokens")}
         </Typography>
         {candidatesLoading ? (
-          <Typography variant="caption" sx={{ color: "text.secondary", opacity: 0.78 }}>
+          <Typography
+            variant="caption"
+            sx={{ color: "text.secondary", opacity: 0.78 }}
+          >
             {t("Loading candidates...")}
           </Typography>
         ) : tokenCandidates.length > 0 ? (
@@ -217,7 +267,9 @@ export function TokenActionMiniPanel({
               <Button
                 key={`${candidate.text}-${candidate.logprob ?? "na"}`}
                 size="small"
-                variant={candidate.text === replacementToken ? "contained" : "outlined"}
+                variant={
+                  candidate.text === replacementToken ? "contained" : "outlined"
+                }
                 onClick={() => onSetReplacementToken(candidate.text)}
                 sx={{
                   minWidth: 0,
@@ -235,7 +287,10 @@ export function TokenActionMiniPanel({
             ))}
           </Box>
         ) : (
-          <Typography variant="caption" sx={{ color: "text.secondary", opacity: 0.78 }}>
+          <Typography
+            variant="caption"
+            sx={{ color: "text.secondary", opacity: 0.78 }}
+          >
             {t("No candidates.")}
           </Typography>
         )}

@@ -32,6 +32,7 @@ import {
   serializeSampleAsYaml,
 } from "./dataWorkspaceUtils";
 import { getWorkspaceColors } from "./dataWorkspaceTheme";
+import { useI18n } from "../../i18n";
 
 function MessageBubble({
   edits,
@@ -66,6 +67,7 @@ function MessageBubble({
     target: "content" | "reasoning",
   ) => void;
 }) {
+  const { t } = useI18n();
   const isAssistant = message.role === "assistant";
   const isUser = message.role === "user";
   const reasoning = message.reasoning?.trim() ?? "";
@@ -195,8 +197,8 @@ function MessageBubble({
               key={`${messageIndex}-${target}-${tokenIndex}-newline-${partIndex}`}
               component="button"
               type="button"
-              title="换行 token"
-              aria-label="换行 token"
+              title={t("Line break token")}
+              aria-label={t("Line break token")}
               onClick={() => {
                 if (!hasContinuationDraft) {
                   onSelectToken(messageIndex, tokenIndex, target);
@@ -362,7 +364,7 @@ function MessageBubble({
                   multiline
                   minRows={3}
                   fullWidth
-                  placeholder="Reasoning / 推理内容"
+                  placeholder={t("Reasoning")}
                   variant="outlined"
                   sx={{
                     ...inlineFieldSx,
@@ -394,7 +396,7 @@ function MessageBubble({
                       letterSpacing: 0.5,
                     }}
                   >
-                    reasoning
+                    {t("Reasoning")}
                   </Typography>
                   <Typography
                     variant="body2"
@@ -484,6 +486,7 @@ export function MessageFlowPanel({
   onUpdateSampleMessages: (updater: (messages: DatasetMessage[]) => DatasetMessage[]) => void;
   onUpdateSampleTitle: (title: string) => void;
 }) {
+  const { t } = useI18n();
   const [editingMessageIndex, setEditingMessageIndex] = useState<number | null>(null);
   const [editingTitle, setEditingTitle] = useState(false);
   const [viewMode, setViewMode] = useState<"flow" | "yaml">("flow");
@@ -552,7 +555,7 @@ export function MessageFlowPanel({
                 sx={{ color: (theme) => getWorkspaceColors(theme).textPrimary, fontWeight: 700, minWidth: 0 }}
                 noWrap
               >
-                {sample?.title || "消息流"}
+                {sample?.title || t("Message flow")}
               </Typography>
             )}
           </Box>
@@ -585,7 +588,7 @@ export function MessageFlowPanel({
         <Stack direction="row" spacing={1}>
           <Stack direction="row" spacing={0.75} sx={{ mr: "auto" }}>
             <Button size="small" variant={viewMode === "flow" ? "contained" : "outlined"} onClick={() => setViewMode("flow")}>
-              消息流
+              {t("Message flow")}
             </Button>
             <Button size="small" variant={viewMode === "yaml" ? "contained" : "outlined"} onClick={() => setViewMode("yaml")}>
               YAML
@@ -599,7 +602,7 @@ export function MessageFlowPanel({
             disabled={generatingAssistant || !sample || hasContinuationDraft}
             sx={{ color: "text.primary", borderColor: "divider" }}
           >
-            {generatingAssistant ? "生成中..." : "生成 AI 消息"}
+            {generatingAssistant ? t("Generating...") : t("Generate AI message")}
           </Button>
           <Button
             variant="outlined"
@@ -609,7 +612,7 @@ export function MessageFlowPanel({
             disabled={savingSample || !sample || hasContinuationDraft}
             sx={{ color: "text.primary", borderColor: "divider" }}
           >
-            {savingSample ? "保存中..." : "保存样本"}
+            {savingSample ? t("Saving...") : t("Save sample")}
           </Button>
         </Stack>
       </Box>
@@ -627,11 +630,11 @@ export function MessageFlowPanel({
       >
         {samplesLoading ? (
           <Typography variant="body2" sx={{ color: "text.secondary" }}>
-            加载样本中...
+            {t("Loading samples...")}
           </Typography>
         ) : !sample ? (
           <Typography variant="body2" sx={{ color: "text.secondary" }}>
-            选择一条样本开始编辑。
+            {t("Select a sample to start editing.")}
           </Typography>
         ) : viewMode === "yaml" ? (
           <Paper
@@ -753,7 +756,7 @@ export function MessageFlowPanel({
                 disabled={hasContinuationDraft}
                 sx={{ color: "text.primary", borderColor: "divider" }}
               >
-                添加用户消息
+                {t("Add user message")}
               </Button>
               <Button
                 variant="outlined"
@@ -765,7 +768,7 @@ export function MessageFlowPanel({
                 disabled={hasContinuationDraft}
                 sx={{ color: "text.primary", borderColor: "divider" }}
               >
-                添加助手消息
+                {t("Add assistant message")}
               </Button>
             </Stack>
           </Stack>

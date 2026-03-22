@@ -213,7 +213,13 @@ class CliTests(unittest.TestCase):
             sys.path.pop(0)
 
         with tempfile.TemporaryDirectory() as temp_dir:
-            with mock.patch("uvicorn.run") as mocked_run:
+            fake_uvicorn = mock.Mock()
+            fake_server = mock.Mock()
+            fake_server.create_app.return_value = mock.sentinel.app
+            with mock.patch.dict(
+                sys.modules,
+                {"uvicorn": fake_uvicorn, "lawftune.server": fake_server},
+            ):
                 exit_code = main(
                     [
                         "gateway",
@@ -227,8 +233,9 @@ class CliTests(unittest.TestCase):
                 )
 
             self.assertEqual(exit_code, 0)
-            mocked_run.assert_called_once()
-            _, kwargs = mocked_run.call_args
+            fake_server.create_app.assert_called_once_with(Path(temp_dir))
+            fake_uvicorn.run.assert_called_once()
+            _, kwargs = fake_uvicorn.run.call_args
             self.assertEqual(kwargs["host"], "0.0.0.0")
             self.assertEqual(kwargs["port"], 9001)
 

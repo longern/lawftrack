@@ -1,6 +1,7 @@
 import CloseRoundedIcon from "@mui/icons-material/CloseRounded";
 import { Card, CardContent, IconButton, Stack, Typography } from "@mui/material";
 import { alpha } from "@mui/material/styles";
+import { useI18n } from "../../i18n";
 
 interface ErrorCardProps {
   message: string;
@@ -8,6 +9,8 @@ interface ErrorCardProps {
 }
 
 function ErrorCard({ message, onClose }: ErrorCardProps) {
+  const { t } = useI18n();
+
   return (
     <Card
       sx={{
@@ -18,7 +21,7 @@ function ErrorCard({ message, onClose }: ErrorCardProps) {
       <CardContent>
         <Stack direction="row" alignItems="flex-start" justifyContent="space-between" spacing={1}>
           <Typography variant="subtitle1" fontWeight={700} color="error.main">
-            Gateway data could not be loaded
+            {t("Gateway data could not be loaded")}
           </Typography>
           {onClose ? (
             <IconButton size="small" onClick={onClose} sx={{ mt: -0.5, mr: -0.5 }}>

@@ -57,6 +57,7 @@ import {
   type RemoteModelRecord,
   resolvePreferredBaseModel,
 } from "../utils/modelSelection";
+import { useI18n } from "../i18n";
 
 type TrainingMethodType = "sft" | "lawf";
 
@@ -145,7 +146,7 @@ function formatDateTime(timestamp?: number | null): string {
   if (!timestamp) {
     return "-";
   }
-  return new Intl.DateTimeFormat("zh-CN", {
+  return new Intl.DateTimeFormat(document.documentElement.lang || undefined, {
     hour12: false,
     month: "2-digit",
     day: "2-digit",
@@ -165,15 +166,21 @@ function formatBytes(bytes: number): string {
 }
 
 function TrainingSection() {
-  const [preferredBaseModel, setPreferredBaseModel] = useState(FALLBACK_BASE_MODEL);
-  const [form, setForm] = useState<TrainingFormState>(() => buildDefaultForm(FALLBACK_BASE_MODEL));
+  const { t, formatTaskCount } = useI18n();
+  const [preferredBaseModel, setPreferredBaseModel] =
+    useState(FALLBACK_BASE_MODEL);
+  const [form, setForm] = useState<TrainingFormState>(() =>
+    buildDefaultForm(FALLBACK_BASE_MODEL),
+  );
   const [datasets, setDatasets] = useState<DatasetRecord[]>([]);
   const [selectedDatasetId, setSelectedDatasetId] = useState("");
   const [files, setFiles] = useState<UploadedFile[]>([]);
   const [jobs, setJobs] = useState<FineTuningJob[]>([]);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [jobEvents, setJobEvents] = useState<FineTuningJobEvent[]>([]);
-  const [jobCheckpoints, setJobCheckpoints] = useState<FineTuningJobCheckpoint[]>([]);
+  const [jobCheckpoints, setJobCheckpoints] = useState<
+    FineTuningJobCheckpoint[]
+  >([]);
   const [jobLogs, setJobLogs] = useState<FineTuningJobLogs | null>(null);
   const [jobDetailTab, setJobDetailTab] = useState<"events" | "logs">("events");
   const [pageError, setPageError] = useState("");
@@ -193,7 +200,8 @@ function TrainingSection() {
     () => datasets.find((dataset) => dataset.id === selectedDatasetId) ?? null,
     [datasets, selectedDatasetId],
   );
-  const selectedJob = jobs.find((job) => job.id === selectedJobId) ?? jobs[0] ?? null;
+  const selectedJob =
+    jobs.find((job) => job.id === selectedJobId) ?? jobs[0] ?? null;
 
   useEffect(() => {
     void refreshAll();
@@ -217,10 +225,7 @@ function TrainingSection() {
     }
     setForm((current) => {
       const currentModel = current.model.trim();
-      if (
-        currentModel !== "" &&
-        currentModel !== previousPreferredBaseModel
-      ) {
+      if (currentModel !== "" && currentModel !== previousPreferredBaseModel) {
         return current;
       }
       return {
@@ -255,11 +260,14 @@ function TrainingSection() {
       setRefreshing(true);
     }
     try {
-      const payload = await fetchJson<ApiListResponse<UploadedFile>>("/api/files");
+      const payload =
+        await fetchJson<ApiListResponse<UploadedFile>>("/api/files");
       setFiles(payload.data);
       setPageError("");
     } catch (error) {
-      setPageError(error instanceof Error ? error.message : "加载文件失败");
+      setPageError(
+        error instanceof Error ? error.message : t("Failed to load files"),
+      );
     } finally {
       if (showSpinner) {
         setRefreshing(false);
@@ -272,11 +280,14 @@ function TrainingSection() {
       setRefreshing(true);
     }
     try {
-      const payload = await fetchJson<ApiListResponse<DatasetRecord>>("/api/datasets");
+      const payload =
+        await fetchJson<ApiListResponse<DatasetRecord>>("/api/datasets");
       setDatasets(payload.data);
       setPageError("");
     } catch (error) {
-      setPageError(error instanceof Error ? error.message : "加载数据集失败");
+      setPageError(
+        error instanceof Error ? error.message : t("Failed to load datasets"),
+      );
     } finally {
       if (showSpinner) {
         setRefreshing(false);
@@ -289,11 +300,17 @@ function TrainingSection() {
       setRefreshing(true);
     }
     try {
-      const payload = await fetchJson<ApiListResponse<FineTuningJob>>("/api/fine_tuning/jobs");
+      const payload = await fetchJson<ApiListResponse<FineTuningJob>>(
+        "/api/fine_tuning/jobs",
+      );
       setJobs(payload.data);
       setPageError("");
     } catch (error) {
-      setPageError(error instanceof Error ? error.message : "加载训练任务失败");
+      setPageError(
+        error instanceof Error
+          ? error.message
+          : t("Failed to load training jobs"),
+      );
     } finally {
       if (showSpinner) {
         setRefreshing(false);
@@ -303,7 +320,8 @@ function TrainingSection() {
 
   async function loadPreferredBaseModel() {
     try {
-      const payload = await fetchJson<ApiListResponse<RemoteModelRecord>>("/v1/models");
+      const payload =
+        await fetchJson<ApiListResponse<RemoteModelRecord>>("/v1/models");
       const resolvedBaseModel = resolvePreferredBaseModel(payload.data);
       if (resolvedBaseModel) {
         setPreferredBaseModel(resolvedBaseModel);
@@ -318,16 +336,25 @@ function TrainingSection() {
       setLoadingJobArtifacts(true);
     }
     try {
-      const [eventsPayload, checkpointsPayload, logsPayload] = await Promise.all([
-        fetchJson<ApiListResponse<FineTuningJobEvent>>(`/api/fine_tuning/jobs/${jobId}/events`),
-        fetchJson<ApiListResponse<FineTuningJobCheckpoint>>(`/api/fine_tuning/jobs/${jobId}/checkpoints`),
-        fetchJson<FineTuningJobLogs>(`/api/fine_tuning/jobs/${jobId}/logs`),
-      ]);
+      const [eventsPayload, checkpointsPayload, logsPayload] =
+        await Promise.all([
+          fetchJson<ApiListResponse<FineTuningJobEvent>>(
+            `/api/fine_tuning/jobs/${jobId}/events`,
+          ),
+          fetchJson<ApiListResponse<FineTuningJobCheckpoint>>(
+            `/api/fine_tuning/jobs/${jobId}/checkpoints`,
+          ),
+          fetchJson<FineTuningJobLogs>(`/api/fine_tuning/jobs/${jobId}/logs`),
+        ]);
       setJobEvents(eventsPayload.data);
       setJobCheckpoints(checkpointsPayload.data);
       setJobLogs(logsPayload);
     } catch (error) {
-      setPageError(error instanceof Error ? error.message : "加载训练日志失败");
+      setPageError(
+        error instanceof Error
+          ? error.message
+          : t("Failed to load training logs"),
+      );
     } finally {
       if (showSpinner) {
         setLoadingJobArtifacts(false);
@@ -348,13 +375,20 @@ function TrainingSection() {
       setJobs(jobsPayload.data);
       setPageError("");
     } catch (error) {
-      setPageError(error instanceof Error ? error.message : "刷新训练页面失败");
+      setPageError(
+        error instanceof Error
+          ? error.message
+          : t("Failed to refresh training page"),
+      );
     } finally {
       setRefreshing(false);
     }
   }
 
-  function updateForm<K extends keyof TrainingFormState>(key: K, value: TrainingFormState[K]) {
+  function updateForm<K extends keyof TrainingFormState>(
+    key: K,
+    value: TrainingFormState[K],
+  ) {
     setForm((current) => ({ ...current, [key]: value }));
   }
 
@@ -389,7 +423,9 @@ function TrainingSection() {
       }));
       setPageError("");
     } catch (error) {
-      setPageError(error instanceof Error ? error.message : "上传文件失败");
+      setPageError(
+        error instanceof Error ? error.message : t("Failed to upload file"),
+      );
     } finally {
       setUploading(false);
       event.target.value = "";
@@ -400,7 +436,7 @@ function TrainingSection() {
     event.preventDefault();
     const method = buildMethodConfig(form);
     if (!selectedDatasetId && !form.trainingFileId) {
-      setPageError("必须先选择训练集文件。");
+      setPageError(t("Select a training file first."));
       return;
     }
 
@@ -427,21 +463,30 @@ function TrainingSection() {
         validation_file: form.validationFileId || undefined,
         suffix: form.suffix || undefined,
         seed: form.seed ? Number(form.seed) : undefined,
-        metadata: selectedDatasetId ? { dataset_id: selectedDatasetId } : undefined,
+        metadata: selectedDatasetId
+          ? { dataset_id: selectedDatasetId }
+          : undefined,
         integrations: form.tensorboard ? [{ type: "tensorboard" }] : [],
         method,
       };
-      const createdJob = await fetchJson<FineTuningJob>("/api/fine_tuning/jobs", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+      const createdJob = await fetchJson<FineTuningJob>(
+        "/api/fine_tuning/jobs",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        },
+      );
       await loadJobs(false);
       setSelectedJobId(createdJob.id);
       setCreateDialogOpen(false);
       setPageError("");
     } catch (error) {
-      setPageError(error instanceof Error ? error.message : "创建训练任务失败");
+      setPageError(
+        error instanceof Error
+          ? error.message
+          : t("Failed to create training job"),
+      );
     } finally {
       setSubmitting(false);
     }
@@ -454,7 +499,9 @@ function TrainingSection() {
       });
       await loadJobs(false);
     } catch (error) {
-      setPageError(error instanceof Error ? error.message : "取消任务失败");
+      setPageError(
+        error instanceof Error ? error.message : t("Failed to cancel job"),
+      );
     }
   }
 
@@ -478,7 +525,7 @@ function TrainingSection() {
               justifyContent="space-between"
             >
               <Box>
-                <Typography variant="h6">训练控制台</Typography>
+                <Typography variant="h6">{t("Training console")}</Typography>
               </Box>
               <Stack direction="row" spacing={1.5}>
                 <Button
@@ -487,14 +534,14 @@ function TrainingSection() {
                   onClick={() => void refreshAll()}
                   disabled={refreshing}
                 >
-                  刷新
+                  {t("Refresh")}
                 </Button>
                 <Button
                   variant="contained"
                   startIcon={<AddRoundedIcon />}
                   onClick={() => setCreateDialogOpen(true)}
                 >
-                  创建训练任务
+                  {t("Create training job")}
                 </Button>
               </Stack>
             </Stack>
@@ -506,9 +553,13 @@ function TrainingSection() {
         <Card sx={{ height: "100%" }}>
           <CardContent>
             <Stack spacing={2.5}>
-              <Stack direction="row" alignItems="center" justifyContent="space-between">
+              <Stack
+                direction="row"
+                alignItems="center"
+                justifyContent="space-between"
+              >
                 <Box>
-                  <Typography variant="h6">训练文件库</Typography>
+                  <Typography variant="h6">{t("Training files")}</Typography>
                 </Box>
                 <Button
                   size="small"
@@ -516,7 +567,7 @@ function TrainingSection() {
                   onClick={() => uploadInputRef.current?.click()}
                   disabled={uploading}
                 >
-                  {uploading ? "上传中..." : "上传"}
+                  {uploading ? t("Uploading...") : t("Upload")}
                 </Button>
                 <input
                   ref={uploadInputRef}
@@ -531,7 +582,9 @@ function TrainingSection() {
                   variant="outlined"
                   sx={{ p: 3, textAlign: "center", color: "text.secondary" }}
                 >
-                  还没有训练文件。先上传一个 JSON/JSONL/CSV/Parquet 文件。
+                  {t(
+                    "No training files yet. Upload a JSON/JSONL/CSV/Parquet file first.",
+                  )}
                 </Paper>
               ) : (
                 <Stack spacing={1.5}>
@@ -542,12 +595,23 @@ function TrainingSection() {
                       sx={{ p: 2, borderRadius: 3 }}
                     >
                       <Stack spacing={1.5}>
-                        <Stack direction="row" justifyContent="space-between" spacing={2}>
+                        <Stack
+                          direction="row"
+                          justifyContent="space-between"
+                          spacing={2}
+                        >
                           <Box sx={{ minWidth: 0 }}>
-                            <Typography variant="subtitle2" fontWeight={700} noWrap>
+                            <Typography
+                              variant="subtitle2"
+                              fontWeight={700}
+                              noWrap
+                            >
                               {file.filename}
                             </Typography>
-                            <Typography variant="caption" color="text.secondary">
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                            >
                               {file.id}
                             </Typography>
                           </Box>
@@ -567,17 +631,29 @@ function TrainingSection() {
                         <Stack direction="row" spacing={1}>
                           <Button
                             size="small"
-                            variant={form.trainingFileId === file.id ? "contained" : "outlined"}
-                            onClick={() => updateForm("trainingFileId", file.id)}
+                            variant={
+                              form.trainingFileId === file.id
+                                ? "contained"
+                                : "outlined"
+                            }
+                            onClick={() =>
+                              updateForm("trainingFileId", file.id)
+                            }
                           >
-                            作为训练集
+                            {t("Use as training file")}
                           </Button>
                           <Button
                             size="small"
-                            variant={form.validationFileId === file.id ? "contained" : "outlined"}
-                            onClick={() => updateForm("validationFileId", file.id)}
+                            variant={
+                              form.validationFileId === file.id
+                                ? "contained"
+                                : "outlined"
+                            }
+                            onClick={() =>
+                              updateForm("validationFileId", file.id)
+                            }
                           >
-                            作为验证集
+                            {t("Use as validation file")}
                           </Button>
                         </Stack>
                       </Stack>
@@ -594,13 +670,17 @@ function TrainingSection() {
         <Card sx={{ height: "100%" }}>
           <CardContent>
             <Stack spacing={2.5}>
-              <Stack direction="row" alignItems="center" justifyContent="space-between">
+              <Stack
+                direction="row"
+                alignItems="center"
+                justifyContent="space-between"
+              >
                 <Box>
-                  <Typography variant="h6">训练任务队列</Typography>
+                  <Typography variant="h6">{t("Training queue")}</Typography>
                 </Box>
                 <Chip
                   size="small"
-                  label={`${jobs.length} 个任务`}
+                  label={formatTaskCount(jobs.length)}
                   color="primary"
                   variant="outlined"
                 />
@@ -611,7 +691,9 @@ function TrainingSection() {
                   variant="outlined"
                   sx={{ p: 3, textAlign: "center", color: "text.secondary" }}
                 >
-                  还没有训练任务。点击右上角“创建训练任务”开始。
+                  {t(
+                    'No training jobs yet. Click "Create training job" to get started.',
+                  )}
                 </Paper>
               ) : (
                 <Stack spacing={1.5}>
@@ -631,12 +713,23 @@ function TrainingSection() {
                       }}
                     >
                       <Stack spacing={1.25}>
-                        <Stack direction="row" justifyContent="space-between" spacing={2}>
+                        <Stack
+                          direction="row"
+                          justifyContent="space-between"
+                          spacing={2}
+                        >
                           <Box sx={{ minWidth: 0 }}>
-                            <Typography variant="subtitle2" fontWeight={700} noWrap>
+                            <Typography
+                              variant="subtitle2"
+                              fontWeight={700}
+                              noWrap
+                            >
                               {job.model}
                             </Typography>
-                            <Typography variant="caption" color="text.secondary">
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                            >
                               {job.id}
                             </Typography>
                           </Box>
@@ -681,8 +774,12 @@ function TrainingSection() {
         <Card>
           <CardContent>
             <Stack spacing={2}>
-              <Stack direction="row" alignItems="center" justifyContent="space-between">
-                <Typography variant="h6">任务详情</Typography>
+              <Stack
+                direction="row"
+                alignItems="center"
+                justifyContent="space-between"
+              >
+                <Typography variant="h6">{t("Job details")}</Typography>
                 {selectedJob?.status === "running" ? (
                   <Button
                     color="error"
@@ -690,40 +787,71 @@ function TrainingSection() {
                     startIcon={<CancelRoundedIcon />}
                     onClick={() => void handleCancelJob(selectedJob.id)}
                   >
-                    取消任务
+                    {t("Cancel job")}
                   </Button>
                 ) : null}
               </Stack>
 
               {!selectedJob ? (
-                <Paper variant="outlined" sx={{ p: 3, textAlign: "center", color: "text.secondary" }}>
-                  选择一个训练任务查看详情。
+                <Paper
+                  variant="outlined"
+                  sx={{ p: 3, textAlign: "center", color: "text.secondary" }}
+                >
+                  {t("Select a training job to view details.")}
                 </Paper>
               ) : (
                 <Grid container spacing={2}>
                   <Grid size={{ xs: 12, md: 6, xl: 3 }}>
-                    <DetailCard title="基础信息">
+                    <DetailCard title={t("Basic info")}>
                       <DetailRow label="Job ID" value={selectedJob.id} />
-                      <DetailRow label="状态" value={selectedJob.status} />
-                      <DetailRow label="方法" value={selectedJob.method?.type ?? "-"} />
-                      <DetailRow label="模型" value={selectedJob.model} />
+                      <DetailRow
+                        label={t("Status")}
+                        value={selectedJob.status}
+                      />
+                      <DetailRow
+                        label={t("Method")}
+                        value={selectedJob.method?.type ?? "-"}
+                      />
+                      <DetailRow label={t("Model")} value={selectedJob.model} />
                     </DetailCard>
                   </Grid>
                   <Grid size={{ xs: 12, md: 6, xl: 3 }}>
-                    <DetailCard title="文件引用">
-                      <DetailRow label="训练集" value={selectedJob.training_file} />
-                      <DetailRow label="验证集" value={selectedJob.validation_file ?? "-"} />
-                      <DetailRow label="Suffix" value={selectedJob.suffix ?? "-"} />
-                      <DetailRow label="Seed" value={selectedJob.seed?.toString() ?? "-"} />
+                    <DetailCard title={t("File references")}>
+                      <DetailRow
+                        label={t("Training file")}
+                        value={selectedJob.training_file}
+                      />
+                      <DetailRow
+                        label={t("Validation file")}
+                        value={selectedJob.validation_file ?? "-"}
+                      />
+                      <DetailRow
+                        label="Suffix"
+                        value={selectedJob.suffix ?? "-"}
+                      />
+                      <DetailRow
+                        label="Seed"
+                        value={selectedJob.seed?.toString() ?? "-"}
+                      />
                     </DetailCard>
                   </Grid>
                   <Grid size={{ xs: 12, md: 6, xl: 3 }}>
-                    <DetailCard title="运行状态">
-                      <DetailRow label="创建时间" value={formatDateTime(selectedJob.created_at)} />
-                      <DetailRow label="结束时间" value={formatDateTime(selectedJob.finished_at)} />
+                    <DetailCard title={t("Runtime status")}>
+                      <DetailRow
+                        label={t("Created at")}
+                        value={formatDateTime(selectedJob.created_at)}
+                      />
+                      <DetailRow
+                        label={t("End time")}
+                        value={formatDateTime(selectedJob.finished_at)}
+                      />
                       <DetailRow
                         label="PID"
-                        value={selectedJob.process?.pid ? String(selectedJob.process.pid) : "-"}
+                        value={
+                          selectedJob.process?.pid
+                            ? String(selectedJob.process.pid)
+                            : "-"
+                        }
                       />
                       <DetailRow
                         label="Exit Code"
@@ -737,8 +865,11 @@ function TrainingSection() {
                     </DetailCard>
                   </Grid>
                   <Grid size={{ xs: 12, md: 6, xl: 3 }}>
-                    <DetailCard title="产物与错误">
-                      <DetailRow label="微调模型" value={selectedJob.fine_tuned_model ?? "-"} />
+                    <DetailCard title={t("Outputs and errors")}>
+                      <DetailRow
+                        label={t("Fine-tuned model")}
+                        value={selectedJob.fine_tuned_model ?? "-"}
+                      />
                       <DetailRow
                         label="Adapter"
                         value={selectedJob.lora_adapter?.status ?? "-"}
@@ -748,29 +879,44 @@ function TrainingSection() {
                         value={selectedJob.lora_adapter?.path ?? "-"}
                       />
                       <DetailRow
-                        label="错误"
-                        value={selectedJob.error?.message ?? selectedJob.lora_adapter?.error?.message ?? "-"}
+                        label={t("Error")}
+                        value={
+                          selectedJob.error?.message ??
+                          selectedJob.lora_adapter?.error?.message ??
+                          "-"
+                        }
                       />
                     </DetailCard>
                   </Grid>
                   <Grid size={{ xs: 12, xl: 12 }}>
-                    <DetailCard title="训练曲线">
+                    <DetailCard title={t("Training curve")}>
                       {loadingJobArtifacts ? (
                         <Skeleton variant="rounded" height={220} />
                       ) : (
-                        <LossChart checkpoints={jobCheckpoints} events={jobEvents} />
+                        <LossChart
+                          checkpoints={jobCheckpoints}
+                          events={jobEvents}
+                        />
                       )}
                     </DetailCard>
                   </Grid>
                   <Grid size={{ xs: 12, xl: 12 }}>
-                    <DetailCard title="日志与事件">
+                    <DetailCard title={t("Logs and events")}>
                       <Tabs
                         value={jobDetailTab}
                         onChange={(_, value) => setJobDetailTab(value)}
                         sx={{ minHeight: 36 }}
                       >
-                        <Tab value="events" label="事件" sx={{ minHeight: 36 }} />
-                        <Tab value="logs" label="原始日志" sx={{ minHeight: 36 }} />
+                        <Tab
+                          value="events"
+                          label={t("Events")}
+                          sx={{ minHeight: 36 }}
+                        />
+                        <Tab
+                          value="logs"
+                          label={t("Raw logs")}
+                          sx={{ minHeight: 36 }}
+                        />
                       </Tabs>
                       {loadingJobArtifacts ? (
                         <Stack spacing={1.5} sx={{ mt: 2 }}>
@@ -813,10 +959,14 @@ function TrainingSection() {
 }
 
 function EventStream({ events }: { events: FineTuningJobEvent[] }) {
+  const { t } = useI18n();
   if (events.length === 0) {
     return (
-      <Paper variant="outlined" sx={{ mt: 2, p: 3, textAlign: "center", color: "text.secondary" }}>
-        暂无事件。
+      <Paper
+        variant="outlined"
+        sx={{ mt: 2, p: 3, textAlign: "center", color: "text.secondary" }}
+      >
+        {t("No events.")}
       </Paper>
     );
   }
@@ -824,7 +974,8 @@ function EventStream({ events }: { events: FineTuningJobEvent[] }) {
   return (
     <Stack spacing={1.25} sx={{ mt: 2, maxHeight: 360, overflowY: "auto" }}>
       {events.map((event) => {
-        const metrics = event.data?.type === "metrics" ? event.data.metrics : null;
+        const metrics =
+          event.data?.type === "metrics" ? event.data.metrics : null;
         return (
           <Paper
             key={event.id}
@@ -840,27 +991,58 @@ function EventStream({ events }: { events: FineTuningJobEvent[] }) {
             }}
           >
             <Stack spacing={0.75}>
-              <Stack direction="row" spacing={1} alignItems="center" justifyContent="space-between">
+              <Stack
+                direction="row"
+                spacing={1}
+                alignItems="center"
+                justifyContent="space-between"
+              >
                 <Stack direction="row" spacing={1} alignItems="center">
-                  <Chip size="small" label={event.level} color={event.level === "error" ? "error" : event.data?.type === "metrics" ? "primary" : "default"} />
+                  <Chip
+                    size="small"
+                    label={event.level}
+                    color={
+                      event.level === "error"
+                        ? "error"
+                        : event.data?.type === "metrics"
+                          ? "primary"
+                          : "default"
+                    }
+                  />
                   {event.data?.stream ? (
-                    <Chip size="small" label={event.data.stream} variant="outlined" />
+                    <Chip
+                      size="small"
+                      label={event.data.stream}
+                      variant="outlined"
+                    />
                   ) : null}
                   {event.data?.step ? (
-                    <Chip size="small" label={`step ${event.data.step}`} variant="outlined" />
+                    <Chip
+                      size="small"
+                      label={`step ${event.data.step}`}
+                      variant="outlined"
+                    />
                   ) : null}
                 </Stack>
                 <Typography variant="caption" color="text.secondary">
                   {formatDateTime(event.created_at)}
                 </Typography>
               </Stack>
-              <Typography variant="body2" sx={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+              <Typography
+                variant="body2"
+                sx={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}
+              >
                 {event.message}
               </Typography>
               {metrics ? (
                 <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
                   {Object.entries(metrics).map(([key, value]) => (
-                    <Chip key={key} size="small" label={`${key}: ${formatMetricValue(value)}`} variant="outlined" />
+                    <Chip
+                      key={key}
+                      size="small"
+                      label={`${key}: ${formatMetricValue(value)}`}
+                      variant="outlined"
+                    />
                   ))}
                 </Stack>
               ) : null}
@@ -873,12 +1055,16 @@ function EventStream({ events }: { events: FineTuningJobEvent[] }) {
 }
 
 function RawLogsPanel({ logs }: { logs: FineTuningJobLogs | null }) {
+  const { t } = useI18n();
   const stdout = logs?.stdout.trim() || "";
   const stderr = logs?.stderr.trim() || "";
   if (!stdout && !stderr) {
     return (
-      <Paper variant="outlined" sx={{ mt: 2, p: 3, textAlign: "center", color: "text.secondary" }}>
-        暂无原始日志。
+      <Paper
+        variant="outlined"
+        sx={{ mt: 2, p: 3, textAlign: "center", color: "text.secondary" }}
+      >
+        {t("No raw logs.")}
       </Paper>
     );
   }
@@ -900,6 +1086,7 @@ function LogBlock({
   content: string;
   tone?: "default" | "error";
 }) {
+  const { t } = useI18n();
   return (
     <Paper
       variant="outlined"
@@ -934,7 +1121,7 @@ function LogBlock({
           wordBreak: "break-word",
         }}
       >
-        {content || "暂无内容"}
+        {content || t("No content")}
       </Box>
     </Paper>
   );
@@ -947,6 +1134,7 @@ function LossChart({
   checkpoints: FineTuningJobCheckpoint[];
   events: FineTuningJobEvent[];
 }) {
+  const { t } = useI18n();
   const points = useMemo(() => {
     const checkpointPoints = checkpoints
       .map((checkpoint) => {
@@ -956,7 +1144,9 @@ function LossChart({
         }
         return { step: checkpoint.step_number, loss };
       })
-      .filter((point): point is { step: number; loss: number } => Boolean(point));
+      .filter((point): point is { step: number; loss: number } =>
+        Boolean(point),
+      );
     if (checkpointPoints.length > 0) {
       return checkpointPoints;
     }
@@ -972,13 +1162,18 @@ function LossChart({
           loss,
         };
       })
-      .filter((point): point is { step: number; loss: number } => Boolean(point));
+      .filter((point): point is { step: number; loss: number } =>
+        Boolean(point),
+      );
   }, [checkpoints, events]);
 
   if (points.length === 0) {
     return (
-      <Paper variant="outlined" sx={{ p: 3, textAlign: "center", color: "text.secondary" }}>
-        暂无可绘制的损失数据。
+      <Paper
+        variant="outlined"
+        sx={{ p: 3, textAlign: "center", color: "text.secondary" }}
+      >
+        {t("No loss data available to plot.")}
       </Paper>
     );
   }
@@ -994,7 +1189,9 @@ function LossChart({
     .map((point, index) => {
       const x = padding + ((width - padding * 2) * index) / stepSpan;
       const y =
-        height - padding - ((point.loss - minLoss) / lossSpan) * (height - padding * 2);
+        height -
+        padding -
+        ((point.loss - minLoss) / lossSpan) * (height - padding * 2);
       return `${x},${y}`;
     })
     .join(" ");
@@ -1002,23 +1199,71 @@ function LossChart({
   return (
     <Stack spacing={1.5}>
       <Box sx={{ width: "100%", overflowX: "auto" }}>
-        <svg width="100%" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="训练损失曲线">
+        <svg
+          width="100%"
+          viewBox={`0 0 ${width} ${height}`}
+          role="img"
+          aria-label={t("Training loss curve")}
+        >
           <rect x="0" y="0" width={width} height={height} fill="transparent" />
-          <line x1={padding} y1={padding} x2={padding} y2={height - padding} stroke="currentColor" opacity="0.18" />
-          <line x1={padding} y1={height - padding} x2={width - padding} y2={height - padding} stroke="currentColor" opacity="0.18" />
-          <polyline fill="none" stroke="currentColor" strokeWidth="3" points={polyline} />
+          <line
+            x1={padding}
+            y1={padding}
+            x2={padding}
+            y2={height - padding}
+            stroke="currentColor"
+            opacity="0.18"
+          />
+          <line
+            x1={padding}
+            y1={height - padding}
+            x2={width - padding}
+            y2={height - padding}
+            stroke="currentColor"
+            opacity="0.18"
+          />
+          <polyline
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="3"
+            points={polyline}
+          />
           {points.map((point, index) => {
             const x = padding + ((width - padding * 2) * index) / stepSpan;
             const y =
-              height - padding - ((point.loss - minLoss) / lossSpan) * (height - padding * 2);
-            return <circle key={`${point.step}-${point.loss}`} cx={x} cy={y} r="3.5" fill="currentColor" />;
+              height -
+              padding -
+              ((point.loss - minLoss) / lossSpan) * (height - padding * 2);
+            return (
+              <circle
+                key={`${point.step}-${point.loss}`}
+                cx={x}
+                cy={y}
+                r="3.5"
+                fill="currentColor"
+              />
+            );
           })}
         </svg>
       </Box>
       <Stack direction="row" spacing={1.5} flexWrap="wrap" useFlexGap>
-        <Chip size="small" label={`起始 loss ${formatMetricValue(points[0].loss)}`} variant="outlined" />
-        <Chip size="small" label={`最新 loss ${formatMetricValue(points[points.length - 1].loss)}`} color="primary" variant="outlined" />
-        <Chip size="small" label={`最低 loss ${formatMetricValue(minLoss)}`} color="success" variant="outlined" />
+        <Chip
+          size="small"
+          label={`${t("Initial loss")} ${formatMetricValue(points[0].loss)}`}
+          variant="outlined"
+        />
+        <Chip
+          size="small"
+          label={`${t("Latest loss")} ${formatMetricValue(points[points.length - 1].loss)}`}
+          color="primary"
+          variant="outlined"
+        />
+        <Chip
+          size="small"
+          label={`${t("Lowest loss")} ${formatMetricValue(minLoss)}`}
+          color="success"
+          variant="outlined"
+        />
       </Stack>
     </Stack>
   );
@@ -1067,11 +1312,12 @@ function CreateTrainingJobDialog({
   onClearError,
   onClose,
 }: CreateTrainingJobDialogProps) {
+  const { t } = useI18n();
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="md">
-      <DialogTitle>创建训练任务</DialogTitle>
+      <DialogTitle>{t("Create training job")}</DialogTitle>
       <Box component="form" onSubmit={onSubmit}>
         <DialogContent dividers>
           <Stack spacing={2.5}>
@@ -1085,20 +1331,24 @@ function CreateTrainingJobDialog({
               label="Base Model"
               value={form.model}
               onChange={(event) => onChangeForm("model", event.target.value)}
-              placeholder={`${preferredBaseModel} 或 /path/to/model`}
+              placeholder={`${preferredBaseModel} ${t("or /path/to/model")}`}
               required
               fullWidth
             />
 
             <FormControl fullWidth>
-              <InputLabel id="dialog-dataset-select-label">数据集</InputLabel>
+              <InputLabel id="dialog-dataset-select-label">
+                {t("Dataset")}
+              </InputLabel>
               <Select
                 labelId="dialog-dataset-select-label"
-                label="数据集"
+                label={t("Dataset")}
                 value={selectedDatasetId}
                 onChange={(event) => onSelectDataset(event.target.value)}
               >
-                <MenuItem value="">不绑定数据集元数据</MenuItem>
+                <MenuItem value="">
+                  {t("Do not attach dataset metadata")}
+                </MenuItem>
                 {datasets.map((dataset) => (
                   <MenuItem key={dataset.id} value={dataset.id}>
                     {dataset.name}
@@ -1110,13 +1360,18 @@ function CreateTrainingJobDialog({
             <Grid container spacing={2}>
               <Grid size={{ xs: 12, sm: 6 }}>
                 <FormControl fullWidth>
-                  <InputLabel id="training-method-label">训练方法</InputLabel>
+                  <InputLabel id="training-method-label">
+                    {t("Training method")}
+                  </InputLabel>
                   <Select
                     labelId="training-method-label"
-                    label="训练方法"
+                    label={t("Training method")}
                     value={form.methodType}
                     onChange={(event) =>
-                      onChangeForm("methodType", event.target.value as TrainingMethodType)
+                      onChangeForm(
+                        "methodType",
+                        event.target.value as TrainingMethodType,
+                      )
                     }
                   >
                     <MenuItem value="sft">SFT</MenuItem>
@@ -1127,19 +1382,23 @@ function CreateTrainingJobDialog({
               <Grid size={{ xs: 12, sm: 6 }}>
                 {selectedDataset ? (
                   <TextField
-                    label="训练集文件"
-                    value={`${selectedDataset.name} · 创建时生成`}
+                    label={t("Training file")}
+                    value={`${selectedDataset.name} ? ${t("Generated on create")}`}
                     fullWidth
                     disabled
                   />
                 ) : (
                   <FormControl fullWidth required>
-                    <InputLabel id="training-file-label">训练集文件</InputLabel>
+                    <InputLabel id="training-file-label">
+                      {t("Training file")}
+                    </InputLabel>
                     <Select
                       labelId="training-file-label"
-                      label="训练集文件"
+                      label={t("Training file")}
                       value={form.trainingFileId}
-                      onChange={(event) => onChangeForm("trainingFileId", event.target.value)}
+                      onChange={(event) =>
+                        onChangeForm("trainingFileId", event.target.value)
+                      }
                     >
                       {fineTuneFiles.map((file) => (
                         <MenuItem key={file.id} value={file.id}>
@@ -1153,14 +1412,18 @@ function CreateTrainingJobDialog({
             </Grid>
 
             <FormControl fullWidth>
-              <InputLabel id="validation-file-label">验证集文件</InputLabel>
+              <InputLabel id="validation-file-label">
+                {t("Validation file")}
+              </InputLabel>
               <Select
                 labelId="validation-file-label"
-                label="验证集文件"
+                label={t("Validation file")}
                 value={form.validationFileId}
-                onChange={(event) => onChangeForm("validationFileId", event.target.value)}
+                onChange={(event) =>
+                  onChangeForm("validationFileId", event.target.value)
+                }
               >
-                <MenuItem value="">不使用</MenuItem>
+                <MenuItem value="">{t("Do not use")}</MenuItem>
                 {fineTuneFiles.map((file) => (
                   <MenuItem key={file.id} value={file.id}>
                     {file.filename}
@@ -1182,7 +1445,7 @@ function CreateTrainingJobDialog({
             >
               <AccordionSummary expandIcon={<ExpandMoreRoundedIcon />}>
                 <Typography variant="subtitle2" fontWeight={700}>
-                  高级设置
+                  {t("Advanced settings")}
                 </Typography>
               </AccordionSummary>
               <AccordionDetails>
@@ -1193,7 +1456,9 @@ function CreateTrainingJobDialog({
                         label="Epochs"
                         type="number"
                         value={form.nEpochs}
-                        onChange={(event) => onChangeForm("nEpochs", event.target.value)}
+                        onChange={(event) =>
+                          onChangeForm("nEpochs", event.target.value)
+                        }
                         inputProps={{ min: 1, step: 1 }}
                         fullWidth
                       />
@@ -1203,7 +1468,9 @@ function CreateTrainingJobDialog({
                         label="Seed"
                         type="number"
                         value={form.seed}
-                        onChange={(event) => onChangeForm("seed", event.target.value)}
+                        onChange={(event) =>
+                          onChangeForm("seed", event.target.value)
+                        }
                         fullWidth
                       />
                     </Grid>
@@ -1211,7 +1478,9 @@ function CreateTrainingJobDialog({
                       <TextField
                         label="Suffix"
                         value={form.suffix}
-                        onChange={(event) => onChangeForm("suffix", event.target.value)}
+                        onChange={(event) =>
+                          onChangeForm("suffix", event.target.value)
+                        }
                         fullWidth
                       />
                     </Grid>
@@ -1224,7 +1493,9 @@ function CreateTrainingJobDialog({
                           label="Batch Size"
                           type="number"
                           value={form.batchSize}
-                          onChange={(event) => onChangeForm("batchSize", event.target.value)}
+                          onChange={(event) =>
+                            onChangeForm("batchSize", event.target.value)
+                          }
                           fullWidth
                         />
                       </Grid>
@@ -1233,7 +1504,9 @@ function CreateTrainingJobDialog({
                           label="Learning Rate"
                           type="number"
                           value={form.learningRate}
-                          onChange={(event) => onChangeForm("learningRate", event.target.value)}
+                          onChange={(event) =>
+                            onChangeForm("learningRate", event.target.value)
+                          }
                           inputProps={{ step: "0.00001" }}
                           fullWidth
                         />
@@ -1243,7 +1516,9 @@ function CreateTrainingJobDialog({
                           label="Logging Steps"
                           type="number"
                           value={form.loggingSteps}
-                          onChange={(event) => onChangeForm("loggingSteps", event.target.value)}
+                          onChange={(event) =>
+                            onChangeForm("loggingSteps", event.target.value)
+                          }
                           fullWidth
                         />
                       </Grid>
@@ -1252,7 +1527,9 @@ function CreateTrainingJobDialog({
                           label="LoRA Rank"
                           type="number"
                           value={form.loraRank}
-                          onChange={(event) => onChangeForm("loraRank", event.target.value)}
+                          onChange={(event) =>
+                            onChangeForm("loraRank", event.target.value)
+                          }
                           fullWidth
                         />
                       </Grid>
@@ -1261,7 +1538,9 @@ function CreateTrainingJobDialog({
                           label="LoRA Alpha"
                           type="number"
                           value={form.loraAlpha}
-                          onChange={(event) => onChangeForm("loraAlpha", event.target.value)}
+                          onChange={(event) =>
+                            onChangeForm("loraAlpha", event.target.value)
+                          }
                           fullWidth
                         />
                       </Grid>
@@ -1270,7 +1549,9 @@ function CreateTrainingJobDialog({
                           label="LoRA Dropout"
                           type="number"
                           value={form.loraDropout}
-                          onChange={(event) => onChangeForm("loraDropout", event.target.value)}
+                          onChange={(event) =>
+                            onChangeForm("loraDropout", event.target.value)
+                          }
                           inputProps={{ step: "0.01" }}
                           fullWidth
                         />
@@ -1282,10 +1563,12 @@ function CreateTrainingJobDialog({
                     control={
                       <Checkbox
                         checked={form.tensorboard}
-                        onChange={(event) => onChangeForm("tensorboard", event.target.checked)}
+                        onChange={(event) =>
+                          onChangeForm("tensorboard", event.target.checked)
+                        }
                       />
                     }
-                    label="启用 TensorBoard 集成"
+                    label={t("Enable TensorBoard integration")}
                   />
                 </Stack>
               </AccordionDetails>
@@ -1293,14 +1576,14 @@ function CreateTrainingJobDialog({
           </Stack>
         </DialogContent>
         <DialogActions>
-          <Button onClick={onClose}>取消</Button>
+          <Button onClick={onClose}>{t("Cancel")}</Button>
           <Button
             type="submit"
             variant="contained"
             startIcon={<AddRoundedIcon />}
             disabled={submitting}
           >
-            {submitting ? "提交中..." : "创建训练任务"}
+            {submitting ? t("Submitting...") : t("Create training job")}
           </Button>
         </DialogActions>
       </Box>

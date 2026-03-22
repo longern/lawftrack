@@ -21,6 +21,7 @@ import type {
   DataSummaryItem,
 } from "../../types/app";
 import { DatasetHome } from "./DatasetHome";
+import { useI18n } from "../../i18n";
 import {
   ActivityRail,
   DatasetMetadataForm,
@@ -173,6 +174,7 @@ export function WorkspaceShell({
   onSelectToken,
   onSetReplacementToken,
 }: WorkspaceShellProps) {
+  const { t } = useI18n();
   const tokenPanel =
     activeDataset && draft ? (
       <TokenActionPanel
@@ -181,7 +183,6 @@ export function WorkspaceShell({
         onAcceptContinuationDraft={onAcceptContinuationDraft}
         onDiscardContinuationDraft={onDiscardContinuationDraft}
         onGenerateContinuation={onGenerateContinuation}
-        onSaveSample={onSaveSample}
         onSetReplacementToken={onSetReplacementToken}
         replacementToken={replacementToken}
         savingSample={savingSample}
@@ -228,7 +229,7 @@ export function WorkspaceShell({
             onClick={() => onSetMobileExplorerOpen(true)}
             sx={{ flex: 1, color: "text.primary", borderColor: "divider" }}
           >
-            数据集
+            {t("Dataset")}
           </Button>
           <Button
             size="small"
@@ -237,7 +238,7 @@ export function WorkspaceShell({
             onClick={() => onSetMobileSamplesOpen(true)}
             sx={{ flex: 1, color: "text.primary", borderColor: "divider" }}
           >
-            样本
+            {t("Samples")}
           </Button>
           <Button
             size="small"
@@ -246,7 +247,7 @@ export function WorkspaceShell({
             onClick={() => onSetMobileMetadataOpen(true)}
             sx={{ flex: 1, color: "text.primary", borderColor: "divider" }}
           >
-            编辑
+            {t("Edit")}
           </Button>
         </Box>
 
@@ -424,7 +425,6 @@ export function WorkspaceShell({
                 onAcceptContinuationDraft={onAcceptContinuationDraft}
                 onDiscardContinuationDraft={onDiscardContinuationDraft}
                 onGenerateContinuation={onGenerateContinuation}
-                onSaveSample={onSaveSample}
                 onSetReplacementToken={onSetReplacementToken}
                 replacementToken={replacementToken}
                 savingSample={savingSample}
@@ -457,7 +457,7 @@ export function WorkspaceShell({
             <Box sx={{ height: "100%", minHeight: 0, overflow: "auto", p: 2 }}>
               <Paper variant="outlined" sx={panelCardSx}>
                 <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 2 }}>
-                  数据集元数据
+                  {t("Dataset metadata")}
                 </Typography>
                 <DatasetMetadataForm
                   dataset={activeDataset}

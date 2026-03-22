@@ -1,24 +1,16 @@
 import { Avatar, Box, Divider, List, ListItemButton, ListItemIcon, ListItemText, Typography } from "@mui/material";
-import { NAV_ITEMS } from "../../constants/app";
-import type { NavView } from "../../types/app";
+import type { NavItem, NavView } from "../../types/app";
 
 interface AppSidebarProps {
   activeView: NavView;
+  items: NavItem[];
   onSelect: (view: NavView) => void;
 }
 
-function AppSidebar({ activeView, onSelect }: AppSidebarProps) {
+function AppSidebar({ activeView, items, onSelect }: AppSidebarProps) {
   return (
     <Box sx={{ height: "100%", display: "flex", flexDirection: "column" }}>
-      <Box
-        sx={{
-          px: 2.5,
-          py: 3,
-          display: "flex",
-          alignItems: "center",
-          gap: 1.5,
-        }}
-      >
+      <Box sx={{ px: 2.5, py: 3, display: "flex", alignItems: "center", gap: 1.5 }}>
         <Avatar sx={{ bgcolor: "primary.main", width: 42, height: 42 }}>L</Avatar>
         <Box>
           <Typography variant="subtitle1" fontWeight={700}>
@@ -28,16 +20,12 @@ function AppSidebar({ activeView, onSelect }: AppSidebarProps) {
       </Box>
       <Divider />
       <List sx={{ px: 1.5, py: 2, flex: 1 }}>
-        {NAV_ITEMS.map((item) => (
+        {items.map((item) => (
           <ListItemButton
             key={item.id}
             selected={activeView === item.id}
             onClick={() => onSelect(item.id)}
-            sx={{
-              mb: 0.75,
-              minHeight: 52,
-              borderRadius: 3,
-            }}
+            sx={{ mb: 0.75, minHeight: 52, borderRadius: 3 }}
           >
             <ListItemIcon sx={{ minWidth: 40 }}>{item.icon}</ListItemIcon>
             <ListItemText primary={item.label} slotProps={{ primary: { fontWeight: 700 } }} />

@@ -17,6 +17,7 @@ import type {
   DataSummaryItem,
 } from "../../types/app";
 import { WorkspaceShell } from "./DataWorkspaceShell";
+import { useI18n } from "../../i18n";
 import type { ContinuationDraft, DatasetDraft, TokenCandidate, TokenSelection } from "./dataWorkspaceTypes";
 import {
   FALLBACK_BASE_MODEL,
@@ -28,6 +29,7 @@ import {
 interface DataWorkspaceProps {
   dataSummary: DataSummaryItem[];
   isMobile: boolean;
+  onDatasetOpen?: (dataset: DatasetRecord) => void;
 }
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
@@ -73,7 +75,8 @@ function decodeCandidateToken(token?: string, bytes?: number[]): string {
   return token ?? "";
 }
 
-function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
+function DataWorkspace({ dataSummary, isMobile, onDatasetOpen }: DataWorkspaceProps) {
+  const { t } = useI18n();
   const [datasets, setDatasets] = useState<DatasetRecord[]>([]);
   const [datasetTabs, setDatasetTabs] = useState<DatasetRecord[]>([]);
   const [activeDatasetId, setActiveDatasetId] = useState<string | null>(null);
@@ -103,6 +106,7 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
   const [sampleToDelete, setSampleToDelete] = useState<DatasetSample | null>(null);
   const [modelOptions, setModelOptions] = useState<string[]>([]);
   const [preferredBaseModel, setPreferredBaseModel] = useState(FALLBACK_BASE_MODEL);
+  const preferredBaseModelRef = useRef(FALLBACK_BASE_MODEL);
   const [modelsLoading, setModelsLoading] = useState(false);
   const [modelOptionsError, setModelOptionsError] = useState("");
   const [modelsLoaded, setModelsLoaded] = useState(false);
@@ -111,7 +115,7 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const tokenCandidatesRequestRef = useRef(0);
   const samplesRef = useRef<DatasetSample[]>([]);
-  const preferredBaseModelRef = useRef(FALLBACK_BASE_MODEL);
+  const lastOpenedDatasetStorageKey = "lawftune:last-opened-dataset-id";
 
   const activeDataset = datasetTabs.find((tab) => tab.id === activeDatasetId) ?? null;
   const recentDatasets = useMemo(
@@ -168,6 +172,13 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
 
   useEffect(() => {
     void loadModelOptions();
+  }, []);
+
+  useEffect(() => {
+    const savedDatasetId = window.localStorage.getItem(lastOpenedDatasetStorageKey);
+    if (savedDatasetId) {
+      setRecentDatasetIds([savedDatasetId]);
+    }
   }, []);
 
   useEffect(() => {
@@ -253,7 +264,7 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
       setDatasets(datasetsPayload.data);
       setError("");
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "加载数据工作区失败");
+      setError(loadError instanceof Error ? loadError.message : t("Failed to delete dataset"));
     } finally {
       setLoading(false);
     }
@@ -272,7 +283,7 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
       setModelOptionsError("");
       setModelsLoaded(true);
     } catch (loadError) {
-      setModelOptionsError(loadError instanceof Error ? loadError.message : "加载模型列表失败");
+      setModelOptionsError(loadError instanceof Error ? loadError.message : t("Failed to load models"));
       setModelsLoaded(true);
     } finally {
       setModelsLoading(false);
@@ -301,13 +312,15 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
       setContinuationDraft(null);
       setCandidatesLoading(false);
       tokenCandidatesRequestRef.current += 1;
-      setError(loadError instanceof Error ? loadError.message : "加载样本失败");
+      setError(loadError instanceof Error ? loadError.message : t("Failed to delete sample"));
     } finally {
       setSamplesLoading(false);
     }
   }
 
   function openDataset(dataset: DatasetRecord) {
+    window.localStorage.setItem(lastOpenedDatasetStorageKey, dataset.id);
+    onDatasetOpen?.(dataset);
     setRecentDatasetIds((current) => [dataset.id, ...current.filter((id) => id !== dataset.id)].slice(0, 6));
     setMobileExplorerOpen(false);
     setDatasetTabs((currentTabs) => {
@@ -337,7 +350,7 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
       openDataset(created);
       setError("");
     } catch (createError) {
-      setError(createError instanceof Error ? createError.message : "创建数据集失败");
+      setError(createError instanceof Error ? createError.message : t("Failed to delete dataset"));
     } finally {
       setCreating(false);
     }
@@ -380,7 +393,7 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
       setActiveDatasetId(updated.id);
       setError("");
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : "保存数据集失败");
+      setError(saveError instanceof Error ? saveError.message : t("Failed to delete dataset"));
     } finally {
       setSaving(false);
     }
@@ -404,7 +417,7 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
       openDataset(imported);
       setError("");
     } catch (importError) {
-      setError(importError instanceof Error ? importError.message : "导入数据集失败");
+      setError(importError instanceof Error ? importError.message : t("Failed to delete dataset"));
     } finally {
       setCreating(false);
       event.target.value = "";
@@ -421,7 +434,7 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          title: `样本 ${samples.length + 1}`,
+          title: `Sample ${samples.length + 1}`,
         }),
       });
       setSamples((current) => [...current, created]);
@@ -435,7 +448,7 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
       setError("");
       setMobileSamplesOpen(false);
     } catch (createError) {
-      setError(createError instanceof Error ? createError.message : "创建样本失败");
+      setError(createError instanceof Error ? createError.message : t("Failed to delete sample"));
     } finally {
       setSavingSample(false);
     }
@@ -487,7 +500,7 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
   async function ensureSampleTokenization(sample: DatasetSample): Promise<DatasetSampleTokenization | null> {
     const model = draft?.base_model.trim() || activeDataset?.base_model || "";
     if (!model || !activeDataset) {
-      setError("请先在数据集元数据中设置模型。");
+      setError(t("Please configure a base model for the current dataset first."));
       return null;
     }
     const cached = sampleTokenizations[sample.id];
@@ -508,7 +521,7 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
       setSampleTokenizations((current) => ({ ...current, [sample.id]: tokenization }));
       return tokenization;
     } catch (tokenizeError) {
-      setError(tokenizeError instanceof Error ? tokenizeError.message : "加载 token 失败");
+      setError(tokenizeError instanceof Error ? tokenizeError.message : t("Failed to refresh token data"));
       return null;
     }
   }
@@ -671,7 +684,7 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
     }
     const model = draft.base_model.trim() || activeDataset.base_model || "";
     if (!model) {
-      setError("请先在右侧设置数据集绑定模型。");
+      setError(t("Please configure a base model for the current dataset first."));
       return;
     }
     const baseTokenization =
@@ -705,13 +718,13 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
       setSelectedToken({ ...selectedToken, currentToken: replacementToken.trim() || selectedToken.currentToken });
       setError("");
     } catch (generateError) {
-      setError(generateError instanceof Error ? generateError.message : "继续生成失败");
+      setError(generateError instanceof Error ? generateError.message : t("Failed to generate assistant message"));
     } finally {
       setGenerating(false);
     }
   }
 
-  function handleAcceptContinuationDraft() {
+  async function handleAcceptContinuationDraft() {
     if (!selectedSample || !continuationDraft || !selectedToken) {
       return;
     }
@@ -742,6 +755,16 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
     setTokenCandidates([]);
     setCandidatesLoading(false);
     tokenCandidatesRequestRef.current += 1;
+    setSavingSample(true);
+    try {
+      const updated = await persistSample(acceptedSample);
+      setSamples((current) => current.map((sample) => (sample.id === updated.id ? updated : sample)));
+      setError("");
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "Auto-save failed after accepting rewrite");
+    } finally {
+      setSavingSample(false);
+    }
   }
 
   function handleDiscardContinuationDraft() {
@@ -777,7 +800,7 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
       setSamples((current) => current.map((sample) => (sample.id === updated.id ? updated : sample)));
       setError("");
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : "保存样本失败");
+      setError(saveError instanceof Error ? saveError.message : t("Failed to delete sample"));
     } finally {
       setSavingSample(false);
     }
@@ -789,20 +812,20 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
     }
     const model = draft.base_model.trim() || activeDataset.base_model || "";
     if (!model) {
-      setError("请先在右侧设置数据集绑定模型。");
+      setError(t("Please configure a base model for the current dataset first."));
       return;
     }
 
     const lastMessage = selectedSample.messages[selectedSample.messages.length - 1];
     if (lastMessage?.role === "assistant" && lastMessage.content.trim()) {
-      setError("最后一条已经是完整的助手消息，请先添加用户消息或清空最后一条助手消息。");
+      setError(t("The last assistant message already has content. Clear or remove it before generating again."));
       return;
     }
     const promptMessages = lastMessage?.role === "assistant"
       ? selectedSample.messages.slice(0, -1)
       : selectedSample.messages;
     if (promptMessages.length === 0) {
-      setError("请先添加至少一条有效消息。");
+      setError(t("Keep at least one message before generating."));
       return;
     }
     const shouldFillExistingAssistant = lastMessage?.role === "assistant" && !lastMessage.content.trim();
@@ -924,7 +947,7 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
       }
 
       if (!receivedDelta) {
-        throw new Error("生成提前结束，未收到完整消息。");
+        throw new Error(t("The model returned no writable delta, so generation could not continue."));
       }
       const persisted = await persistSample(latestSample);
       setSamples((current) => current.map((sample) => (sample.id === persisted.id ? persisted : sample)));
@@ -933,7 +956,7 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
       if (shouldRestoreOriginal) {
         updateCurrentSample(originalSample);
       }
-      setError(generateError instanceof Error ? generateError.message : "生成助手消息失败");
+      setError(generateError instanceof Error ? generateError.message : t("Failed to delete sample"));
     } finally {
       setGeneratingAssistant(false);
     }
@@ -962,7 +985,7 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
       setDatasetToDelete(null);
       setError("");
     } catch (deleteError) {
-      setError(deleteError instanceof Error ? deleteError.message : "删除数据集失败");
+      setError(deleteError instanceof Error ? deleteError.message : t("Failed to delete dataset"));
     } finally {
       setCreating(false);
     }
@@ -1000,7 +1023,7 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
       setSampleToDelete(null);
       setError("");
     } catch (deleteError) {
-      setError(deleteError instanceof Error ? deleteError.message : "删除样本失败");
+      setError(deleteError instanceof Error ? deleteError.message : t("Failed to delete sample"));
     } finally {
       setSavingSample(false);
     }
@@ -1022,13 +1045,13 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
       );
       setSampleTokenizations((current) => ({ ...current, [sample.id]: tokenization }));
     } catch (tokenizeError) {
-      setError(tokenizeError instanceof Error ? tokenizeError.message : "更新 token 失败");
+      setError(tokenizeError instanceof Error ? tokenizeError.message : t("Failed to refresh token data"));
     }
   }
 
   async function persistSample(sample: DatasetSample): Promise<DatasetSample> {
     if (!activeDataset) {
-      throw new Error("当前没有打开的数据集。");
+      throw new Error(t("Open a dataset before saving samples."));
     }
     const updated = await fetchJson<DatasetSample>(`/api/datasets/${activeDataset.id}/samples/${sample.id}`, {
       method: "PUT",
@@ -1140,18 +1163,18 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
           },
         }}
       >
-        <DialogTitle>删除数据集</DialogTitle>
+        <DialogTitle>{t("Delete dataset")}</DialogTitle>
         <DialogContent>
           <DialogContentText sx={{ color: "text.secondary" }}>
-            {datasetToDelete ? `确认删除“${datasetToDelete.name}”吗？数据集元数据和已保存样本都会被移除。` : ""}
+            {datasetToDelete ? t("Are you sure you want to delete dataset \"{name}\"? This will remove the dataset and all of its samples permanently.", { name: datasetToDelete.name }) : ""}
           </DialogContentText>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2.5 }}>
           <Button onClick={() => setDatasetToDelete(null)} sx={{ color: "text.secondary" }}>
-            取消
+            {t("Cancel")}
           </Button>
           <Button color="error" variant="contained" onClick={() => void handleDeleteDataset()} disabled={creating}>
-            {creating ? "删除中..." : "确认删除"}
+            {creating ? t("Deleting...") : t("Confirm delete")}
           </Button>
         </DialogActions>
       </Dialog>
@@ -1168,18 +1191,18 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
           },
         }}
       >
-        <DialogTitle>删除样本</DialogTitle>
+        <DialogTitle>{t("Delete sample")}</DialogTitle>
         <DialogContent>
           <DialogContentText sx={{ color: "text.secondary" }}>
-            {sampleToDelete ? `确认删除“${sampleToDelete.title}”吗？此操作会移除该样本及其改写记录。` : ""}
+            {sampleToDelete ? t("Are you sure you want to delete sample \"{title}\"? This action cannot be undone.", { title: sampleToDelete.title }) : ""}
           </DialogContentText>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2.5 }}>
           <Button onClick={() => setSampleToDelete(null)} sx={{ color: "text.secondary" }}>
-            取消
+            {t("Cancel")}
           </Button>
           <Button color="error" variant="contained" onClick={() => void handleDeleteSample()} disabled={savingSample}>
-            {savingSample ? "删除中..." : "确认删除"}
+            {savingSample ? t("Deleting...") : t("Confirm delete")}
           </Button>
         </DialogActions>
       </Dialog>
@@ -1188,3 +1211,4 @@ function DataWorkspace({ dataSummary, isMobile }: DataWorkspaceProps) {
 }
 
 export default DataWorkspace;
+

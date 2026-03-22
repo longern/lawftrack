@@ -92,7 +92,43 @@ class ServerTests(unittest.TestCase):
             response = client.get("/status")
 
             self.assertEqual(response.status_code, 200)
-            self.assertEqual(response.json(), {"name": "lawftune", "status": "running"})
+            payload = response.json()
+            self.assertEqual(payload["name"], "lawftune")
+            self.assertEqual(payload["status"], "running")
+            self.assertIn("hostname", payload)
+            self.assertIn("operating_system", payload)
+            self.assertIn("architecture", payload)
+            self.assertIn("cpu_threads", payload)
+            self.assertIn("python_version", payload)
+            self.assertIn("gpus", payload)
+            self.assertIsInstance(payload["gpus"], list)
+
+    def test_query_gpu_metrics_parses_nvidia_smi_output(self) -> None:
+        sys.path.insert(0, str(ROOT / "src"))
+        try:
+            import lawftune.server as server_module
+        finally:
+            sys.path.pop(0)
+
+        mocked_result = mock.Mock(
+            stdout="NVIDIA GeForce RTX 4090, 24564, 10240, 14324, 72, 61\n"
+        )
+
+        with mock.patch.object(server_module.subprocess, "run", return_value=mocked_result):
+            self.assertEqual(
+                server_module.query_gpu_metrics(),
+                [
+                    {
+                        "index": 0,
+                        "name": "NVIDIA GeForce RTX 4090",
+                        "memory_total_mb": 24564,
+                        "memory_used_mb": 10240,
+                        "memory_free_mb": 14324,
+                        "utilization_gpu_percent": 72,
+                        "temperature_celsius": 61,
+                    }
+                ],
+            )
 
     def test_config_endpoint_hides_api_key(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -556,9 +592,9 @@ class ServerTests(unittest.TestCase):
             sample = samples_response.json()["data"][0]
             self.assertEqual(sample["messages"][0]["role"], "user")
             self.assertEqual(sample["messages"][1]["role"], "assistant")
-            self.assertEqual(sample["messages"][1]["content"], "您好")
+            self.assertEqual(sample["messages"][1]["content"], "hello")
             self.assertEqual(sample["anchors"][0]["token_index"], 0)
-            self.assertEqual(sample["anchors"][0]["replacement_token"], "您好")
+            self.assertEqual(sample["anchors"][0]["replacement_token"], "hello")
 
     def test_dataset_export_training_file_builds_method_specific_jsonl(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -571,23 +607,23 @@ class ServerTests(unittest.TestCase):
             client.post(
                 f"/api/datasets/{created_dataset['id']}/samples",
                 json={
-                    "title": "多轮样本",
+                    "title": "multi-turn sample",
                     "messages": [
-                        {"role": "user", "content": "问题一"},
-                        {"role": "assistant", "content": "回答一"},
-                        {"role": "user", "content": "问题二"},
-                        {"role": "assistant", "content": "回答二"},
+                        {"role": "user", "content": "question-1"},
+                        {"role": "assistant", "content": "answer-1"},
+                        {"role": "user", "content": "question-2"},
+                        {"role": "assistant", "content": "answer-2"},
                     ],
                     "anchors": [
                         {
                             "message_index": 1,
                             "token_index": 0,
-                            "replacement_token": "改写一",
+                            "replacement_token": "rewrite-1",
                         },
                         {
                             "message_index": 3,
                             "token_index": 1,
-                            "replacement_token": "改写二",
+                            "replacement_token": "rewrite-2",
                         },
                     ],
                 },
@@ -626,9 +662,9 @@ class ServerTests(unittest.TestCase):
                 if line.strip()
             ]
             self.assertEqual(len(lawf_records), 2)
-            self.assertEqual(lawf_records[0]["completion"][0]["content"], "回答一")
+            self.assertEqual(lawf_records[0]["completion"][0]["content"], "answer-1")
             self.assertEqual(lawf_records[0]["anchors"][0]["token_index"], 0)
-            self.assertEqual(lawf_records[1]["completion"][0]["content"], "回答二")
+            self.assertEqual(lawf_records[1]["completion"][0]["content"], "answer-2")
             self.assertEqual(lawf_records[1]["anchors"][0]["token_index"], 1)
 
     def test_exported_dataset_file_can_be_used_for_fine_tuning_job(self) -> None:
@@ -653,8 +689,8 @@ class ServerTests(unittest.TestCase):
                     f"/api/datasets/{created_dataset['id']}/samples",
                     json={
                         "messages": [
-                            {"role": "user", "content": "你好"},
-                            {"role": "assistant", "content": "您好"},
+                            {"role": "user", "content": "job-question"},
+                            {"role": "assistant", "content": "job-answer"},
                         ],
                     },
                 )
@@ -743,6 +779,12 @@ class ServerTests(unittest.TestCase):
             self.assertIn("fallback tokenizer", logs_response.json()["stderr"])
 
     def test_datasets_api_lists_and_updates_dataset_samples(self) -> None:
+        initial_assistant = "Hello, I am your legal assistant"
+        updated_title = "Contract review follow-up"
+        updated_user = "Please review the dispute timeline."
+        updated_assistant = "Thanks. Please share the contract and notice."
+        replacement_token = "Updated"
+
         with tempfile.TemporaryDirectory() as temp_dir:
             client = self._create_client(temp_dir)
             created_dataset = client.post(
@@ -751,7 +793,7 @@ class ServerTests(unittest.TestCase):
                     "file": (
                         "train.jsonl",
                         (
-                            b'{"messages":[{"role":"user","content":"\xe4\xbd\xa0\xe5\xa5\xbd"},{"role":"assistant","content":"\xe4\xbd\xa0\xe5\xa5\xbd\xef\xbc\x8c\xe6\x88\x91\xe6\x98\xaf\xe6\xb3\x95\xe5\xbe\x8b\xe5\x8a\xa9\xe6\x89\x8b"}]}\n'
+                            b'{"messages":[{"role":"user","content":"hello"},{"role":"assistant","content":"Hello, I am your legal assistant"}]}\n'
                         ),
                         "application/jsonl",
                     )
@@ -768,23 +810,23 @@ class ServerTests(unittest.TestCase):
             self.assertEqual(samples_payload["object"], "list")
             self.assertEqual(len(samples_payload["data"]), 1)
             sample = samples_payload["data"][0]
-            self.assertEqual(sample["messages"][1]["content"], "你好，我是法律助手")
+            self.assertEqual(sample["messages"][1]["content"], initial_assistant)
 
             update_response = client.put(
                 f"/api/datasets/{created_dataset['id']}/samples/{sample['id']}",
                 json={
-                    "title": "你好样本",
+                    "title": updated_title,
                     "messages": [
-                        {"role": "user", "content": "你好"},
-                        {"role": "assistant", "content": "您好，我是法律助手，可以继续帮您分析。"},
+                        {"role": "user", "content": updated_user},
+                        {"role": "assistant", "content": updated_assistant},
                     ],
                     "source_messages": sample["source_messages"],
                     "edits": [
                         {
                             "message_index": 1,
                             "token_index": 0,
-                            "original_token": "你好",
-                            "replacement_token": "您好",
+                            "original_token": "Hello",
+                            "replacement_token": replacement_token,
                             "regenerated_from_token_index": 1,
                         }
                     ],
@@ -792,9 +834,9 @@ class ServerTests(unittest.TestCase):
             )
             self.assertEqual(update_response.status_code, 200)
             updated_sample = update_response.json()
-            self.assertEqual(updated_sample["title"], "你好样本")
-            self.assertEqual(updated_sample["messages"][1]["content"], "您好，我是法律助手，可以继续帮您分析。")
-            self.assertEqual(updated_sample["edits"][0]["replacement_token"], "您好")
+            self.assertEqual(updated_sample["title"], updated_title)
+            self.assertEqual(updated_sample["messages"][1]["content"], updated_assistant)
+            self.assertEqual(updated_sample["edits"][0]["replacement_token"], replacement_token)
 
             samples_path = (
                 Path(temp_dir)
@@ -804,7 +846,7 @@ class ServerTests(unittest.TestCase):
             )
             self.assertTrue(samples_path.is_file())
             saved_samples = json.loads(samples_path.read_text(encoding="utf-8"))
-            self.assertEqual(saved_samples[0]["title"], "你好样本")
+            self.assertEqual(saved_samples[0]["title"], updated_title)
 
     def test_datasets_api_can_create_blank_sample(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -816,11 +858,11 @@ class ServerTests(unittest.TestCase):
 
             create_sample_response = client.post(
                 f"/api/datasets/{created_dataset['id']}/samples",
-                json={"title": "新样本"},
+                json={"title": "Blank sample"},
             )
             self.assertEqual(create_sample_response.status_code, 200)
             sample = create_sample_response.json()
-            self.assertEqual(sample["title"], "新样本")
+            self.assertEqual(sample["title"], "Blank sample")
             self.assertEqual(sample["messages"][0]["role"], "user")
             self.assertEqual(sample["messages"][1]["role"], "assistant")
 
@@ -838,7 +880,7 @@ class ServerTests(unittest.TestCase):
 
             created_sample = client.post(
                 f"/api/datasets/{created_dataset['id']}/samples",
-                json={"title": "待删除样本"},
+                json={"title": "Delete me"},
             ).json()
 
             delete_response = client.delete(
@@ -852,6 +894,10 @@ class ServerTests(unittest.TestCase):
             self.assertEqual(list_samples_response.json()["data"], [])
 
     def test_dataset_metadata_update_does_not_clear_manual_samples(self) -> None:
+        manual_title = "Manual sample"
+        manual_user = "Need a summary."
+        manual_assistant = "Here is the first draft."
+
         with tempfile.TemporaryDirectory() as temp_dir:
             client = self._create_client(temp_dir)
             created_dataset = client.post(
@@ -862,10 +908,10 @@ class ServerTests(unittest.TestCase):
             created_sample = client.post(
                 f"/api/datasets/{created_dataset['id']}/samples",
                 json={
-                    "title": "新样本",
+                    "title": manual_title,
                     "messages": [
-                        {"role": "user", "content": "问题"},
-                        {"role": "assistant", "content": "回答"},
+                        {"role": "user", "content": manual_user},
+                        {"role": "assistant", "content": manual_assistant},
                     ],
                 },
             ).json()
@@ -884,9 +930,12 @@ class ServerTests(unittest.TestCase):
             samples = list_samples_response.json()["data"]
             self.assertEqual(len(samples), 1)
             self.assertEqual(samples[0]["id"], created_sample["id"])
-            self.assertEqual(samples[0]["messages"][1]["content"], "回答")
+            self.assertEqual(samples[0]["messages"][1]["content"], manual_assistant)
 
     def test_dataset_metadata_update_does_not_reset_existing_samples(self) -> None:
+        updated_user = "Need a revision."
+        updated_assistant = "Updated manual answer."
+
         with tempfile.TemporaryDirectory() as temp_dir:
             client = self._create_client(temp_dir)
             created_dataset = client.post(
@@ -895,7 +944,7 @@ class ServerTests(unittest.TestCase):
                     "file": (
                         "train.jsonl",
                         (
-                            b'{"messages":[{"role":"user","content":"\xe4\xbd\xa0\xe5\xa5\xbd"},{"role":"assistant","content":"\xe5\x8e\x9f\xe5\xa7\x8b\xe5\x9b\x9e\xe7\xad\x94"}]}\n'
+                            b'{"messages":[{"role":"user","content":"hello"},{"role":"assistant","content":"Original answer"}]}\n'
                         ),
                         "application/jsonl",
                     )
@@ -912,8 +961,8 @@ class ServerTests(unittest.TestCase):
                 json={
                     "title": sample["title"],
                     "messages": [
-                        {"role": "user", "content": "你好"},
-                        {"role": "assistant", "content": "编辑后的回答"},
+                        {"role": "user", "content": updated_user},
+                        {"role": "assistant", "content": updated_assistant},
                     ],
                     "source_messages": sample["source_messages"],
                     "edits": [],
@@ -922,9 +971,7 @@ class ServerTests(unittest.TestCase):
 
             update_response = client.patch(
                 f"/api/datasets/{created_dataset['id']}",
-                json={
-                    "base_model": "/models/local-qwen",
-                },
+                json={"base_model": "/models/local-qwen"},
             )
             self.assertEqual(update_response.status_code, 200)
 
@@ -932,41 +979,19 @@ class ServerTests(unittest.TestCase):
             self.assertEqual(list_samples_response.status_code, 200)
             samples = list_samples_response.json()["data"]
             self.assertEqual(len(samples), 1)
-            self.assertEqual(samples[0]["messages"][1]["content"], "编辑后的回答")
+            self.assertEqual(samples[0]["messages"][1]["content"], updated_assistant)
 
     def test_dataset_sample_tokenize_and_continue_use_model_tokenizer(self) -> None:
         sys.path.insert(0, str(ROOT / "src"))
         try:
             import lawftune.api.datasets_api as datasets_api_module
             import lawftune.server as server_module
-            from fastapi.testclient import TestClient
         finally:
             sys.path.pop(0)
 
-        class DummyTokenizer:
-            is_fast = True
-
-            def __call__(self, text, add_special_tokens=False, return_offsets_mapping=False):
-                mapping = {
-                    "你好，助手": {
-                        "input_ids": [11, 12, 13],
-                        "offset_mapping": [(0, 2), (2, 3), (3, 5)],
-                    },
-                    "您好": {
-                        "input_ids": [21],
-                        "offset_mapping": [(0, 2)],
-                    },
-                }
-                payload = mapping[text]
-                if return_offsets_mapping:
-                    return payload
-                return {"input_ids": payload["input_ids"]}
-
-            def convert_ids_to_tokens(self, token_id):
-                return {11: "你好", 12: "，", 13: "助手", 21: "您好"}[token_id]
-
-            def decode(self, token_ids, clean_up_tokenization_spaces=False):
-                return "".join({11: "你好", 12: "，", 13: "助手", 21: "您好"}[token_id] for token_id in token_ids)
+        initial_reasoning = "Initial reasoning"
+        initial_content = "Hello"
+        continued_content = "Updated completion tail"
 
         class DummyResponse:
             def __init__(self, payload):
@@ -991,15 +1016,31 @@ class ServerTests(unittest.TestCase):
                 captured_request["url"] = url
                 captured_request["headers"] = headers
                 captured_request["json"] = json
-                return DummyResponse(
-                    {
-                        "choices": [
-                            {
-                                "text": "，我是新的助手回答",
-                            }
-                        ]
-                    }
-                )
+                return DummyResponse({"choices": [{"text": " completion tail"}]})
+
+        initial_tokens = [
+            {"token_index": 0, "token_id": 11, "token": "He", "text": "He", "start": 0, "end": 2},
+            {"token_index": 1, "token_id": 12, "token": "ll", "text": "ll", "start": 2, "end": 4},
+            {"token_index": 2, "token_id": 13, "token": "o", "text": "o", "start": 4, "end": 5},
+        ]
+        continued_tokens = [
+            {"token_index": 0, "token_id": 21, "token": "Updated", "text": "Updated", "start": 0, "end": 7},
+            {"token_index": 1, "token_id": 22, "token": " completion", "text": " completion", "start": 7, "end": 18},
+            {"token_index": 2, "token_id": 23, "token": " tail", "text": " tail", "start": 18, "end": 23},
+        ]
+        reasoning_tokens = [
+            {"token_index": 0, "token_id": 31, "token": "Initial", "text": "Initial", "start": 0, "end": 7},
+            {"token_index": 1, "token_id": 32, "token": " reasoning", "text": " reasoning", "start": 7, "end": 17},
+        ]
+
+        def fake_tokenize(model, text):
+            if text == initial_content:
+                return initial_tokens
+            if text == continued_content:
+                return continued_tokens
+            if text == initial_reasoning:
+                return reasoning_tokens
+            raise AssertionError(text)
 
         with tempfile.TemporaryDirectory() as temp_dir:
             config_path = Path(temp_dir) / "config.json"
@@ -1014,7 +1055,7 @@ class ServerTests(unittest.TestCase):
                 files={
                     "file": (
                         "train.jsonl",
-                        b'{"messages":[{"role":"user","content":"hi"},{"role":"assistant","content":"\xe4\xbd\xa0\xe5\xa5\xbd\xef\xbc\x8c\xe5\x8a\xa9\xe6\x89\x8b","reasoning":"\xe5\x8e\x9f\xe5\xa7\x8b\xe6\x8e\xa8\xe7\x90\x86"}]}\n',
+                        b'{"messages":[{"role":"user","content":"hi"},{"role":"assistant","content":"Hello","reasoning":"Initial reasoning"}]}\n',
                         "application/jsonl",
                     )
                 },
@@ -1025,59 +1066,51 @@ class ServerTests(unittest.TestCase):
             )
             sample = client.get(f"/api/datasets/{created_dataset['id']}/samples").json()["data"][0]
 
-            with mock.patch.object(datasets_api_module, "tokenize_text", side_effect=lambda model, text: [
-                {"token_index": 0, "token_id": 11, "token": "你好", "text": "你好", "start": 0, "end": 2},
-                {"token_index": 1, "token_id": 12, "token": "，", "text": "，", "start": 2, "end": 3},
-                {"token_index": 2, "token_id": 13, "token": "助手", "text": "助手", "start": 3, "end": 5},
-            ]):
+            with mock.patch.object(datasets_api_module, "tokenize_text", side_effect=fake_tokenize):
                 tokenize_response = client.post(
                     f"/api/datasets/{created_dataset['id']}/samples/{sample['id']}/tokenize",
                     json={"model": "Qwen/Qwen2.5-7B-Instruct"},
                 )
             self.assertEqual(tokenize_response.status_code, 200)
-            self.assertEqual(tokenize_response.json()["messages"][1]["tokens"][0]["token"], "你好")
+            self.assertEqual(tokenize_response.json()["messages"][1]["tokens"][0]["token"], "He")
 
-            with mock.patch.object(datasets_api_module, "build_continuation_prefix", return_value=("您好", "你好", "您好")):
+            with mock.patch.object(
+                datasets_api_module,
+                "build_continuation_prefix",
+                return_value=("Updated", "Hello", "Updated"),
+            ):
                 with mock.patch.object(server_module.httpx, "AsyncClient", return_value=DummyAsyncClient()):
                     with mock.patch.object(datasets_api_module.httpx, "AsyncClient", return_value=DummyAsyncClient()):
                         with mock.patch.object(
                             datasets_api_module,
                             "build_completion_prompt",
-                            return_value="PROMPT:您好",
+                            return_value="PROMPT:Updated",
                         ):
                             with mock.patch.object(
                                 datasets_api_module,
                                 "suggest_completion_max_tokens",
                                 return_value=4096,
                             ):
-                                with mock.patch.object(
-                                    datasets_api_module,
-                                    "tokenize_text",
-                                    return_value=[
-                                        {"token_index": 0, "token_id": 21, "token": "您好", "text": "您好", "start": 0, "end": 2},
-                                        {"token_index": 1, "token_id": 12, "token": "，", "text": "，", "start": 2, "end": 3},
-                                        {"token_index": 2, "token_id": 13, "token": "助手", "text": "助手", "start": 7, "end": 9},
-                                    ],
-                                ):
+                                with mock.patch.object(datasets_api_module, "tokenize_text", side_effect=fake_tokenize):
                                     continue_response = client.post(
                                         f"/api/datasets/{created_dataset['id']}/samples/{sample['id']}/continue",
                                         json={
                                             "model": "Qwen/Qwen2.5-7B-Instruct",
                                             "message_index": 1,
                                             "token_index": 0,
-                                            "replacement_token": "您好",
+                                            "replacement_token": "Updated",
                                         },
                                     )
 
             self.assertEqual(continue_response.status_code, 200)
             continued_payload = continue_response.json()
             continued_sample = continued_payload["sample"]
-            self.assertEqual(continued_sample["messages"][1]["content"], "您好，我是新的助手回答")
-            self.assertEqual(continued_sample["messages"][1]["reasoning"], "原始推理")
-            self.assertEqual(continued_sample["edits"][0]["original_token"], "你好")
-            self.assertEqual(continued_sample["edits"][0]["replacement_token"], "您好")
-            self.assertEqual(continued_payload["tokenization"]["messages"][1]["tokens"][0]["text"], "您好")
-            self.assertEqual(captured_request["json"]["prompt"], "PROMPT:您好")
+            self.assertEqual(continued_sample["messages"][1]["content"], continued_content)
+            self.assertEqual(continued_sample["messages"][1]["reasoning"], initial_reasoning)
+            self.assertEqual(continued_sample["edits"][0]["original_token"], "Hello")
+            self.assertEqual(continued_sample["edits"][0]["replacement_token"], "Updated")
+            self.assertEqual(continued_payload["tokenization"]["messages"][1]["tokens"][0]["text"], "Updated")
+            self.assertEqual(captured_request["json"]["prompt"], "PROMPT:Updated")
             self.assertEqual(captured_request["json"]["max_tokens"], 4096)
             self.assertTrue(str(captured_request["url"]).endswith("/v1/completions"))
 
@@ -1096,7 +1129,7 @@ class ServerTests(unittest.TestCase):
                 },
             )
             self.assertEqual(save_response.status_code, 200)
-            self.assertEqual(save_response.json()["messages"][1]["reasoning"], "原始推理")
+            self.assertEqual(save_response.json()["messages"][1]["reasoning"], initial_reasoning)
 
     def test_continue_preserves_edits_before_current_token(self) -> None:
         sys.path.insert(0, str(ROOT / "src"))
@@ -1124,15 +1157,7 @@ class ServerTests(unittest.TestCase):
                 return False
 
             async def post(self, url, headers=None, json=None):
-                return DummyResponse(
-                    {
-                        "choices": [
-                            {
-                                "text": " X",
-                            }
-                        ]
-                    }
-                )
+                return DummyResponse({"choices": [{"text": " X"}]})
 
         with tempfile.TemporaryDirectory() as temp_dir:
             config_path = Path(temp_dir) / "config.json"
@@ -1149,7 +1174,7 @@ class ServerTests(unittest.TestCase):
             created_sample = client.post(
                 f"/api/datasets/{created_dataset['id']}/samples",
                 json={
-                    "title": "样本",
+                    "title": "Preserve edits sample",
                     "messages": [
                         {"role": "user", "content": "hi"},
                         {"role": "assistant", "content": "a b c"},
@@ -1227,6 +1252,11 @@ class ServerTests(unittest.TestCase):
         finally:
             sys.path.pop(0)
 
+        initial_reasoning = "Step one"
+        initial_content = "Original answer"
+        continued_reasoning = "Revised plan"
+        continued_content = "Updated answer"
+
         class DummyResponse:
             def __init__(self, payload):
                 self._payload = payload
@@ -1249,15 +1279,30 @@ class ServerTests(unittest.TestCase):
             async def post(self, url, headers=None, json=None):
                 captured_request["url"] = url
                 captured_request["json"] = json
-                return DummyResponse(
-                    {
-                        "choices": [
-                            {
-                                "text": "步骤二</think>最终回答",
-                            }
-                        ]
-                    }
-                )
+                return DummyResponse({"choices": [{"text": " plan</think>Updated answer"}]})
+
+        def fake_tokenize(model, text):
+            if text == initial_reasoning:
+                return [
+                    {"token_index": 0, "token_id": 1, "token": "Step", "text": "Step", "start": 0, "end": 4},
+                    {"token_index": 1, "token_id": 2, "token": " one", "text": " one", "start": 4, "end": 8},
+                ]
+            if text == initial_content:
+                return [
+                    {"token_index": 0, "token_id": 3, "token": "Original", "text": "Original", "start": 0, "end": 8},
+                    {"token_index": 1, "token_id": 4, "token": " answer", "text": " answer", "start": 8, "end": 15},
+                ]
+            if text == continued_reasoning:
+                return [
+                    {"token_index": 0, "token_id": 5, "token": "Revised", "text": "Revised", "start": 0, "end": 7},
+                    {"token_index": 1, "token_id": 6, "token": " plan", "text": " plan", "start": 7, "end": 12},
+                ]
+            if text == continued_content:
+                return [
+                    {"token_index": 0, "token_id": 7, "token": "Updated", "text": "Updated", "start": 0, "end": 7},
+                    {"token_index": 1, "token_id": 8, "token": " answer", "text": " answer", "start": 7, "end": 14},
+                ]
+            raise AssertionError(text)
 
         with tempfile.TemporaryDirectory() as temp_dir:
             config_path = Path(temp_dir) / "config.json"
@@ -1272,36 +1317,12 @@ class ServerTests(unittest.TestCase):
                 files={
                     "file": (
                         "train.jsonl",
-                        b'{"messages":[{"role":"user","content":"hi"},{"role":"assistant","reasoning":"\xe6\xad\xa5\xe9\xaa\xa4\xe4\xb8\x80","content":"\xe5\x8e\x9f\xe5\x9b\x9e\xe7\xad\x94"}]}\n',
+                        b'{"messages":[{"role":"user","content":"hi"},{"role":"assistant","reasoning":"Step one","content":"Original answer"}]}\n',
                         "application/jsonl",
                     )
                 },
             ).json()
             sample = client.get(f"/api/datasets/{created_dataset['id']}/samples").json()["data"][0]
-
-            def fake_tokenize(model, text):
-                if text == "步骤一":
-                    return [
-                        {"token_index": 0, "token_id": 1, "token": "步骤", "text": "步骤", "start": 0, "end": 2},
-                        {"token_index": 1, "token_id": 2, "token": "一", "text": "一", "start": 2, "end": 3},
-                    ]
-                if text == "原回答":
-                    return [
-                        {"token_index": 0, "token_id": 3, "token": "原", "text": "原", "start": 0, "end": 1},
-                        {"token_index": 1, "token_id": 4, "token": "回答", "text": "回答", "start": 1, "end": 3},
-                    ]
-                if text == "新步骤二":
-                    return [
-                        {"token_index": 0, "token_id": 5, "token": "新", "text": "新", "start": 0, "end": 1},
-                        {"token_index": 1, "token_id": 1, "token": "步骤", "text": "步骤", "start": 1, "end": 3},
-                        {"token_index": 2, "token_id": 6, "token": "二", "text": "二", "start": 3, "end": 4},
-                    ]
-                if text == "最终回答":
-                    return [
-                        {"token_index": 0, "token_id": 7, "token": "最终", "text": "最终", "start": 0, "end": 2},
-                        {"token_index": 1, "token_id": 4, "token": "回答", "text": "回答", "start": 2, "end": 4},
-                    ]
-                raise AssertionError(text)
 
             with mock.patch.object(datasets_api_module, "tokenize_text", side_effect=fake_tokenize):
                 tokenize_response = client.post(
@@ -1311,16 +1332,20 @@ class ServerTests(unittest.TestCase):
 
             self.assertEqual(tokenize_response.status_code, 200)
             tokenization_payload = tokenize_response.json()
-            self.assertEqual(tokenization_payload["messages"][1]["reasoning_tokens"][0]["text"], "步骤")
-            self.assertEqual(tokenization_payload["messages"][1]["tokens"][0]["text"], "原")
+            self.assertEqual(tokenization_payload["messages"][1]["reasoning_tokens"][0]["text"], "Step")
+            self.assertEqual(tokenization_payload["messages"][1]["tokens"][0]["text"], "Original")
 
-            with mock.patch.object(datasets_api_module, "build_continuation_prefix", return_value=("新", "步骤", "新")):
+            with mock.patch.object(
+                datasets_api_module,
+                "build_continuation_prefix",
+                return_value=("Revised", "Step", "Revised"),
+            ):
                 with mock.patch.object(server_module.httpx, "AsyncClient", return_value=DummyAsyncClient()):
                     with mock.patch.object(datasets_api_module.httpx, "AsyncClient", return_value=DummyAsyncClient()):
                         with mock.patch.object(
                             datasets_api_module,
                             "build_completion_prompt",
-                            return_value="PROMPT:<think>新",
+                            return_value="PROMPT:<think>Revised",
                         ):
                             with mock.patch.object(
                                 datasets_api_module,
@@ -1335,20 +1360,20 @@ class ServerTests(unittest.TestCase):
                                             "message_index": 1,
                                             "token_index": 0,
                                             "target": "reasoning",
-                                            "replacement_token": "新",
+                                            "replacement_token": "Revised",
                                         },
                                     )
 
             self.assertEqual(continue_response.status_code, 200)
             continued_payload = continue_response.json()
-            self.assertEqual(continued_payload["sample"]["messages"][1]["reasoning"], "新步骤二")
-            self.assertEqual(continued_payload["sample"]["messages"][1]["content"], "最终回答")
+            self.assertEqual(continued_payload["sample"]["messages"][1]["reasoning"], continued_reasoning)
+            self.assertEqual(continued_payload["sample"]["messages"][1]["content"], continued_content)
             self.assertEqual(continued_payload["sample"]["edits"][0]["target"], "reasoning")
             self.assertEqual(
                 continued_payload["tokenization"]["messages"][1]["reasoning_tokens"][0]["text"],
-                "新",
+                "Revised",
             )
-            self.assertEqual(captured_request["json"]["prompt"], "PROMPT:<think>新")
+            self.assertEqual(captured_request["json"]["prompt"], "PROMPT:<think>Revised")
             self.assertTrue(str(captured_request["url"]).endswith("/v1/completions"))
 
     def test_dataset_sample_candidate_tokens_use_completions(self) -> None:
@@ -1387,7 +1412,7 @@ class ServerTests(unittest.TestCase):
                             {
                                 "logprobs": {
                                     "top_logprobs": [
-                                        {"新": -0.1, "旧": -0.9}
+                                        {"Alpha": -0.1, "Beta": -0.9}
                                     ]
                                 }
                             }
@@ -1410,10 +1435,10 @@ class ServerTests(unittest.TestCase):
             created_sample = client.post(
                 f"/api/datasets/{created_dataset['id']}/samples",
                 json={
-                    "title": "样本",
+                    "title": "Candidate tokens sample",
                     "messages": [
                         {"role": "user", "content": "hi"},
-                        {"role": "assistant", "reasoning": "步骤一", "content": "原回答"},
+                        {"role": "assistant", "reasoning": "Draft reasoning", "content": "Answer body"},
                     ],
                 },
             ).json()
@@ -1423,7 +1448,7 @@ class ServerTests(unittest.TestCase):
                     with mock.patch.object(
                         datasets_api_module,
                         "build_prefix_before_token",
-                        return_value="前缀",
+                        return_value="Draft",
                     ):
                         with mock.patch.object(
                             datasets_api_module,
@@ -1444,8 +1469,8 @@ class ServerTests(unittest.TestCase):
             self.assertEqual(
                 response.json()["data"],
                 [
-                    {"text": "新", "logprob": -0.1},
-                    {"text": "旧", "logprob": -0.9},
+                    {"text": "Alpha", "logprob": -0.1},
+                    {"text": "Beta", "logprob": -0.9},
                 ],
             )
             self.assertEqual(captured_request["json"]["prompt"], "PROMPT:CANDIDATES")
@@ -1704,8 +1729,9 @@ class ServerTests(unittest.TestCase):
 
             self.assertEqual(response.status_code, 200)
             self.assertIn("text/event-stream", response.headers["content-type"])
-            self.assertIn('data: {"choices":[{"delta":{"content":"你好"}}]}', response.text)
+            self.assertIn('data: {"choices":[{"delta":{"content":"\u4f60\u597d"}}]}', response.text)
 
 
 if __name__ == "__main__":
     unittest.main()
+

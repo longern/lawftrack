@@ -1,4 +1,3 @@
-import SaveRoundedIcon from "@mui/icons-material/SaveRounded";
 import {
   Box,
   Button,
@@ -11,6 +10,7 @@ import type { DatasetSample } from "../../types/app";
 import { darkFieldSx, panelCardSx } from "./dataWorkspaceStyles";
 import type { TokenCandidate, TokenSelection } from "./dataWorkspaceTypes";
 import { formatCandidateLabel, getWorkspaceColors } from "./dataWorkspaceTheme";
+import { useI18n } from "../../i18n";
 
 export function TokenActionPanel({
   candidatesLoading,
@@ -19,7 +19,6 @@ export function TokenActionPanel({
   onAcceptContinuationDraft,
   onDiscardContinuationDraft,
   onGenerateContinuation,
-  onSaveSample,
   onSetReplacementToken,
   replacementToken,
   savingSample,
@@ -33,7 +32,6 @@ export function TokenActionPanel({
   onAcceptContinuationDraft: () => void;
   onDiscardContinuationDraft: () => void;
   onGenerateContinuation: () => void;
-  onSaveSample: () => void;
   onSetReplacementToken: (value: string) => void;
   replacementToken: string;
   savingSample: boolean;
@@ -41,6 +39,8 @@ export function TokenActionPanel({
   selectedToken: TokenSelection | null;
   tokenCandidates: TokenCandidate[];
 }) {
+  const { t } = useI18n();
+
   return (
     <Box
       sx={{
@@ -53,7 +53,7 @@ export function TokenActionPanel({
     >
       <Box sx={{ px: 2, py: 1.5, borderBottom: (theme) => `1px solid ${getWorkspaceColors(theme).border}` }}>
         <Typography variant="subtitle1" sx={{ color: (theme) => getWorkspaceColors(theme).textPrimary, fontWeight: 700 }}>
-          Token 改写
+          {t("Token rewrite")}
         </Typography>
       </Box>
 
@@ -63,10 +63,10 @@ export function TokenActionPanel({
             {selectedToken ? (
               <>
                 <Typography variant="body2" sx={{ color: "#fca5a5" }}>
-                  原 {selectedToken.target === "reasoning" ? "reasoning" : "content"} token: {selectedToken.originalToken}
+                  {t("Original {target} token: {token}", { target: selectedToken.target === "reasoning" ? "reasoning" : "content", token: selectedToken.originalToken })}
                 </Typography>
                 <TextField
-                  label="替换为"
+                  label={t("Replace with")}
                   value={replacementToken}
                   onChange={(event) => onSetReplacementToken(event.target.value)}
                   fullWidth
@@ -75,11 +75,11 @@ export function TokenActionPanel({
                 />
                 <Stack spacing={0.75}>
                   <Typography variant="caption" sx={{ color: "text.secondary" }}>
-                    候选 token
+                    {t("Candidate tokens")}
                   </Typography>
                   {candidatesLoading ? (
                     <Typography variant="caption" sx={{ color: "text.secondary", opacity: 0.78 }}>
-                      加载候选中...
+                      {t("Loading candidates...")}
                     </Typography>
                   ) : tokenCandidates.length > 0 ? (
                     <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.75 }}>
@@ -106,43 +106,42 @@ export function TokenActionPanel({
                     </Box>
                   ) : (
                     <Typography variant="caption" sx={{ color: "text.secondary", opacity: 0.78 }}>
-                      暂无候选。
+                      {t("No candidates.")}
                     </Typography>
                   )}
                 </Stack>
                 {hasContinuationDraft ? (
                   <Stack direction="row" spacing={1}>
-                    <Button variant="contained" onClick={onAcceptContinuationDraft} sx={{ flex: 1 }}>
-                      接受改写
+                    <Button
+                      variant="contained"
+                      onClick={onAcceptContinuationDraft}
+                      disabled={savingSample}
+                      sx={{ flex: 1 }}
+                    >
+                      {savingSample ? t("Saving...") : t("Accept and save")}
                     </Button>
                     <Button
                       variant="outlined"
                       onClick={onDiscardContinuationDraft}
+                      disabled={savingSample}
                       sx={{ flex: 1, color: "text.primary", borderColor: "divider" }}
                     >
-                      放弃改写
+                      {t("Discard rewrite")}
                     </Button>
                   </Stack>
                 ) : (
-                  <>
-                    <Button variant="contained" onClick={onGenerateContinuation} disabled={generating}>
-                      {generating ? "生成中..." : "替换并继续生成"}
-                    </Button>
-                    <Button
-                      variant="outlined"
-                      startIcon={<SaveRoundedIcon />}
-                      onClick={onSaveSample}
-                      disabled={savingSample}
-                      sx={{ color: "text.primary", borderColor: "divider" }}
-                    >
-                      {savingSample ? "保存中..." : "保存到数据集"}
-                    </Button>
-                  </>
+                  <Button
+                    variant="contained"
+                    onClick={onGenerateContinuation}
+                    disabled={generating || savingSample}
+                  >
+                    {generating ? t("Generating...") : t("Replace and continue")}
+                  </Button>
                 )}
               </>
             ) : (
               <Typography variant="body2" sx={{ color: "text.secondary" }}>
-                点击 assistant 消息中的任意 token 后，可将它替换为新 token，并让模型从该位置继续生成。
+                {t("Click any token in an assistant message to replace it and continue generation from that point.")}
               </Typography>
             )}
           </Stack>
@@ -159,7 +158,6 @@ export function TokenActionMiniPanel({
   onAcceptContinuationDraft,
   onDiscardContinuationDraft,
   onGenerateContinuation,
-  onSaveSample,
   onSetReplacementToken,
   replacementToken,
   savingSample,
@@ -174,7 +172,6 @@ export function TokenActionMiniPanel({
   onAcceptContinuationDraft: () => void;
   onDiscardContinuationDraft: () => void;
   onGenerateContinuation: () => void;
-  onSaveSample: () => void;
   onSetReplacementToken: (value: string) => void;
   replacementToken: string;
   savingSample: boolean;
@@ -183,21 +180,23 @@ export function TokenActionMiniPanel({
   showSelectionSummary?: boolean;
   tokenCandidates: TokenCandidate[];
 }) {
+  const { t } = useI18n();
+
   if (!selectedToken) {
-    return <Typography variant="body2" sx={{ color: "text.secondary" }}>点击 assistant 消息里的 token 开始改写。</Typography>;
+    return <Typography variant="body2" sx={{ color: "text.secondary" }}>{t("Click a token in an assistant message to start rewriting.")}</Typography>;
   }
 
   return (
     <Stack spacing={1.25}>
       {showSelectionSummary ? (
         <Typography variant="caption" sx={{ color: "text.secondary" }}>
-          {selectedSample?.title} · 原 token: {selectedToken.originalToken}
-          {" · "}
+          {selectedSample?.title} | {t("Original token: {token}", { token: selectedToken.originalToken })}
+          {" | "}
           {selectedToken.target}
         </Typography>
       ) : null}
       <TextField
-        label="替换为"
+        label={t("Replace with")}
         value={replacementToken}
         onChange={(event) => onSetReplacementToken(event.target.value)}
         size="small"
@@ -206,11 +205,11 @@ export function TokenActionMiniPanel({
       />
       <Stack spacing={0.75}>
         <Typography variant="caption" sx={{ color: "text.secondary" }}>
-          候选 token
+          {t("Candidate tokens")}
         </Typography>
         {candidatesLoading ? (
           <Typography variant="caption" sx={{ color: "text.secondary", opacity: 0.78 }}>
-            加载候选中...
+            {t("Loading candidates...")}
           </Typography>
         ) : tokenCandidates.length > 0 ? (
           <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.75 }}>
@@ -237,40 +236,42 @@ export function TokenActionMiniPanel({
           </Box>
         ) : (
           <Typography variant="caption" sx={{ color: "text.secondary", opacity: 0.78 }}>
-            暂无候选。
+            {t("No candidates.")}
           </Typography>
         )}
       </Stack>
       <Stack direction="row" spacing={1}>
         {hasContinuationDraft ? (
           <>
-            <Button variant="contained" size="small" onClick={onAcceptContinuationDraft} sx={{ flex: 1 }}>
-              接受
+            <Button
+              variant="contained"
+              size="small"
+              onClick={onAcceptContinuationDraft}
+              disabled={savingSample}
+              sx={{ flex: 1 }}
+            >
+              {savingSample ? t("Saving...") : t("Accept and save")}
             </Button>
             <Button
               variant="outlined"
               size="small"
               onClick={onDiscardContinuationDraft}
-              sx={{ flex: 1, color: "text.primary", borderColor: "divider" }}
-            >
-              放弃
-            </Button>
-          </>
-        ) : (
-          <>
-            <Button variant="contained" size="small" onClick={onGenerateContinuation} disabled={generating} sx={{ flex: 1 }}>
-              {generating ? "生成中..." : "继续生成"}
-            </Button>
-            <Button
-              variant="outlined"
-              size="small"
-              onClick={onSaveSample}
               disabled={savingSample}
               sx={{ flex: 1, color: "text.primary", borderColor: "divider" }}
             >
-              {savingSample ? "保存中..." : "保存"}
+              {t("Discard")}
             </Button>
           </>
+        ) : (
+          <Button
+            variant="contained"
+            size="small"
+            onClick={onGenerateContinuation}
+            disabled={generating || savingSample}
+            sx={{ flex: 1 }}
+          >
+            {generating ? t("Generating...") : t("Continue generation")}
+          </Button>
         )}
       </Stack>
     </Stack>

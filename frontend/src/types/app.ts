@@ -1,10 +1,26 @@
 import type { ReactNode } from "react";
 
-export type NavView = "data" | "training" | "service";
+export type NavView = "overview" | "data" | "training" | "service";
+
+export interface GpuStatus {
+  index: number;
+  name: string;
+  memory_total_mb?: number | null;
+  memory_used_mb?: number | null;
+  memory_free_mb?: number | null;
+  utilization_gpu_percent?: number | null;
+  temperature_celsius?: number | null;
+}
 
 export interface GatewayStatus {
   name: string;
   status: string;
+  hostname?: string;
+  operating_system?: string;
+  architecture?: string;
+  cpu_threads?: number | null;
+  python_version?: string;
+  gpus?: GpuStatus[];
 }
 
 export interface GatewayHealth {
@@ -231,3 +247,9 @@ export interface FineTuningJobLogs {
   stderr: string;
   status: string;
 }
+
+export interface DeviceInfoItem {
+  label: string;
+  value: string;
+}
+

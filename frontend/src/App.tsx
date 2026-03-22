@@ -4,6 +4,8 @@ import {
   BottomNavigation,
   BottomNavigationAction,
   Box,
+  Button,
+  ButtonGroup,
   Chip,
   Container,
   CssBaseline,
@@ -11,6 +13,7 @@ import {
   IconButton,
   LinearProgress,
   Paper,
+  Stack,
   Toolbar,
   Typography,
 } from "@mui/material";
@@ -20,13 +23,34 @@ import MenuRoundedIcon from "@mui/icons-material/MenuRounded";
 import AppSidebar from "./components/layout/AppSidebar";
 import DataWorkspace from "./components/data/DataWorkspace";
 import ErrorCard from "./components/shared/ErrorCard";
+import { DRAWER_WIDTH, getNavItems, getServiceCommands } from "./constants/app";
+import { useI18n } from "./i18n";
+import OverviewSection from "./sections/OverviewSection";
 import ServiceSection from "./sections/ServiceSection";
 import TrainingSection from "./sections/TrainingSection";
-import { DRAWER_WIDTH, NAV_ITEMS, SERVICE_COMMANDS } from "./constants/app";
 import { createAppTheme } from "./theme/appTheme";
-import type { AppSnapshot, DataSummaryItem, NavView, ServiceRecord } from "./types/app";
+import type {
+  ApiListResponse,
+  AppSnapshot,
+  DataSummaryItem,
+  DatasetRecord,
+  FineTuningJob,
+  NavView,
+  ServiceRecord,
+} from "./types/app";
+
+const LAST_OPENED_DATASET_STORAGE_KEY = "lawftune:last-opened-dataset-id";
+
+async function fetchJson<T>(url: string): Promise<T> {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Request failed: ${response.status}`);
+  }
+  return (await response.json()) as T;
+}
 
 function App() {
+  const { locale, setLocale, t } = useI18n();
   const APP_BAR_HEIGHT = 72;
   const MOBILE_NAV_HEIGHT = 92;
   const dataViewportHeight = {
@@ -34,105 +58,168 @@ function App() {
     md: `calc(100dvh - ${APP_BAR_HEIGHT}px)`,
   } as const;
   const prefersDarkMode = useMediaQuery("(prefers-color-scheme: dark)");
-  const theme = useMemo(() => createAppTheme(prefersDarkMode ? "dark" : "light"), [prefersDarkMode]);
+  const theme = useMemo(
+    () => createAppTheme(prefersDarkMode ? "dark" : "light"),
+    [prefersDarkMode],
+  );
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
-  const [activeView, setActiveView] = useState<NavView>("data");
+  const [activeView, setActiveView] = useState<NavView>("overview");
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [recentDatasetId, setRecentDatasetId] = useState<string | null>(null);
+  const [datasets, setDatasets] = useState<DatasetRecord[]>([]);
+  const [jobs, setJobs] = useState<FineTuningJob[]>([]);
   const [snapshot, setSnapshot] = useState<AppSnapshot>({
     status: null,
     health: null,
     config: null,
   });
 
+  const navItems = useMemo(() => getNavItems(t), [t]);
+  const serviceCommands = useMemo(() => getServiceCommands(t), [t]);
+
+  useEffect(() => {
+    setRecentDatasetId(
+      window.localStorage.getItem(LAST_OPENED_DATASET_STORAGE_KEY),
+    );
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
 
-    async function loadSnapshot() {
+    async function loadAppState() {
       setLoading(true);
       setError("");
 
-      try {
-        const [statusResponse, healthResponse, configResponse] = await Promise.all([
-          fetch("/api/status"),
-          fetch("/api/healthz"),
-          fetch("/api/config"),
-        ]);
+      const results = await Promise.allSettled([
+        fetchJson<AppSnapshot["status"]>("/api/status"),
+        fetchJson<AppSnapshot["health"]>("/api/healthz"),
+        fetchJson<AppSnapshot["config"]>("/api/config"),
+        fetchJson<ApiListResponse<DatasetRecord>>("/api/datasets"),
+        fetchJson<ApiListResponse<FineTuningJob>>("/api/fine_tuning/jobs"),
+      ]);
 
-        if (!statusResponse.ok || !healthResponse.ok || !configResponse.ok) {
-          throw new Error("Could not load gateway state");
-        }
-
-        const [status, health, config] = await Promise.all([
-          statusResponse.json(),
-          healthResponse.json(),
-          configResponse.json(),
-        ]);
-
-        if (!cancelled) {
-          setSnapshot({ status, health, config });
-        }
-      } catch (loadError) {
-        if (!cancelled) {
-          setError(loadError instanceof Error ? loadError.message : "Unknown error");
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
+      if (cancelled) {
+        return;
       }
+
+      const [
+        statusResult,
+        healthResult,
+        configResult,
+        datasetsResult,
+        jobsResult,
+      ] = results;
+
+      if (
+        statusResult.status === "fulfilled" &&
+        healthResult.status === "fulfilled" &&
+        configResult.status === "fulfilled"
+      ) {
+        setSnapshot({
+          status: statusResult.value,
+          health: healthResult.value,
+          config: configResult.value,
+        });
+      }
+
+      if (datasetsResult.status === "fulfilled") {
+        setDatasets(datasetsResult.value.data);
+      }
+
+      if (jobsResult.status === "fulfilled") {
+        setJobs(jobsResult.value.data);
+      }
+
+      const firstError = results.find((result) => result.status === "rejected");
+      setError(
+        firstError?.status === "rejected"
+          ? firstError.reason instanceof Error
+            ? firstError.reason.message
+            : t("Unknown error")
+          : "",
+      );
+      setLoading(false);
     }
 
-    void loadSnapshot();
+    void loadAppState();
 
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [t]);
 
-  const healthLabel = snapshot.health?.status === "ok" ? "正常" : "离线";
-  const endpoint = snapshot.config?.vllm_endpoint ?? "Unavailable";
-  const apiKey = snapshot.config?.has_api_key ? "已配置" : "未设置";
+  const healthOk = snapshot.health?.status === "ok";
+  const healthLabel = healthOk ? t("Healthy") : t("Offline");
+  const endpoint = snapshot.config?.vllm_endpoint ?? t("Unavailable");
+  const apiKey = snapshot.config?.has_api_key ? t("Configured") : t("Not set");
   const gatewayStatus = snapshot.status?.status ?? "unknown";
-  const activeNav = NAV_ITEMS.find((item) => item.id === activeView) ?? NAV_ITEMS[0];
+  const activeNav =
+    navItems.find((item) => item.id === activeView) ?? navItems[0];
+
+  const recentDataset = useMemo(() => {
+    if (recentDatasetId) {
+      const matched = datasets.find(
+        (dataset) => dataset.id === recentDatasetId,
+      );
+      if (matched) {
+        return matched;
+      }
+    }
+    return [...datasets].sort((a, b) => b.updated_at - a.updated_at)[0] ?? null;
+  }, [datasets, recentDatasetId]);
+
+  const recentJob = useMemo(
+    () => [...jobs].sort((a, b) => b.created_at - a.created_at)[0] ?? null,
+    [jobs],
+  );
 
   const dataSummary = useMemo<DataSummaryItem[]>(
     () => [
       {
-        title: "网关",
-        value: gatewayStatus === "running" ? "已连通" : "未就绪",
+        title: t("Gateway"),
+        value: gatewayStatus === "running" ? t("Connected") : t("Not ready"),
         icon: "gateway",
       },
-      {
-        title: "健康",
-        value: healthLabel,
-        icon: "health",
-      },
-      {
-        title: "上游",
-        value: endpoint,
-        icon: "upstream",
-      },
-      {
-        title: "鉴权",
-        value: apiKey,
-        icon: "auth",
-      },
+      { title: t("Health"), value: healthLabel, icon: "health" },
+      { title: t("Upstream"), value: endpoint, icon: "upstream" },
+      { title: t("Auth"), value: apiKey, icon: "auth" },
     ],
-    [apiKey, endpoint, gatewayStatus, healthLabel],
+    [apiKey, endpoint, gatewayStatus, healthLabel, t],
   );
 
   const serviceRecords: ServiceRecord[] = [
-    { label: "服务名称", value: snapshot.status?.name ?? "Loading..." },
-    { label: "网关状态", value: snapshot.status?.status ?? "Loading..." },
-    { label: "健康状态", value: snapshot.health?.status ?? "Loading..." },
-    { label: "vLLM 地址", value: snapshot.config?.vllm_endpoint ?? "Loading..." },
+    {
+      label: t("Service name"),
+      value: snapshot.status?.name ?? t("Loading..."),
+    },
+    {
+      label: t("Gateway status"),
+      value: snapshot.status?.status ?? t("Loading..."),
+    },
+    {
+      label: t("Health status"),
+      value: snapshot.health?.status ?? t("Loading..."),
+    },
+    {
+      label: t("vLLM endpoint"),
+      value: snapshot.config?.vllm_endpoint ?? t("Loading..."),
+    },
     {
       label: "API Key",
-      value: snapshot.config?.has_api_key ? "Configured" : loading ? "Loading..." : "Not set",
+      value: snapshot.config?.has_api_key
+        ? t("Configured")
+        : loading
+          ? t("Loading...")
+          : t("Not set"),
     },
   ];
+
+  function handleOpenDataset(dataset: DatasetRecord) {
+    window.localStorage.setItem(LAST_OPENED_DATASET_STORAGE_KEY, dataset.id);
+    setRecentDatasetId(dataset.id);
+  }
 
   return (
     <ThemeProvider theme={theme}>
@@ -161,28 +248,61 @@ function App() {
                 : alpha("#f6f9ff", 0.85),
           }}
         >
-          <Toolbar sx={{ minHeight: `${APP_BAR_HEIGHT}px !important`, height: APP_BAR_HEIGHT }}>
-            {isMobile && (
-              <IconButton edge="start" onClick={() => setMobileDrawerOpen(true)} sx={{ mr: 1 }}>
+          <Toolbar
+            sx={{
+              minHeight: `${APP_BAR_HEIGHT}px !important`,
+              height: APP_BAR_HEIGHT,
+              gap: 1.5,
+            }}
+          >
+            {isMobile ? (
+              <IconButton
+                edge="start"
+                onClick={() => setMobileDrawerOpen(true)}
+                sx={{ mr: 0.5 }}
+              >
                 <MenuRoundedIcon />
               </IconButton>
-            )}
-            <Box sx={{ flex: 1 }}>
-              <Typography variant="h6" fontWeight={700}>
+            ) : null}
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <Typography variant="h6" fontWeight={700} noWrap>
                 {activeNav.label}
               </Typography>
             </Box>
-            <Chip
-              color={healthLabel === "正常" ? "success" : "default"}
-              label={healthLabel}
-              variant="filled"
-            />
+            <Stack direction="row" spacing={1} alignItems="center">
+              <ButtonGroup
+                size="small"
+                variant="outlined"
+                sx={{ display: { xs: "none", sm: "inline-flex" } }}
+              >
+                <Button
+                  onClick={() => setLocale("zh-CN")}
+                  variant={locale === "zh-CN" ? "contained" : "outlined"}
+                >
+                  {t("Chinese")}
+                </Button>
+                <Button
+                  onClick={() => setLocale("en-US")}
+                  variant={locale === "en-US" ? "contained" : "outlined"}
+                >
+                  {t("English")}
+                </Button>
+              </ButtonGroup>
+              <Chip
+                color={healthOk ? "success" : "default"}
+                label={healthLabel}
+                variant="filled"
+              />
+            </Stack>
           </Toolbar>
-          {loading && <LinearProgress />}
+          {loading ? <LinearProgress /> : null}
         </AppBar>
 
         <Box sx={{ display: "flex" }}>
-          <Box component="nav" sx={{ width: { md: DRAWER_WIDTH }, flexShrink: { md: 0 } }}>
+          <Box
+            component="nav"
+            sx={{ width: { md: DRAWER_WIDTH }, flexShrink: { md: 0 } }}
+          >
             <Drawer
               variant="temporary"
               open={mobileDrawerOpen}
@@ -193,7 +313,11 @@ function App() {
                 "& .MuiDrawer-paper": { width: DRAWER_WIDTH },
               }}
             >
-              <AppSidebar activeView={activeView} onSelect={setActiveView} />
+              <AppSidebar
+                activeView={activeView}
+                items={navItems}
+                onSelect={setActiveView}
+              />
             </Drawer>
             <Drawer
               variant="permanent"
@@ -206,7 +330,11 @@ function App() {
                 },
               }}
             >
-              <AppSidebar activeView={activeView} onSelect={setActiveView} />
+              <AppSidebar
+                activeView={activeView}
+                items={navItems}
+                onSelect={setActiveView}
+              />
             </Drawer>
           </Box>
 
@@ -219,7 +347,12 @@ function App() {
               overflow: activeView === "data" ? "hidden" : "visible",
             }}
           >
-            <Toolbar sx={{ minHeight: `${APP_BAR_HEIGHT}px !important`, height: APP_BAR_HEIGHT }} />
+            <Toolbar
+              sx={{
+                minHeight: `${APP_BAR_HEIGHT}px !important`,
+                height: APP_BAR_HEIGHT,
+              }}
+            />
 
             {activeView === "data" ? (
               <Box
@@ -237,16 +370,36 @@ function App() {
                   </Box>
                 ) : null}
                 <Box sx={{ flex: 1, minHeight: 0 }}>
-                  <DataWorkspace dataSummary={dataSummary} isMobile={isMobile} />
+                  <DataWorkspace
+                    dataSummary={dataSummary}
+                    isMobile={isMobile}
+                    onDatasetOpen={handleOpenDataset}
+                  />
                 </Box>
               </Box>
             ) : (
               <Container maxWidth="xl" sx={{ py: { xs: 2, md: 4 } }}>
-                <Box sx={{ display: "grid", gap: 24 }}>
-                  {error ? <ErrorCard message={error} onClose={() => setError("")} /> : null}
+                <Box sx={{ display: "grid", gap: 2 }}>
+                  {error ? (
+                    <ErrorCard message={error} onClose={() => setError("")} />
+                  ) : null}
+                  {activeView === "overview" ? (
+                    <OverviewSection
+                      loading={loading}
+                      recentDataset={recentDataset}
+                      recentJob={recentJob}
+                      status={snapshot.status}
+                      health={snapshot.health}
+                      config={snapshot.config}
+                      onNavigate={setActiveView}
+                    />
+                  ) : null}
                   {activeView === "training" ? <TrainingSection /> : null}
                   {activeView === "service" ? (
-                    <ServiceSection commands={SERVICE_COMMANDS} records={serviceRecords} />
+                    <ServiceSection
+                      commands={serviceCommands}
+                      records={serviceRecords}
+                    />
                   ) : null}
                 </Box>
               </Container>
@@ -277,7 +430,7 @@ function App() {
               value={activeView}
               onChange={(_, value: NavView) => setActiveView(value)}
             >
-              {NAV_ITEMS.map((item) => (
+              {navItems.map((item) => (
                 <BottomNavigationAction
                   key={item.id}
                   label={item.label}

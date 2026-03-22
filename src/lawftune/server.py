@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import os
+import platform
+import socket
+import subprocess
 from pathlib import Path
 
 import httpx
@@ -37,6 +40,68 @@ HOP_BY_HOP_HEADERS = {
     "upgrade",
 }
 DEFAULT_CORS_ORIGIN_REGEX = r"^https?://(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$"
+
+
+def parse_optional_int(raw_value: str) -> int | None:
+    try:
+        return int(raw_value)
+    except (TypeError, ValueError):
+        return None
+
+
+def query_gpu_metrics() -> list[dict[str, str | int | None]]:
+    try:
+        result = subprocess.run(
+            [
+                "nvidia-smi",
+                "--query-gpu=name,memory.total,memory.used,memory.free,utilization.gpu,temperature.gpu",
+                "--format=csv,noheader,nounits",
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=2,
+        )
+    except (FileNotFoundError, OSError, subprocess.SubprocessError):
+        return []
+
+    gpus: list[dict[str, str | int | None]] = []
+    for index, line in enumerate(result.stdout.splitlines()):
+        if not line.strip():
+            continue
+        parts = [part.strip() for part in line.split(",")]
+        if len(parts) != 6:
+            continue
+        name, memory_total, memory_used, memory_free, utilization_gpu, temperature = parts
+        gpus.append(
+            {
+                "index": index,
+                "name": name or "Unknown GPU",
+                "memory_total_mb": parse_optional_int(memory_total),
+                "memory_used_mb": parse_optional_int(memory_used),
+                "memory_free_mb": parse_optional_int(memory_free),
+                "utilization_gpu_percent": parse_optional_int(utilization_gpu),
+                "temperature_celsius": parse_optional_int(temperature),
+            }
+        )
+    return gpus
+
+
+def build_status_payload() -> dict[str, object]:
+    system_name = platform.system() or "Unknown"
+    release_name = platform.release() or "Unknown"
+    return {
+        "name": "lawftune",
+        "status": "running",
+        "hostname": socket.gethostname() or "Unknown",
+        "operating_system": f"{system_name} {release_name}".strip(),
+        "architecture": platform.machine() or "Unknown",
+        "cpu_threads": os.cpu_count(),
+        "python_version": platform.python_version(),
+        "gpus": query_gpu_metrics(),
+    }
+
+
 def sanitize_outbound_headers(headers: Request.headers, api_key: str) -> dict[str, str]:
     outbound_headers = {
         key: value
@@ -114,8 +179,8 @@ def create_app(config_dir: Path | None = None) -> FastAPI:
 
     @app.get("/status")
     @app.get("/api/status")
-    def status() -> dict[str, str]:
-        return {"name": "lawftune", "status": "running"}
+    def status() -> dict[str, object]:
+        return build_status_payload()
 
     @app.get("/healthz")
     @app.get("/api/healthz")
@@ -165,3 +230,4 @@ def create_app(config_dir: Path | None = None) -> FastAPI:
         )
 
     return app
+

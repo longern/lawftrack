@@ -1,34 +1,27 @@
 import DataObjectRoundedIcon from "@mui/icons-material/DataObjectRounded";
+import DashboardRoundedIcon from "@mui/icons-material/DashboardRounded";
 import ModelTrainingRoundedIcon from "@mui/icons-material/ModelTrainingRounded";
 import SettingsEthernetRoundedIcon from "@mui/icons-material/SettingsEthernetRounded";
-import type { NavItem } from "../types/app";
+import type { CommandItem, NavItem } from "../types/app";
 
 export const DRAWER_WIDTH = 280;
 
-export const NAV_ITEMS: NavItem[] = [
-  { id: "data", label: "数据", icon: <DataObjectRoundedIcon /> },
-  { id: "training", label: "训练", icon: <ModelTrainingRoundedIcon /> },
-  { id: "service", label: "服务", icon: <SettingsEthernetRoundedIcon /> },
-];
+type Translate = (message: string) => string;
 
-export const SERVICE_COMMANDS = [
-  { label: "重新安装", value: "lawftune install" },
-  { label: "前台启动网关", value: "lawftune gateway" },
-  { label: "查看服务状态", value: "lawftune gateway status" },
-  { label: "启动服务", value: "lawftune gateway start" },
-];
+export function getNavItems(t: Translate): NavItem[] {
+  return [
+    { id: "overview", label: t("Overview"), icon: <DashboardRoundedIcon /> },
+    { id: "data", label: t("Data"), icon: <DataObjectRoundedIcon /> },
+    { id: "training", label: t("Training"), icon: <ModelTrainingRoundedIcon /> },
+    { id: "service", label: t("Service"), icon: <SettingsEthernetRoundedIcon /> },
+  ];
+}
 
-export const TRAINING_STEPS = [
-  {
-    title: "准备数据集",
-    body: "在这里接入上传、切分和标注状态，后续可以扩成数据集列表与详情抽屉。",
-  },
-  {
-    title: "配置训练参数",
-    body: "适合放 LoRA 参数、基座模型、轮数、批大小，以及训练模板选择。",
-  },
-  {
-    title: "提交与跟踪任务",
-    body: "当前可以先展示最近任务、队列状态和日志入口，后面再接真实训练接口。",
-  },
-];
+export function getServiceCommands(t: Translate): CommandItem[] {
+  return [
+    { label: t("Reinstall"), value: "lawftune install" },
+    { label: t("Run gateway in foreground"), value: "lawftune gateway" },
+    { label: t("Check gateway status"), value: "lawftune gateway status" },
+    { label: t("Start gateway service"), value: "lawftune gateway start" },
+  ];
+}

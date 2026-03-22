@@ -18,7 +18,12 @@ import type {
 } from "../../types/app";
 import { WorkspaceShell } from "./DataWorkspaceShell";
 import { useI18n } from "../../i18n";
-import type { ContinuationDraft, DatasetDraft, TokenCandidate, TokenSelection } from "./dataWorkspaceTypes";
+import type {
+  ContinuationDraft,
+  DatasetDraft,
+  TokenCandidate,
+  TokenSelection,
+} from "./dataWorkspaceTypes";
 import {
   FALLBACK_BASE_MODEL,
   type RemoteModelRecord,
@@ -49,7 +54,10 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
-function splitAssistantPrefill(text: string): { reasoning?: string; content: string } {
+function splitAssistantPrefill(text: string): {
+  reasoning?: string;
+  content: string;
+} {
   if (!text.startsWith("<think>")) {
     return { content: text };
   }
@@ -75,7 +83,11 @@ function decodeCandidateToken(token?: string, bytes?: number[]): string {
   return token ?? "";
 }
 
-function DataWorkspace({ dataSummary, isMobile, onDatasetOpen }: DataWorkspaceProps) {
+function DataWorkspace({
+  dataSummary,
+  isMobile,
+  onDatasetOpen,
+}: DataWorkspaceProps) {
   const { t } = useI18n();
   const [datasets, setDatasets] = useState<DatasetRecord[]>([]);
   const [datasetTabs, setDatasetTabs] = useState<DatasetRecord[]>([]);
@@ -83,13 +95,18 @@ function DataWorkspace({ dataSummary, isMobile, onDatasetOpen }: DataWorkspacePr
   const [recentDatasetIds, setRecentDatasetIds] = useState<string[]>([]);
   const [draft, setDraft] = useState<DatasetDraft | null>(null);
   const [samples, setSamples] = useState<DatasetSample[]>([]);
-  const [sampleTokenizations, setSampleTokenizations] = useState<Record<string, DatasetSampleTokenization>>({});
+  const [sampleTokenizations, setSampleTokenizations] = useState<
+    Record<string, DatasetSampleTokenization>
+  >({});
   const [selectedSampleId, setSelectedSampleId] = useState<string | null>(null);
   const [dirtySampleIds, setDirtySampleIds] = useState<string[]>([]);
-  const [selectedToken, setSelectedToken] = useState<TokenSelection | null>(null);
+  const [selectedToken, setSelectedToken] = useState<TokenSelection | null>(
+    null,
+  );
   const [replacementToken, setReplacementToken] = useState("");
   const [tokenCandidates, setTokenCandidates] = useState<TokenCandidate[]>([]);
-  const [continuationDraft, setContinuationDraft] = useState<ContinuationDraft | null>(null);
+  const [continuationDraft, setContinuationDraft] =
+    useState<ContinuationDraft | null>(null);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -101,11 +118,17 @@ function DataWorkspace({ dataSummary, isMobile, onDatasetOpen }: DataWorkspacePr
   const [mobileExplorerOpen, setMobileExplorerOpen] = useState(false);
   const [mobileSamplesOpen, setMobileSamplesOpen] = useState(false);
   const [mobileMetadataOpen, setMobileMetadataOpen] = useState(false);
-  const [desktopExplorerCollapsed, setDesktopExplorerCollapsed] = useState(true);
-  const [datasetToDelete, setDatasetToDelete] = useState<DatasetRecord | null>(null);
-  const [sampleToDelete, setSampleToDelete] = useState<DatasetSample | null>(null);
+  const [desktopExplorerCollapsed, setDesktopExplorerCollapsed] =
+    useState(true);
+  const [datasetToDelete, setDatasetToDelete] = useState<DatasetRecord | null>(
+    null,
+  );
+  const [sampleToDelete, setSampleToDelete] = useState<DatasetSample | null>(
+    null,
+  );
   const [modelOptions, setModelOptions] = useState<string[]>([]);
-  const [preferredBaseModel, setPreferredBaseModel] = useState(FALLBACK_BASE_MODEL);
+  const [preferredBaseModel, setPreferredBaseModel] =
+    useState(FALLBACK_BASE_MODEL);
   const preferredBaseModelRef = useRef(FALLBACK_BASE_MODEL);
   const [modelsLoading, setModelsLoading] = useState(false);
   const [modelOptionsError, setModelOptionsError] = useState("");
@@ -117,7 +140,8 @@ function DataWorkspace({ dataSummary, isMobile, onDatasetOpen }: DataWorkspacePr
   const samplesRef = useRef<DatasetSample[]>([]);
   const lastOpenedDatasetStorageKey = "lawftune:last-opened-dataset-id";
 
-  const activeDataset = datasetTabs.find((tab) => tab.id === activeDatasetId) ?? null;
+  const activeDataset =
+    datasetTabs.find((tab) => tab.id === activeDatasetId) ?? null;
   const recentDatasets = useMemo(
     () =>
       recentDatasetIds
@@ -125,10 +149,16 @@ function DataWorkspace({ dataSummary, isMobile, onDatasetOpen }: DataWorkspacePr
         .filter((dataset): dataset is DatasetRecord => Boolean(dataset)),
     [datasets, recentDatasetIds],
   );
-  const selectedSample = samples.find((sample) => sample.id === selectedSampleId) ?? samples[0] ?? null;
-  const selectedSampleTokenization = selectedSample ? sampleTokenizations[selectedSample.id] ?? null : null;
+  const selectedSample =
+    samples.find((sample) => sample.id === selectedSampleId) ??
+    samples[0] ??
+    null;
+  const selectedSampleTokenization = selectedSample
+    ? (sampleTokenizations[selectedSample.id] ?? null)
+    : null;
   const visibleSample = continuationDraft?.sample ?? selectedSample;
-  const visibleSampleTokenization = continuationDraft?.tokenization ?? selectedSampleTokenization;
+  const visibleSampleTokenization =
+    continuationDraft?.tokenization ?? selectedSampleTokenization;
   const tokenSequence = useMemo(
     () =>
       (visibleSampleTokenization?.messages ?? []).flatMap((message) =>
@@ -175,7 +205,9 @@ function DataWorkspace({ dataSummary, isMobile, onDatasetOpen }: DataWorkspacePr
   }, []);
 
   useEffect(() => {
-    const savedDatasetId = window.localStorage.getItem(lastOpenedDatasetStorageKey);
+    const savedDatasetId = window.localStorage.getItem(
+      lastOpenedDatasetStorageKey,
+    );
     if (savedDatasetId) {
       setRecentDatasetIds([savedDatasetId]);
     }
@@ -241,11 +273,22 @@ function DataWorkspace({ dataSummary, isMobile, onDatasetOpen }: DataWorkspacePr
   }, [selectedSample, selectedSampleId]);
 
   useEffect(() => {
-    if (!activeDataset || !selectedSample || generatingAssistant || dirtySampleIds.includes(selectedSample.id)) {
+    if (
+      !activeDataset ||
+      !selectedSample ||
+      generatingAssistant ||
+      dirtySampleIds.includes(selectedSample.id)
+    ) {
       return;
     }
     void ensureSampleTokenization(selectedSample);
-  }, [activeDataset, selectedSample, draft?.base_model, generatingAssistant, dirtySampleIds]);
+  }, [
+    activeDataset,
+    selectedSample,
+    draft?.base_model,
+    generatingAssistant,
+    dirtySampleIds,
+  ]);
 
   function buildSampleSignature(sample: DatasetSample) {
     return JSON.stringify(
@@ -260,11 +303,16 @@ function DataWorkspace({ dataSummary, isMobile, onDatasetOpen }: DataWorkspacePr
   async function refreshWorkspace() {
     setLoading(true);
     try {
-      const datasetsPayload = await fetchJson<ApiListResponse<DatasetRecord>>("/api/datasets");
+      const datasetsPayload =
+        await fetchJson<ApiListResponse<DatasetRecord>>("/api/datasets");
       setDatasets(datasetsPayload.data);
       setError("");
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : t("Failed to delete dataset"));
+      setError(
+        loadError instanceof Error
+          ? loadError.message
+          : t("Failed to delete dataset"),
+      );
     } finally {
       setLoading(false);
     }
@@ -276,14 +324,21 @@ function DataWorkspace({ dataSummary, isMobile, onDatasetOpen }: DataWorkspacePr
     }
     setModelsLoading(true);
     try {
-      const payload = await fetchJson<ApiListResponse<RemoteModelRecord>>("/v1/models");
+      const payload =
+        await fetchJson<ApiListResponse<RemoteModelRecord>>("/v1/models");
       const options = listModelOptionIds(payload.data);
       setModelOptions(options);
-      setPreferredBaseModel(resolvePreferredBaseModel(payload.data) ?? FALLBACK_BASE_MODEL);
+      setPreferredBaseModel(
+        resolvePreferredBaseModel(payload.data) ?? FALLBACK_BASE_MODEL,
+      );
       setModelOptionsError("");
       setModelsLoaded(true);
     } catch (loadError) {
-      setModelOptionsError(loadError instanceof Error ? loadError.message : t("Failed to load models"));
+      setModelOptionsError(
+        loadError instanceof Error
+          ? loadError.message
+          : t("Failed to load models"),
+      );
       setModelsLoaded(true);
     } finally {
       setModelsLoading(false);
@@ -293,7 +348,9 @@ function DataWorkspace({ dataSummary, isMobile, onDatasetOpen }: DataWorkspacePr
   async function loadSamples(datasetId: string) {
     setSamplesLoading(true);
     try {
-      const payload = await fetchJson<ApiListResponse<DatasetSample>>(`/api/datasets/${datasetId}/samples`);
+      const payload = await fetchJson<ApiListResponse<DatasetSample>>(
+        `/api/datasets/${datasetId}/samples`,
+      );
       setSamples(payload.data);
       setSelectedSampleId(payload.data[0]?.id ?? null);
       setSelectedToken(null);
@@ -312,7 +369,11 @@ function DataWorkspace({ dataSummary, isMobile, onDatasetOpen }: DataWorkspacePr
       setContinuationDraft(null);
       setCandidatesLoading(false);
       tokenCandidatesRequestRef.current += 1;
-      setError(loadError instanceof Error ? loadError.message : t("Failed to delete sample"));
+      setError(
+        loadError instanceof Error
+          ? loadError.message
+          : t("Failed to delete sample"),
+      );
     } finally {
       setSamplesLoading(false);
     }
@@ -321,7 +382,9 @@ function DataWorkspace({ dataSummary, isMobile, onDatasetOpen }: DataWorkspacePr
   function openDataset(dataset: DatasetRecord) {
     window.localStorage.setItem(lastOpenedDatasetStorageKey, dataset.id);
     onDatasetOpen?.(dataset);
-    setRecentDatasetIds((current) => [dataset.id, ...current.filter((id) => id !== dataset.id)].slice(0, 6));
+    setRecentDatasetIds((current) =>
+      [dataset.id, ...current.filter((id) => id !== dataset.id)].slice(0, 6),
+    );
     setMobileExplorerOpen(false);
     setDatasetTabs((currentTabs) => {
       if (currentTabs.some((tab) => tab.id === dataset.id)) {
@@ -350,14 +413,20 @@ function DataWorkspace({ dataSummary, isMobile, onDatasetOpen }: DataWorkspacePr
       openDataset(created);
       setError("");
     } catch (createError) {
-      setError(createError instanceof Error ? createError.message : t("Failed to delete dataset"));
+      setError(
+        createError instanceof Error
+          ? createError.message
+          : t("Failed to delete dataset"),
+      );
     } finally {
       setCreating(false);
     }
   }
 
   function handleOpenNextDataset() {
-    const nextDataset = datasets.find((dataset) => !datasetTabs.some((tab) => tab.id === dataset.id));
+    const nextDataset = datasets.find(
+      (dataset) => !datasetTabs.some((tab) => tab.id === dataset.id),
+    );
     if (nextDataset) {
       openDataset(nextDataset);
     }
@@ -367,7 +436,9 @@ function DataWorkspace({ dataSummary, isMobile, onDatasetOpen }: DataWorkspacePr
     setDatasetTabs((currentTabs) => {
       const nextTabs = currentTabs.filter((tab) => tab.id !== datasetId);
       if (activeDatasetId === datasetId) {
-        setActiveDatasetId(nextTabs.length > 0 ? nextTabs[nextTabs.length - 1].id : null);
+        setActiveDatasetId(
+          nextTabs.length > 0 ? nextTabs[nextTabs.length - 1].id : null,
+        );
       }
       return nextTabs;
     });
@@ -380,20 +451,31 @@ function DataWorkspace({ dataSummary, isMobile, onDatasetOpen }: DataWorkspacePr
     }
     setSaving(true);
     try {
-      const updated = await fetchJson<DatasetRecord>(`/api/datasets/${activeDataset.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: draft.name.trim() || activeDataset.name,
-          base_model: draft.base_model.trim(),
-        }),
-      });
-      setDatasets((current) => current.map((item) => (item.id === updated.id ? updated : item)));
-      setDatasetTabs((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+      const updated = await fetchJson<DatasetRecord>(
+        `/api/datasets/${activeDataset.id}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: draft.name.trim() || activeDataset.name,
+            base_model: draft.base_model.trim(),
+          }),
+        },
+      );
+      setDatasets((current) =>
+        current.map((item) => (item.id === updated.id ? updated : item)),
+      );
+      setDatasetTabs((current) =>
+        current.map((item) => (item.id === updated.id ? updated : item)),
+      );
       setActiveDatasetId(updated.id);
       setError("");
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : t("Failed to delete dataset"));
+      setError(
+        saveError instanceof Error
+          ? saveError.message
+          : t("Failed to delete dataset"),
+      );
     } finally {
       setSaving(false);
     }
@@ -417,7 +499,11 @@ function DataWorkspace({ dataSummary, isMobile, onDatasetOpen }: DataWorkspacePr
       openDataset(imported);
       setError("");
     } catch (importError) {
-      setError(importError instanceof Error ? importError.message : t("Failed to delete dataset"));
+      setError(
+        importError instanceof Error
+          ? importError.message
+          : t("Failed to delete dataset"),
+      );
     } finally {
       setCreating(false);
       event.target.value = "";
@@ -430,13 +516,16 @@ function DataWorkspace({ dataSummary, isMobile, onDatasetOpen }: DataWorkspacePr
     }
     setSavingSample(true);
     try {
-      const created = await fetchJson<DatasetSample>(`/api/datasets/${activeDataset.id}/samples`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: `Sample ${samples.length + 1}`,
-        }),
-      });
+      const created = await fetchJson<DatasetSample>(
+        `/api/datasets/${activeDataset.id}/samples`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: `Sample ${samples.length + 1}`,
+          }),
+        },
+      );
       setSamples((current) => [...current, created]);
       setSelectedSampleId(created.id);
       setSelectedToken(null);
@@ -448,15 +537,25 @@ function DataWorkspace({ dataSummary, isMobile, onDatasetOpen }: DataWorkspacePr
       setError("");
       setMobileSamplesOpen(false);
     } catch (createError) {
-      setError(createError instanceof Error ? createError.message : t("Failed to delete sample"));
+      setError(
+        createError instanceof Error
+          ? createError.message
+          : t("Failed to delete sample"),
+      );
     } finally {
       setSavingSample(false);
     }
   }
 
   function updateCurrentSample(nextSample: DatasetSample) {
-    setSamples((current) => current.map((sample) => (sample.id === nextSample.id ? nextSample : sample)));
-    setDirtySampleIds((current) => (current.includes(nextSample.id) ? current : [...current, nextSample.id]));
+    setSamples((current) =>
+      current.map((sample) =>
+        sample.id === nextSample.id ? nextSample : sample,
+      ),
+    );
+    setDirtySampleIds((current) =>
+      current.includes(nextSample.id) ? current : [...current, nextSample.id],
+    );
     setSampleTokenizations((current) => {
       const next = { ...current };
       delete next[nextSample.id];
@@ -464,7 +563,9 @@ function DataWorkspace({ dataSummary, isMobile, onDatasetOpen }: DataWorkspacePr
     });
   }
 
-  function updateSelectedSample(updater: (sample: DatasetSample) => DatasetSample) {
+  function updateSelectedSample(
+    updater: (sample: DatasetSample) => DatasetSample,
+  ) {
     if (!selectedSample) {
       return;
     }
@@ -483,7 +584,9 @@ function DataWorkspace({ dataSummary, isMobile, onDatasetOpen }: DataWorkspacePr
     tokenCandidatesRequestRef.current += 1;
   }
 
-  function updateSelectedSampleMessages(updater: (messages: DatasetMessage[]) => DatasetMessage[]) {
+  function updateSelectedSampleMessages(
+    updater: (messages: DatasetMessage[]) => DatasetMessage[],
+  ) {
     updateSelectedSample((sample) => ({
       ...sample,
       messages: updater(sample.messages),
@@ -497,10 +600,14 @@ function DataWorkspace({ dataSummary, isMobile, onDatasetOpen }: DataWorkspacePr
     }));
   }
 
-  async function ensureSampleTokenization(sample: DatasetSample): Promise<DatasetSampleTokenization | null> {
+  async function ensureSampleTokenization(
+    sample: DatasetSample,
+  ): Promise<DatasetSampleTokenization | null> {
     const model = draft?.base_model.trim() || activeDataset?.base_model || "";
     if (!model || !activeDataset) {
-      setError(t("Please configure a base model for the current dataset first."));
+      setError(
+        t("Please configure a base model for the current dataset first."),
+      );
       return null;
     }
     const cached = sampleTokenizations[sample.id];
@@ -509,19 +616,31 @@ function DataWorkspace({ dataSummary, isMobile, onDatasetOpen }: DataWorkspacePr
     }
     const signature = buildSampleSignature(sample);
     try {
-      const tokenization = await fetchJson<DatasetSampleTokenization>(`/api/datasets/${activeDataset.id}/samples/${sample.id}/tokenize`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model }),
-      });
-      const latestSample = samplesRef.current.find((item) => item.id === sample.id);
+      const tokenization = await fetchJson<DatasetSampleTokenization>(
+        `/api/datasets/${activeDataset.id}/samples/${sample.id}/tokenize`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ model }),
+        },
+      );
+      const latestSample = samplesRef.current.find(
+        (item) => item.id === sample.id,
+      );
       if (!latestSample || buildSampleSignature(latestSample) !== signature) {
         return null;
       }
-      setSampleTokenizations((current) => ({ ...current, [sample.id]: tokenization }));
+      setSampleTokenizations((current) => ({
+        ...current,
+        [sample.id]: tokenization,
+      }));
       return tokenization;
     } catch (tokenizeError) {
-      setError(tokenizeError instanceof Error ? tokenizeError.message : t("Failed to refresh token data"));
+      setError(
+        tokenizeError instanceof Error
+          ? tokenizeError.message
+          : t("Failed to refresh token data"),
+      );
       return null;
     }
   }
@@ -542,7 +661,13 @@ function DataWorkspace({ dataSummary, isMobile, onDatasetOpen }: DataWorkspacePr
     if (!tokenization) {
       return;
     }
-    await selectResolvedToken(visibleSample, tokenization, messageIndex, tokenIndex, target);
+    await selectResolvedToken(
+      visibleSample,
+      tokenization,
+      messageIndex,
+      tokenIndex,
+      target,
+    );
   }
 
   async function selectResolvedToken(
@@ -552,8 +677,11 @@ function DataWorkspace({ dataSummary, isMobile, onDatasetOpen }: DataWorkspacePr
     tokenIndex: number,
     target: "content" | "reasoning",
   ) {
-    const message = tokenization.messages.find((item) => item.message_index === messageIndex);
-    const tokenList = target === "reasoning" ? message?.reasoning_tokens : message?.tokens;
+    const message = tokenization.messages.find(
+      (item) => item.message_index === messageIndex,
+    );
+    const tokenList =
+      target === "reasoning" ? message?.reasoning_tokens : message?.tokens;
     const token = tokenList?.find((item) => item.token_index === tokenIndex);
     if (!token) {
       return;
@@ -568,14 +696,22 @@ function DataWorkspace({ dataSummary, isMobile, onDatasetOpen }: DataWorkspacePr
       originalToken: tokenText,
     });
     setReplacementToken(tokenText);
-    void loadTokenCandidates(sample, tokenization, messageIndex, tokenIndex, target);
+    void loadTokenCandidates(
+      sample,
+      tokenization,
+      messageIndex,
+      tokenIndex,
+      target,
+    );
   }
 
   async function handleSelectAdjacentToken(direction: -1 | 1) {
     if (!visibleSample || continuationDraft || !selectedToken) {
       return;
     }
-    const tokenization = visibleSampleTokenization ?? (await ensureSampleTokenization(visibleSample));
+    const tokenization =
+      visibleSampleTokenization ??
+      (await ensureSampleTokenization(visibleSample));
     if (!tokenization) {
       return;
     }
@@ -622,10 +758,22 @@ function DataWorkspace({ dataSummary, isMobile, onDatasetOpen }: DataWorkspacePr
     }
 
     const targetMessage = sample.messages[messageIndex];
-    const messageTokenization = tokenization.messages.find((item) => item.message_index === messageIndex);
-    const tokenList = target === "reasoning" ? messageTokenization?.reasoning_tokens : messageTokenization?.tokens;
-    const targetToken = tokenList?.find((item) => item.token_index === tokenIndex);
-    if (!targetMessage || targetMessage.role !== "assistant" || !messageTokenization || !targetToken) {
+    const messageTokenization = tokenization.messages.find(
+      (item) => item.message_index === messageIndex,
+    );
+    const tokenList =
+      target === "reasoning"
+        ? messageTokenization?.reasoning_tokens
+        : messageTokenization?.tokens;
+    const targetToken = tokenList?.find(
+      (item) => item.token_index === tokenIndex,
+    );
+    if (
+      !targetMessage ||
+      targetMessage.role !== "assistant" ||
+      !messageTokenization ||
+      !targetToken
+    ) {
       return;
     }
 
@@ -638,22 +786,26 @@ function DataWorkspace({ dataSummary, isMobile, onDatasetOpen }: DataWorkspacePr
           text?: string;
           logprob?: number | null;
         }>;
-      }>(`/api/datasets/${activeDataset.id}/samples/${sample.id}/candidate_tokens`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model,
-          message_index: messageIndex,
-          token_index: tokenIndex,
-          target,
-          top_logprobs: 10,
-        }),
-      });
+      }>(
+        `/api/datasets/${activeDataset.id}/samples/${sample.id}/candidate_tokens`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model,
+            message_index: messageIndex,
+            token_index: tokenIndex,
+            target,
+            top_logprobs: 10,
+          }),
+        },
+      );
       const seen = new Set<string>();
       const nextCandidates = (payload.data ?? [])
         .map((candidate) => ({
           text: decodeCandidateToken(candidate.text),
-          logprob: typeof candidate.logprob === "number" ? candidate.logprob : null,
+          logprob:
+            typeof candidate.logprob === "number" ? candidate.logprob : null,
         }))
         .filter((candidate) => candidate.text)
         .filter((candidate) => {
@@ -682,31 +834,40 @@ function DataWorkspace({ dataSummary, isMobile, onDatasetOpen }: DataWorkspacePr
     if (!activeDataset || !draft || !selectedSample || !selectedToken) {
       return;
     }
+    const submittedReplacementToken =
+      replacementToken === "" ? selectedToken.currentToken : replacementToken;
     const model = draft.base_model.trim() || activeDataset.base_model || "";
     if (!model) {
-      setError(t("Please configure a base model for the current dataset first."));
+      setError(
+        t("Please configure a base model for the current dataset first."),
+      );
       return;
     }
     const baseTokenization =
-      visibleSampleTokenization ?? (await ensureSampleTokenization(selectedSample));
+      visibleSampleTokenization ??
+      (await ensureSampleTokenization(selectedSample));
     if (!baseTokenization) {
       return;
     }
     setGenerating(true);
     try {
-      const continuation = await fetchJson<{ sample: DatasetSample; tokenization: DatasetSampleTokenization }>(
+      const continuation = await fetchJson<{
+        sample: DatasetSample;
+        tokenization: DatasetSampleTokenization;
+      }>(
         `/api/datasets/${activeDataset.id}/samples/${selectedSample.id}/continue`,
         {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model,
-          message_index: selectedToken.messageIndex,
-          token_index: selectedToken.tokenIndex,
-          target: selectedToken.target,
-          replacement_token: replacementToken.trim() || selectedToken.currentToken,
-        }),
-      });
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model,
+            message_index: selectedToken.messageIndex,
+            token_index: selectedToken.tokenIndex,
+            target: selectedToken.target,
+            replacement_token: submittedReplacementToken,
+          }),
+        },
+      );
       setSampleTokenizations((current) => ({
         ...current,
         [selectedSample.id]: continuation.tokenization,
@@ -715,10 +876,17 @@ function DataWorkspace({ dataSummary, isMobile, onDatasetOpen }: DataWorkspacePr
         ...continuation,
         baseTokenization,
       });
-      setSelectedToken({ ...selectedToken, currentToken: replacementToken.trim() || selectedToken.currentToken });
+      setSelectedToken({
+        ...selectedToken,
+        currentToken: submittedReplacementToken,
+      });
       setError("");
     } catch (generateError) {
-      setError(generateError instanceof Error ? generateError.message : t("Failed to generate assistant message"));
+      setError(
+        generateError instanceof Error
+          ? generateError.message
+          : t("Failed to generate assistant message"),
+      );
     } finally {
       setGenerating(false);
     }
@@ -758,10 +926,16 @@ function DataWorkspace({ dataSummary, isMobile, onDatasetOpen }: DataWorkspacePr
     setSavingSample(true);
     try {
       const updated = await persistSample(acceptedSample);
-      setSamples((current) => current.map((sample) => (sample.id === updated.id ? updated : sample)));
+      setSamples((current) =>
+        current.map((sample) => (sample.id === updated.id ? updated : sample)),
+      );
       setError("");
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : "Auto-save failed after accepting rewrite");
+      setError(
+        saveError instanceof Error
+          ? saveError.message
+          : "Auto-save failed after accepting rewrite",
+      );
     } finally {
       setSavingSample(false);
     }
@@ -797,10 +971,16 @@ function DataWorkspace({ dataSummary, isMobile, onDatasetOpen }: DataWorkspacePr
     setSavingSample(true);
     try {
       const updated = await persistSample(selectedSample);
-      setSamples((current) => current.map((sample) => (sample.id === updated.id ? updated : sample)));
+      setSamples((current) =>
+        current.map((sample) => (sample.id === updated.id ? updated : sample)),
+      );
       setError("");
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : t("Failed to delete sample"));
+      setError(
+        saveError instanceof Error
+          ? saveError.message
+          : t("Failed to delete sample"),
+      );
     } finally {
       setSavingSample(false);
     }
@@ -812,25 +992,38 @@ function DataWorkspace({ dataSummary, isMobile, onDatasetOpen }: DataWorkspacePr
     }
     const model = draft.base_model.trim() || activeDataset.base_model || "";
     if (!model) {
-      setError(t("Please configure a base model for the current dataset first."));
+      setError(
+        t("Please configure a base model for the current dataset first."),
+      );
       return;
     }
 
-    const lastMessage = selectedSample.messages[selectedSample.messages.length - 1];
+    const lastMessage =
+      selectedSample.messages[selectedSample.messages.length - 1];
     if (lastMessage?.role === "assistant" && lastMessage.content.trim()) {
-      setError(t("The last assistant message already has content. Clear or remove it before generating again."));
+      setError(
+        t(
+          "The last assistant message already has content. Clear or remove it before generating again.",
+        ),
+      );
       return;
     }
-    const promptMessages = lastMessage?.role === "assistant"
-      ? selectedSample.messages.slice(0, -1)
-      : selectedSample.messages;
+    const promptMessages =
+      lastMessage?.role === "assistant"
+        ? selectedSample.messages.slice(0, -1)
+        : selectedSample.messages;
     if (promptMessages.length === 0) {
       setError(t("Keep at least one message before generating."));
       return;
     }
-    const shouldFillExistingAssistant = lastMessage?.role === "assistant" && !lastMessage.content.trim();
+    const shouldFillExistingAssistant =
+      lastMessage?.role === "assistant" && !lastMessage.content.trim();
     const optimisticMessages = shouldFillExistingAssistant
-      ? selectedSample.messages.map((message, index) => (index === selectedSample.messages.length - 1 ? { ...message, content: "" } : message))
+      ? selectedSample.messages.map((message, index) =>
+          index === selectedSample.messages.length - 1
+            ? { ...message, content: "" }
+            : message,
+        )
       : [...selectedSample.messages, { role: "assistant", content: "" }];
 
     setGeneratingAssistant(true);
@@ -846,9 +1039,10 @@ function DataWorkspace({ dataSummary, isMobile, onDatasetOpen }: DataWorkspacePr
     });
 
     try {
-      const promptPayload = await fetchJson<{ prompt: string; suggested_max_tokens?: number | null }>(
-        "/api/datasets/render_completion_prompt",
-        {
+      const promptPayload = await fetchJson<{
+        prompt: string;
+        suggested_max_tokens?: number | null;
+      }>("/api/datasets/render_completion_prompt", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -947,16 +1141,28 @@ function DataWorkspace({ dataSummary, isMobile, onDatasetOpen }: DataWorkspacePr
       }
 
       if (!receivedDelta) {
-        throw new Error(t("The model returned no writable delta, so generation could not continue."));
+        throw new Error(
+          t(
+            "The model returned no writable delta, so generation could not continue.",
+          ),
+        );
       }
       const persisted = await persistSample(latestSample);
-      setSamples((current) => current.map((sample) => (sample.id === persisted.id ? persisted : sample)));
+      setSamples((current) =>
+        current.map((sample) =>
+          sample.id === persisted.id ? persisted : sample,
+        ),
+      );
       setError("");
     } catch (generateError) {
       if (shouldRestoreOriginal) {
         updateCurrentSample(originalSample);
       }
-      setError(generateError instanceof Error ? generateError.message : t("Failed to delete sample"));
+      setError(
+        generateError instanceof Error
+          ? generateError.message
+          : t("Failed to delete sample"),
+      );
     } finally {
       setGeneratingAssistant(false);
     }
@@ -969,8 +1175,12 @@ function DataWorkspace({ dataSummary, isMobile, onDatasetOpen }: DataWorkspacePr
     const deletingId = datasetToDelete.id;
     setCreating(true);
     try {
-      await fetchJson<{ deleted: boolean }>(`/api/datasets/${deletingId}`, { method: "DELETE" });
-      setDatasets((current) => current.filter((dataset) => dataset.id !== deletingId));
+      await fetchJson<{ deleted: boolean }>(`/api/datasets/${deletingId}`, {
+        method: "DELETE",
+      });
+      setDatasets((current) =>
+        current.filter((dataset) => dataset.id !== deletingId),
+      );
       setDatasetTabs((current) => {
         const nextTabs = current.filter((dataset) => dataset.id !== deletingId);
         if (activeDatasetId === deletingId) {
@@ -978,14 +1188,20 @@ function DataWorkspace({ dataSummary, isMobile, onDatasetOpen }: DataWorkspacePr
         }
         return nextTabs;
       });
-      setRecentDatasetIds((current) => current.filter((id) => id !== deletingId));
+      setRecentDatasetIds((current) =>
+        current.filter((id) => id !== deletingId),
+      );
       if (selectedSampleId && activeDatasetId === deletingId) {
         setSelectedSampleId(null);
       }
       setDatasetToDelete(null);
       setError("");
     } catch (deleteError) {
-      setError(deleteError instanceof Error ? deleteError.message : t("Failed to delete dataset"));
+      setError(
+        deleteError instanceof Error
+          ? deleteError.message
+          : t("Failed to delete dataset"),
+      );
     } finally {
       setCreating(false);
     }
@@ -1002,7 +1218,9 @@ function DataWorkspace({ dataSummary, isMobile, onDatasetOpen }: DataWorkspacePr
         `/api/datasets/${activeDataset.id}/samples/${deletingSampleId}`,
         { method: "DELETE" },
       );
-      const nextSamples = samples.filter((sample) => sample.id !== deletingSampleId);
+      const nextSamples = samples.filter(
+        (sample) => sample.id !== deletingSampleId,
+      );
       setSamples(nextSamples);
       setSelectedSampleId((current) => {
         if (current !== deletingSampleId) {
@@ -1010,7 +1228,9 @@ function DataWorkspace({ dataSummary, isMobile, onDatasetOpen }: DataWorkspacePr
         }
         return nextSamples[0]?.id ?? null;
       });
-      setDirtySampleIds((current) => current.filter((sampleId) => sampleId !== deletingSampleId));
+      setDirtySampleIds((current) =>
+        current.filter((sampleId) => sampleId !== deletingSampleId),
+      );
       setSampleTokenizations((current) => {
         const next = { ...current };
         delete next[deletingSampleId];
@@ -1023,7 +1243,11 @@ function DataWorkspace({ dataSummary, isMobile, onDatasetOpen }: DataWorkspacePr
       setSampleToDelete(null);
       setError("");
     } catch (deleteError) {
-      setError(deleteError instanceof Error ? deleteError.message : t("Failed to delete sample"));
+      setError(
+        deleteError instanceof Error
+          ? deleteError.message
+          : t("Failed to delete sample"),
+      );
     } finally {
       setSavingSample(false);
     }
@@ -1043,9 +1267,16 @@ function DataWorkspace({ dataSummary, isMobile, onDatasetOpen }: DataWorkspacePr
           body: JSON.stringify({ model }),
         },
       );
-      setSampleTokenizations((current) => ({ ...current, [sample.id]: tokenization }));
+      setSampleTokenizations((current) => ({
+        ...current,
+        [sample.id]: tokenization,
+      }));
     } catch (tokenizeError) {
-      setError(tokenizeError instanceof Error ? tokenizeError.message : t("Failed to refresh token data"));
+      setError(
+        tokenizeError instanceof Error
+          ? tokenizeError.message
+          : t("Failed to refresh token data"),
+      );
     }
   }
 
@@ -1053,17 +1284,22 @@ function DataWorkspace({ dataSummary, isMobile, onDatasetOpen }: DataWorkspacePr
     if (!activeDataset) {
       throw new Error(t("Open a dataset before saving samples."));
     }
-    const updated = await fetchJson<DatasetSample>(`/api/datasets/${activeDataset.id}/samples/${sample.id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        title: sample.title,
-        messages: sample.messages,
-        source_messages: sample.source_messages,
-        edits: sample.edits,
-      }),
-    });
-    setDirtySampleIds((current) => current.filter((sampleId) => sampleId !== updated.id));
+    const updated = await fetchJson<DatasetSample>(
+      `/api/datasets/${activeDataset.id}/samples/${sample.id}`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: sample.title,
+          messages: sample.messages,
+          source_messages: sample.source_messages,
+          edits: sample.edits,
+        }),
+      },
+    );
+    setDirtySampleIds((current) =>
+      current.filter((sampleId) => sampleId !== updated.id),
+    );
     await refreshPersistedSampleTokenization(updated);
     return updated;
   }
@@ -1077,7 +1313,10 @@ function DataWorkspace({ dataSummary, isMobile, onDatasetOpen }: DataWorkspacePr
         borderRadius: 0,
         overflow: "hidden",
         border: 0,
-        bgcolor: (theme) => theme.palette.mode === "dark" ? "#0f172a" : theme.palette.background.paper,
+        bgcolor: (theme) =>
+          theme.palette.mode === "dark"
+            ? "#0f172a"
+            : theme.palette.background.paper,
       }}
     >
       <WorkspaceShell
@@ -1133,20 +1372,23 @@ function DataWorkspace({ dataSummary, isMobile, onDatasetOpen }: DataWorkspacePr
         onDeleteSample={(sample) => setSampleToDelete(sample)}
         onGenerateAssistantMessage={() => void handleGenerateAssistantMessage()}
         onGenerateContinuation={() => void handleGenerateContinuation()}
-          onAcceptContinuationDraft={handleAcceptContinuationDraft}
-          onDiscardContinuationDraft={handleDiscardContinuationDraft}
-          onSaveSample={() => void handleSaveSample()}
-          onClearSelectedToken={clearSelectedToken}
-          onSelectAdjacentToken={handleSelectAdjacentToken}
-          onUpdateSelectedSampleTitle={updateSelectedSampleTitle}
-          onUpdateSelectedSampleMessages={updateSelectedSampleMessages}
-          hasNextToken={selectedTokenSequenceIndex >= 0 && selectedTokenSequenceIndex < tokenSequence.length - 1}
-          hasPrevToken={selectedTokenSequenceIndex > 0}
-          onSelectSample={(sampleId) => {
-            setSelectedSampleId(sampleId);
-            setContinuationDraft(null);
-            clearSelectedToken();
-          }}
+        onAcceptContinuationDraft={handleAcceptContinuationDraft}
+        onDiscardContinuationDraft={handleDiscardContinuationDraft}
+        onSaveSample={() => void handleSaveSample()}
+        onClearSelectedToken={clearSelectedToken}
+        onSelectAdjacentToken={handleSelectAdjacentToken}
+        onUpdateSelectedSampleTitle={updateSelectedSampleTitle}
+        onUpdateSelectedSampleMessages={updateSelectedSampleMessages}
+        hasNextToken={
+          selectedTokenSequenceIndex >= 0 &&
+          selectedTokenSequenceIndex < tokenSequence.length - 1
+        }
+        hasPrevToken={selectedTokenSequenceIndex > 0}
+        onSelectSample={(sampleId) => {
+          setSelectedSampleId(sampleId);
+          setContinuationDraft(null);
+          clearSelectedToken();
+        }}
         onSelectToken={handleSelectTokenTarget}
         onSetReplacementToken={setReplacementToken}
       />
@@ -1166,14 +1408,27 @@ function DataWorkspace({ dataSummary, isMobile, onDatasetOpen }: DataWorkspacePr
         <DialogTitle>{t("Delete dataset")}</DialogTitle>
         <DialogContent>
           <DialogContentText sx={{ color: "text.secondary" }}>
-            {datasetToDelete ? t("Are you sure you want to delete dataset \"{name}\"? This will remove the dataset and all of its samples permanently.", { name: datasetToDelete.name }) : ""}
+            {datasetToDelete
+              ? t(
+                  'Are you sure you want to delete dataset "{name}"? This will remove the dataset and all of its samples permanently.',
+                  { name: datasetToDelete.name },
+                )
+              : ""}
           </DialogContentText>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2.5 }}>
-          <Button onClick={() => setDatasetToDelete(null)} sx={{ color: "text.secondary" }}>
+          <Button
+            onClick={() => setDatasetToDelete(null)}
+            sx={{ color: "text.secondary" }}
+          >
             {t("Cancel")}
           </Button>
-          <Button color="error" variant="contained" onClick={() => void handleDeleteDataset()} disabled={creating}>
+          <Button
+            color="error"
+            variant="contained"
+            onClick={() => void handleDeleteDataset()}
+            disabled={creating}
+          >
             {creating ? t("Deleting...") : t("Confirm delete")}
           </Button>
         </DialogActions>
@@ -1194,14 +1449,27 @@ function DataWorkspace({ dataSummary, isMobile, onDatasetOpen }: DataWorkspacePr
         <DialogTitle>{t("Delete sample")}</DialogTitle>
         <DialogContent>
           <DialogContentText sx={{ color: "text.secondary" }}>
-            {sampleToDelete ? t("Are you sure you want to delete sample \"{title}\"? This action cannot be undone.", { title: sampleToDelete.title }) : ""}
+            {sampleToDelete
+              ? t(
+                  'Are you sure you want to delete sample "{title}"? This action cannot be undone.',
+                  { title: sampleToDelete.title },
+                )
+              : ""}
           </DialogContentText>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2.5 }}>
-          <Button onClick={() => setSampleToDelete(null)} sx={{ color: "text.secondary" }}>
+          <Button
+            onClick={() => setSampleToDelete(null)}
+            sx={{ color: "text.secondary" }}
+          >
             {t("Cancel")}
           </Button>
-          <Button color="error" variant="contained" onClick={() => void handleDeleteSample()} disabled={savingSample}>
+          <Button
+            color="error"
+            variant="contained"
+            onClick={() => void handleDeleteSample()}
+            disabled={savingSample}
+          >
             {savingSample ? t("Deleting...") : t("Confirm delete")}
           </Button>
         </DialogActions>
@@ -1211,4 +1479,3 @@ function DataWorkspace({ dataSummary, isMobile, onDatasetOpen }: DataWorkspacePr
 }
 
 export default DataWorkspace;
-

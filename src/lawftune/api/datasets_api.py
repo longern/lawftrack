@@ -580,6 +580,10 @@ def build_router(config_dir: Path | None = None) -> APIRouter:
                 token_index=payload.token_index,
                 replacement_text=payload.replacement_token,
             )
+            replacement_token_count = count_text_tokens(
+                model=payload.model,
+                text=replacement_token,
+            )
         except TokenizerDependencyError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
         except ValueError as exc:
@@ -670,7 +674,7 @@ def build_router(config_dir: Path | None = None) -> APIRouter:
                 "target": target,
                 "original_token": original_token,
                 "replacement_token": replacement_token,
-                "regenerated_from_token_index": payload.token_index + 1,
+                "regenerated_from_token_index": payload.token_index + replacement_token_count,
             }
         ]
 

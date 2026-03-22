@@ -79,7 +79,9 @@ function MessageBubble({
     message.content,
     messageTokenization?.tokens ?? [],
   );
-  const sortedEdits = [...edits].sort((left, right) => left.token_index - right.token_index);
+  const sortedEdits = [...edits].sort(
+    (left, right) => left.token_index - right.token_index,
+  );
 
   function renderLineBreakableText(text: string, keyPrefix: string) {
     return text.split("\n").flatMap((part, partIndex, parts) => {
@@ -105,14 +107,18 @@ function MessageBubble({
   ) {
     return segments.map((segment, index) => {
       if (segment.kind === "text") {
-        return renderLineBreakableText(segment.text, `${messageIndex}-${target}-gap-${index}`);
+        return renderLineBreakableText(
+          segment.text,
+          `${messageIndex}-${target}-gap-${index}`,
+        );
       }
 
       const tokenIndex = segment.tokenIndex;
       const matchingEdit =
         sortedEdits.find(
           (item) =>
-            (item.target ?? "content") === target && tokenIndex === item.token_index,
+            (item.target ?? "content") === target &&
+            tokenIndex === item.token_index,
         ) ?? null;
       const isChanged = Boolean(matchingEdit);
       const isRegenerated = sortedEdits.some(
@@ -153,7 +159,9 @@ function MessageBubble({
                 ? getWorkspaceColors(theme).tokenRegeneratedBg
                 : "transparent",
         boxShadow: (theme: Parameters<typeof getWorkspaceColors>[0]) =>
-          isSelected ? `0 0 0 1px ${alpha(theme.palette.primary.main, 0.75)} inset` : "none",
+          isSelected
+            ? `0 0 0 1px ${alpha(theme.palette.primary.main, 0.75)} inset`
+            : "none",
         fontWeight: isChanged ? 800 : isSelected ? 700 : 500,
         transition: "background-color 120ms ease",
         "&:hover": {
@@ -215,7 +223,11 @@ function MessageBubble({
               ↵
             </Box>,
           );
-          items.push(<br key={`${messageIndex}-${target}-${tokenIndex}-br-${partIndex}`} />);
+          items.push(
+            <br
+              key={`${messageIndex}-${target}-${tokenIndex}-br-${partIndex}`}
+            />,
+          );
         }
         return items;
       });
@@ -223,7 +235,12 @@ function MessageBubble({
   }
 
   return (
-    <Box sx={{ display: "flex", justifyContent: isUser ? "flex-end" : "flex-start" }}>
+    <Box
+      sx={{
+        display: "flex",
+        justifyContent: isUser ? "flex-end" : "flex-start",
+      }}
+    >
       <Paper
         elevation={0}
         sx={{
@@ -232,13 +249,24 @@ function MessageBubble({
           px: 2,
           py: 1.5,
           borderRadius: 3,
-          bgcolor: (theme) => (isUser ? getWorkspaceColors(theme).userBubbleBg : getWorkspaceColors(theme).panelBg),
-          color: (theme) => (isUser ? "#f8fafc" : getWorkspaceColors(theme).textPrimary),
-          border: isAssistant ? ((theme) => `1px solid ${getWorkspaceColors(theme).border}`) : "none",
+          bgcolor: (theme) =>
+            isUser
+              ? getWorkspaceColors(theme).userBubbleBg
+              : getWorkspaceColors(theme).panelBg,
+          color: (theme) =>
+            isUser ? "#f8fafc" : getWorkspaceColors(theme).textPrimary,
+          border: isAssistant
+            ? (theme) => `1px solid ${getWorkspaceColors(theme).border}`
+            : "none",
         }}
       >
         <Stack spacing={1}>
-          <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1}>
+          <Stack
+            direction="row"
+            alignItems="center"
+            justifyContent="space-between"
+            spacing={1}
+          >
             {isEditing ? (
               <FormControl
                 size="small"
@@ -263,16 +291,24 @@ function MessageBubble({
                     display: "flex",
                     alignItems: "center",
                     color: (theme) =>
-                      isUser ? getWorkspaceColors(theme).userMutedText : getWorkspaceColors(theme).textSecondary,
+                      isUser
+                        ? getWorkspaceColors(theme).userMutedText
+                        : getWorkspaceColors(theme).textSecondary,
                   },
                   "& .MuiSelect-icon": {
                     right: 0,
                     color: (theme) =>
-                      isUser ? getWorkspaceColors(theme).userMutedText : getWorkspaceColors(theme).textSecondary,
+                      isUser
+                        ? getWorkspaceColors(theme).userMutedText
+                        : getWorkspaceColors(theme).textSecondary,
                   },
                 }}
               >
-                <Select value={message.role} variant="outlined" onChange={(event) => onChangeRole(event.target.value)}>
+                <Select
+                  value={message.role}
+                  variant="outlined"
+                  onChange={(event) => onChangeRole(event.target.value)}
+                >
                   <MenuItem value="system">system</MenuItem>
                   <MenuItem value="user">user</MenuItem>
                   <MenuItem value="assistant">assistant</MenuItem>
@@ -281,7 +317,12 @@ function MessageBubble({
             ) : (
               <Typography
                 variant="caption"
-                sx={{ color: (theme) => (isUser ? getWorkspaceColors(theme).userMutedText : getWorkspaceColors(theme).textSecondary) }}
+                sx={{
+                  color: (theme) =>
+                    isUser
+                      ? getWorkspaceColors(theme).userMutedText
+                      : getWorkspaceColors(theme).textSecondary,
+                }}
               >
                 {message.role}
               </Typography>
@@ -335,9 +376,15 @@ function MessageBubble({
                   onClick={onDelete}
                   disabled={hasContinuationDraft}
                   sx={{
-                    color: (theme) => (isUser ? "rgba(255,255,255,0.74)" : getWorkspaceColors(theme).textSecondary),
+                    color: (theme) =>
+                      isUser
+                        ? "rgba(255,255,255,0.74)"
+                        : getWorkspaceColors(theme).textSecondary,
                     "&:hover": {
-                      bgcolor: (theme) => (isUser ? alpha("#ffffff", 0.12) : getWorkspaceColors(theme).hoverBg),
+                      bgcolor: (theme) =>
+                        isUser
+                          ? alpha("#ffffff", 0.12)
+                          : getWorkspaceColors(theme).hoverBg,
                     },
                   }}
                 >
@@ -371,7 +418,8 @@ function MessageBubble({
                     mb: 1.25,
                     "& .MuiOutlinedInput-root": {
                       ...inlineFieldSx["& .MuiOutlinedInput-root"],
-                      bgcolor: (theme) => alpha(getWorkspaceColors(theme).hoverBg, 0.36),
+                      bgcolor: (theme) =>
+                        alpha(getWorkspaceColors(theme).hoverBg, 0.36),
                     },
                   }}
                 />
@@ -382,8 +430,10 @@ function MessageBubble({
                     px: 1.25,
                     py: 1,
                     borderRadius: 2,
-                    border: (theme) => `1px dashed ${alpha(getWorkspaceColors(theme).accent, 0.42)}`,
-                    bgcolor: (theme) => alpha(getWorkspaceColors(theme).hoverBg, 0.5),
+                    border: (theme) =>
+                      `1px dashed ${alpha(getWorkspaceColors(theme).accent, 0.42)}`,
+                    bgcolor: (theme) =>
+                      alpha(getWorkspaceColors(theme).hoverBg, 0.5),
                   }}
                 >
                   <Typography
@@ -483,11 +533,15 @@ export function MessageFlowPanel({
     tokenIndex: number,
     target: "content" | "reasoning",
   ) => void;
-  onUpdateSampleMessages: (updater: (messages: DatasetMessage[]) => DatasetMessage[]) => void;
+  onUpdateSampleMessages: (
+    updater: (messages: DatasetMessage[]) => DatasetMessage[],
+  ) => void;
   onUpdateSampleTitle: (title: string) => void;
 }) {
   const { t } = useI18n();
-  const [editingMessageIndex, setEditingMessageIndex] = useState<number | null>(null);
+  const [editingMessageIndex, setEditingMessageIndex] = useState<number | null>(
+    null,
+  );
   const [editingTitle, setEditingTitle] = useState(false);
   const [viewMode, setViewMode] = useState<"flow" | "yaml">("flow");
 
@@ -514,7 +568,8 @@ export function MessageFlowPanel({
         sx={{
           px: 2,
           py: 1.5,
-          borderBottom: (theme) => `1px solid ${getWorkspaceColors(theme).border}`,
+          borderBottom: (theme) =>
+            `1px solid ${getWorkspaceColors(theme).border}`,
           bgcolor: (theme) => getWorkspaceColors(theme).panelBg,
           display: "flex",
           flexDirection: "column",
@@ -552,7 +607,11 @@ export function MessageFlowPanel({
             ) : (
               <Typography
                 variant="subtitle1"
-                sx={{ color: (theme) => getWorkspaceColors(theme).textPrimary, fontWeight: 700, minWidth: 0 }}
+                sx={{
+                  color: (theme) => getWorkspaceColors(theme).textPrimary,
+                  fontWeight: 700,
+                  minWidth: 0,
+                }}
                 noWrap
               >
                 {sample?.title || t("Message flow")}
@@ -568,8 +627,13 @@ export function MessageFlowPanel({
               p: 0.5,
               flexShrink: 0,
               color: (theme) =>
-                editingTitle ? theme.palette.primary.light : getWorkspaceColors(theme).textSecondary,
-              bgcolor: (theme) => (editingTitle ? alpha(theme.palette.primary.main, 0.18) : "transparent"),
+                editingTitle
+                  ? theme.palette.primary.light
+                  : getWorkspaceColors(theme).textSecondary,
+              bgcolor: (theme) =>
+                editingTitle
+                  ? alpha(theme.palette.primary.main, 0.18)
+                  : "transparent",
               border: (theme) =>
                 editingTitle
                   ? `1px solid ${alpha(theme.palette.primary.main, 0.4)}`
@@ -587,10 +651,18 @@ export function MessageFlowPanel({
         </Stack>
         <Stack direction="row" spacing={1}>
           <Stack direction="row" spacing={0.75} sx={{ mr: "auto" }}>
-            <Button size="small" variant={viewMode === "flow" ? "contained" : "outlined"} onClick={() => setViewMode("flow")}>
+            <Button
+              size="small"
+              variant={viewMode === "flow" ? "contained" : "outlined"}
+              onClick={() => setViewMode("flow")}
+            >
               {t("Message flow")}
             </Button>
-            <Button size="small" variant={viewMode === "yaml" ? "contained" : "outlined"} onClick={() => setViewMode("yaml")}>
+            <Button
+              size="small"
+              variant={viewMode === "yaml" ? "contained" : "outlined"}
+              onClick={() => setViewMode("yaml")}
+            >
               YAML
             </Button>
           </Stack>
@@ -602,7 +674,9 @@ export function MessageFlowPanel({
             disabled={generatingAssistant || !sample || hasContinuationDraft}
             sx={{ color: "text.primary", borderColor: "divider" }}
           >
-            {generatingAssistant ? t("Generating...") : t("Generate AI message")}
+            {generatingAssistant
+              ? t("Generating...")
+              : t("Generate AI message")}
           </Button>
           <Button
             variant="outlined"
@@ -657,8 +731,22 @@ export function MessageFlowPanel({
               }}
             >
               {yamlPreview.split("\n").map((line, lineIndex) => (
-                <Box key={`${lineIndex}-${line}`} sx={{ display: "grid", gridTemplateColumns: "40px minmax(0, 1fr)" }}>
-                  <Box sx={{ color: "text.secondary", opacity: 0.65, userSelect: "none" }}>{lineIndex + 1}</Box>
+                <Box
+                  key={`${lineIndex}-${line}`}
+                  sx={{
+                    display: "grid",
+                    gridTemplateColumns: "40px minmax(0, 1fr)",
+                  }}
+                >
+                  <Box
+                    sx={{
+                      color: "text.secondary",
+                      opacity: 0.65,
+                      userSelect: "none",
+                    }}
+                  >
+                    {lineIndex + 1}
+                  </Box>
                   <Box component="span">
                     {highlightYamlLine(line).map((segment, segmentIndex) => (
                       <Box
@@ -673,11 +761,17 @@ export function MessageFlowPanel({
                               case "key":
                                 return colors.accent;
                               case "string":
-                                return theme.palette.mode === "dark" ? "#a7f3d0" : "#0f766e";
+                                return theme.palette.mode === "dark"
+                                  ? "#a7f3d0"
+                                  : "#0f766e";
                               case "number":
-                                return theme.palette.mode === "dark" ? "#fbbf24" : "#b45309";
+                                return theme.palette.mode === "dark"
+                                  ? "#fbbf24"
+                                  : "#b45309";
                               case "keyword":
-                                return theme.palette.mode === "dark" ? "#c4b5fd" : "#7c3aed";
+                                return theme.palette.mode === "dark"
+                                  ? "#c4b5fd"
+                                  : "#7c3aed";
                               default:
                                 return colors.textPrimary;
                             }
@@ -698,17 +792,23 @@ export function MessageFlowPanel({
             {sample.messages.map((message, messageIndex) => (
               <MessageBubble
                 key={`${sample.id}-${messageIndex}`}
-                edits={sample.edits.filter((item) => item.message_index === messageIndex)}
+                edits={sample.edits.filter(
+                  (item) => item.message_index === messageIndex,
+                )}
                 hasContinuationDraft={hasContinuationDraft}
                 isEditing={editingMessageIndex === messageIndex}
                 message={message}
                 messageIndex={messageIndex}
                 messageTokenization={
-                  sampleTokenization?.messages.find((item) => item.message_index === messageIndex) ?? null
+                  sampleTokenization?.messages.find(
+                    (item) => item.message_index === messageIndex,
+                  ) ?? null
                 }
                 onChangeContent={(content) =>
                   onUpdateSampleMessages((messages) =>
-                    messages.map((item, index) => (index === messageIndex ? { ...item, content } : item)),
+                    messages.map((item, index) =>
+                      index === messageIndex ? { ...item, content } : item,
+                    ),
                   )
                 }
                 onChangeReasoning={(reasoning) =>
@@ -720,13 +820,17 @@ export function MessageFlowPanel({
                 }
                 onChangeRole={(role) =>
                   onUpdateSampleMessages((messages) =>
-                    messages.map((item, index) => (index === messageIndex ? { ...item, role } : item)),
+                    messages.map((item, index) =>
+                      index === messageIndex ? { ...item, role } : item,
+                    ),
                   )
                 }
                 onDelete={
                   sample.messages.length > 1
                     ? () => {
-                        onUpdateSampleMessages((messages) => messages.filter((_, index) => index !== messageIndex));
+                        onUpdateSampleMessages((messages) =>
+                          messages.filter((_, index) => index !== messageIndex),
+                        );
                         setEditingMessageIndex((current) => {
                           if (current === null) {
                             return current;
@@ -740,7 +844,9 @@ export function MessageFlowPanel({
                     : undefined
                 }
                 selectedToken={selectedToken}
-                onSetEditing={(editing) => setEditingMessageIndex(editing ? messageIndex : null)}
+                onSetEditing={(editing) =>
+                  setEditingMessageIndex(editing ? messageIndex : null)
+                }
                 onSelectToken={onSelectToken}
               />
             ))}
@@ -750,7 +856,10 @@ export function MessageFlowPanel({
                 variant="outlined"
                 startIcon={<AddRoundedIcon />}
                 onClick={() => {
-                  onUpdateSampleMessages((messages) => [...messages, { role: "user", content: "" }]);
+                  onUpdateSampleMessages((messages) => [
+                    ...messages,
+                    { role: "user", content: "" },
+                  ]);
                   setEditingMessageIndex(sample.messages.length);
                 }}
                 disabled={hasContinuationDraft}
@@ -762,7 +871,10 @@ export function MessageFlowPanel({
                 variant="outlined"
                 startIcon={<AddRoundedIcon />}
                 onClick={() => {
-                  onUpdateSampleMessages((messages) => [...messages, { role: "assistant", content: "" }]);
+                  onUpdateSampleMessages((messages) => [
+                    ...messages,
+                    { role: "assistant", content: "" },
+                  ]);
                   setEditingMessageIndex(sample.messages.length);
                 }}
                 disabled={hasContinuationDraft}

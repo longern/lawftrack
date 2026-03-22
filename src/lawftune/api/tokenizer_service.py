@@ -77,15 +77,15 @@ def build_continuation_prefix(
         raise ValueError(f"Token index {token_index} is out of range.")
 
     replacement_ids = list(tokenizer(replacement_text, add_special_tokens=False)["input_ids"])
-    if len(replacement_ids) != 1:
-        raise ValueError("Replacement must map to exactly one tokenizer token.")
+    if not replacement_ids:
+        raise ValueError("Replacement must map to at least one tokenizer token.")
 
     original_token = tokenizer.decode(
         [int(input_ids[token_index])],
         clean_up_tokenization_spaces=False,
     )
     replacement_token = tokenizer.decode(
-        [int(replacement_ids[0])],
+        [int(token_id) for token_id in replacement_ids],
         clean_up_tokenization_spaces=False,
     )
     prefix_ids = input_ids[:token_index] + replacement_ids

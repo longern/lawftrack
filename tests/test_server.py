@@ -1079,28 +1079,29 @@ class ServerTests(unittest.TestCase):
                 "build_continuation_prefix",
                 return_value=("Updated", "Hello", "Updated"),
             ):
-                with mock.patch.object(server_module.httpx, "AsyncClient", return_value=DummyAsyncClient()):
-                    with mock.patch.object(datasets_api_module.httpx, "AsyncClient", return_value=DummyAsyncClient()):
-                        with mock.patch.object(
-                            datasets_api_module,
-                            "build_completion_prompt",
-                            return_value="PROMPT:Updated",
-                        ):
+                with mock.patch.object(datasets_api_module, "count_text_tokens", return_value=1):
+                    with mock.patch.object(server_module.httpx, "AsyncClient", return_value=DummyAsyncClient()):
+                        with mock.patch.object(datasets_api_module.httpx, "AsyncClient", return_value=DummyAsyncClient()):
                             with mock.patch.object(
                                 datasets_api_module,
-                                "suggest_completion_max_tokens",
-                                return_value=4096,
+                                "build_completion_prompt",
+                                return_value="PROMPT:Updated",
                             ):
-                                with mock.patch.object(datasets_api_module, "tokenize_text", side_effect=fake_tokenize):
-                                    continue_response = client.post(
-                                        f"/api/datasets/{created_dataset['id']}/samples/{sample['id']}/continue",
-                                        json={
-                                            "model": "Qwen/Qwen2.5-7B-Instruct",
-                                            "message_index": 1,
-                                            "token_index": 0,
-                                            "replacement_token": "Updated",
-                                        },
-                                    )
+                                with mock.patch.object(
+                                    datasets_api_module,
+                                    "suggest_completion_max_tokens",
+                                    return_value=4096,
+                                ):
+                                    with mock.patch.object(datasets_api_module, "tokenize_text", side_effect=fake_tokenize):
+                                        continue_response = client.post(
+                                            f"/api/datasets/{created_dataset['id']}/samples/{sample['id']}/continue",
+                                            json={
+                                                "model": "Qwen/Qwen2.5-7B-Instruct",
+                                                "message_index": 1,
+                                                "token_index": 0,
+                                                "replacement_token": "Updated",
+                                            },
+                                        )
 
             self.assertEqual(continue_response.status_code, 200)
             continued_payload = continue_response.json()
@@ -1130,6 +1131,99 @@ class ServerTests(unittest.TestCase):
             )
             self.assertEqual(save_response.status_code, 200)
             self.assertEqual(save_response.json()["messages"][1]["reasoning"], initial_reasoning)
+
+    def test_continue_uses_replacement_token_count_for_regeneration_start(self) -> None:
+        sys.path.insert(0, str(ROOT / "src"))
+        try:
+            import lawftune.api.datasets_api as datasets_api_module
+            import lawftune.server as server_module
+        finally:
+            sys.path.pop(0)
+
+        class DummyResponse:
+            def __init__(self, payload):
+                self._payload = payload
+                self.status_code = 200
+                self.is_success = True
+                self.text = json.dumps(payload)
+
+            def json(self):
+                return self._payload
+
+        class DummyAsyncClient:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            async def post(self, url, headers=None, json=None):
+                return DummyResponse({"choices": [{"text": " tail"}]})
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "config.json"
+            config_path.write_text(
+                json.dumps({"vllm_endpoint": "http://localhost:8000/v1", "api_key": ""}),
+                encoding="utf-8",
+            )
+
+            client = self._create_client(temp_dir)
+            created_dataset = client.post(
+                "/api/datasets",
+                json={"name": "multi-token-rewrite", "base_model": "Qwen/Qwen2.5-7B-Instruct"},
+            ).json()
+            created_sample = client.post(
+                f"/api/datasets/{created_dataset['id']}/samples",
+                json={
+                    "title": "Multi token rewrite sample",
+                    "messages": [
+                        {"role": "user", "content": "hi"},
+                        {"role": "assistant", "content": "Hello"},
+                    ],
+                },
+            ).json()
+
+            with mock.patch.object(
+                datasets_api_module,
+                "build_continuation_prefix",
+                return_value=("Alpha Beta", "Hello", "Alpha Beta"),
+            ):
+                with mock.patch.object(datasets_api_module, "count_text_tokens", return_value=2):
+                    with mock.patch.object(server_module.httpx, "AsyncClient", return_value=DummyAsyncClient()):
+                        with mock.patch.object(datasets_api_module.httpx, "AsyncClient", return_value=DummyAsyncClient()):
+                            with mock.patch.object(
+                                datasets_api_module,
+                                "build_completion_prompt",
+                                return_value="PROMPT:Alpha Beta",
+                            ):
+                                with mock.patch.object(
+                                    datasets_api_module,
+                                    "suggest_completion_max_tokens",
+                                    return_value=4096,
+                                ):
+                                    with mock.patch.object(
+                                        datasets_api_module,
+                                        "tokenize_text",
+                                        return_value=[
+                                            {"token_index": 0, "token_id": 1, "token": "Alpha", "text": "Alpha", "start": 0, "end": 5},
+                                            {"token_index": 1, "token_id": 2, "token": " Beta", "text": " Beta", "start": 5, "end": 10},
+                                            {"token_index": 2, "token_id": 3, "token": " tail", "text": " tail", "start": 10, "end": 15},
+                                        ],
+                                    ):
+                                        continue_response = client.post(
+                                            f"/api/datasets/{created_dataset['id']}/samples/{created_sample['id']}/continue",
+                                            json={
+                                                "model": "Qwen/Qwen2.5-7B-Instruct",
+                                                "message_index": 1,
+                                                "token_index": 0,
+                                                "replacement_token": "Alpha Beta",
+                                            },
+                                        )
+
+            self.assertEqual(continue_response.status_code, 200)
+            continued_sample = continue_response.json()["sample"]
+            self.assertEqual(continued_sample["edits"][0]["replacement_token"], "Alpha Beta")
+            self.assertEqual(continued_sample["edits"][0]["regenerated_from_token_index"], 2)
 
     def test_continue_preserves_edits_before_current_token(self) -> None:
         sys.path.insert(0, str(ROOT / "src"))
@@ -1205,36 +1299,37 @@ class ServerTests(unittest.TestCase):
                 "build_continuation_prefix",
                 return_value=("A b", "b", "B"),
             ):
-                with mock.patch.object(server_module.httpx, "AsyncClient", return_value=DummyAsyncClient()):
-                    with mock.patch.object(datasets_api_module.httpx, "AsyncClient", return_value=DummyAsyncClient()):
-                        with mock.patch.object(
-                            datasets_api_module,
-                            "build_completion_prompt",
-                            return_value="PROMPT:A b",
-                        ):
+                with mock.patch.object(datasets_api_module, "count_text_tokens", return_value=1):
+                    with mock.patch.object(server_module.httpx, "AsyncClient", return_value=DummyAsyncClient()):
+                        with mock.patch.object(datasets_api_module.httpx, "AsyncClient", return_value=DummyAsyncClient()):
                             with mock.patch.object(
                                 datasets_api_module,
-                                "suggest_completion_max_tokens",
-                                return_value=4096,
+                                "build_completion_prompt",
+                                return_value="PROMPT:A b",
                             ):
                                 with mock.patch.object(
                                     datasets_api_module,
-                                    "tokenize_text",
-                                    return_value=[
-                                        {"token_index": 0, "token_id": 1, "token": "A", "text": "A", "start": 0, "end": 1},
-                                        {"token_index": 1, "token_id": 2, "token": " B", "text": " B", "start": 1, "end": 3},
-                                        {"token_index": 2, "token_id": 3, "token": " X", "text": " X", "start": 3, "end": 5},
-                                    ],
+                                    "suggest_completion_max_tokens",
+                                    return_value=4096,
                                 ):
-                                    continue_response = client.post(
-                                        f"/api/datasets/{created_dataset['id']}/samples/{created_sample['id']}/continue",
-                                        json={
-                                            "model": "Qwen/Qwen2.5-7B-Instruct",
-                                            "message_index": 1,
-                                            "token_index": 1,
-                                            "replacement_token": "B",
-                                        },
-                                    )
+                                    with mock.patch.object(
+                                        datasets_api_module,
+                                        "tokenize_text",
+                                        return_value=[
+                                            {"token_index": 0, "token_id": 1, "token": "A", "text": "A", "start": 0, "end": 1},
+                                            {"token_index": 1, "token_id": 2, "token": " B", "text": " B", "start": 1, "end": 3},
+                                            {"token_index": 2, "token_id": 3, "token": " X", "text": " X", "start": 3, "end": 5},
+                                        ],
+                                    ):
+                                        continue_response = client.post(
+                                            f"/api/datasets/{created_dataset['id']}/samples/{created_sample['id']}/continue",
+                                            json={
+                                                "model": "Qwen/Qwen2.5-7B-Instruct",
+                                                "message_index": 1,
+                                                "token_index": 1,
+                                                "replacement_token": "B",
+                                            },
+                                        )
 
             self.assertEqual(continue_response.status_code, 200)
             continued_sample = continue_response.json()["sample"]
@@ -1340,29 +1435,30 @@ class ServerTests(unittest.TestCase):
                 "build_continuation_prefix",
                 return_value=("Revised", "Step", "Revised"),
             ):
-                with mock.patch.object(server_module.httpx, "AsyncClient", return_value=DummyAsyncClient()):
-                    with mock.patch.object(datasets_api_module.httpx, "AsyncClient", return_value=DummyAsyncClient()):
-                        with mock.patch.object(
-                            datasets_api_module,
-                            "build_completion_prompt",
-                            return_value="PROMPT:<think>Revised",
-                        ):
+                with mock.patch.object(datasets_api_module, "count_text_tokens", return_value=1):
+                    with mock.patch.object(server_module.httpx, "AsyncClient", return_value=DummyAsyncClient()):
+                        with mock.patch.object(datasets_api_module.httpx, "AsyncClient", return_value=DummyAsyncClient()):
                             with mock.patch.object(
                                 datasets_api_module,
-                                "suggest_completion_max_tokens",
-                                return_value=4096,
+                                "build_completion_prompt",
+                                return_value="PROMPT:<think>Revised",
                             ):
-                                with mock.patch.object(datasets_api_module, "tokenize_text", side_effect=fake_tokenize):
-                                    continue_response = client.post(
-                                        f"/api/datasets/{created_dataset['id']}/samples/{sample['id']}/continue",
-                                        json={
-                                            "model": "demo-model",
-                                            "message_index": 1,
-                                            "token_index": 0,
-                                            "target": "reasoning",
-                                            "replacement_token": "Revised",
-                                        },
-                                    )
+                                with mock.patch.object(
+                                    datasets_api_module,
+                                    "suggest_completion_max_tokens",
+                                    return_value=4096,
+                                ):
+                                    with mock.patch.object(datasets_api_module, "tokenize_text", side_effect=fake_tokenize):
+                                        continue_response = client.post(
+                                            f"/api/datasets/{created_dataset['id']}/samples/{sample['id']}/continue",
+                                            json={
+                                                "model": "demo-model",
+                                                "message_index": 1,
+                                                "token_index": 0,
+                                                "target": "reasoning",
+                                                "replacement_token": "Revised",
+                                            },
+                                        )
 
             self.assertEqual(continue_response.status_code, 200)
             continued_payload = continue_response.json()

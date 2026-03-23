@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import json
+import os
+import io
 import sys
 import tempfile
+from contextlib import redirect_stderr
 from pathlib import Path
 import unittest
 from unittest import mock
@@ -29,6 +32,21 @@ class LAwFRunnerTests(unittest.TestCase):
 
         self.assertEqual(exit_code, 0)
         mocked_runner.assert_called_once_with(job, Path(temp_dir))
+
+    def test_run_lawf_job_writes_full_traceback_to_stderr(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            job = {"id": "ftjob-lawf-err", "model": "demo-model", "training_file": "file-123"}
+            stderr_buffer = io.StringIO()
+            with mock.patch(
+                "lawftune.train.lawf_runner.run_lawf_training",
+                side_effect=ValueError("boom"),
+            ):
+                with redirect_stderr(stderr_buffer):
+                    exit_code = run_lawf_job(job, Path(temp_dir))
+
+        self.assertEqual(exit_code, 1)
+        self.assertIn("Traceback", stderr_buffer.getvalue())
+        self.assertIn("ValueError: boom", stderr_buffer.getvalue())
 
     def test_run_lawf_training_uses_uploaded_dataset_records_without_conversion(self) -> None:
         class FakeTorch:
@@ -162,9 +180,15 @@ class LAwFRunnerTests(unittest.TestCase):
             self.assertEqual(trainer.kwargs["train_dataset"], train_records)
             self.assertEqual(trainer.kwargs["eval_dataset"], valid_records)
             self.assertTrue(trainer.trained)
+            self.assertEqual(
+                trainer.kwargs["peft_config"].kwargs["target_modules"],
+                "all-linear",
+            )
 
             output_dir = config_dir / "fine_tuning" / "jobs" / "ftjob-lawf-456" / "artifacts" / "model"
             self.assertEqual(trainer.saved_model_paths, [str(output_dir)])
+            self.assertNotIn("logging_dir", trainer.kwargs["args"].kwargs)
+            self.assertEqual(trainer.kwargs["args"].kwargs["num_train_epochs"], 2.0)
 
             tokenizer = FakeAutoTokenizer.last_tokenizer
             self.assertIsNotNone(tokenizer)
@@ -176,6 +200,103 @@ class LAwFRunnerTests(unittest.TestCase):
 
             exported_train_file = config_dir / "fine_tuning" / "jobs" / "ftjob-lawf-456" / "artifacts" / "data" / "train.jsonl"
             self.assertTrue(exported_train_file.exists())
+            self.assertNotIn("TENSORBOARD_LOGGING_DIR", os.environ)
+
+    def test_run_lawf_training_defaults_to_more_epochs(self) -> None:
+        class FakeTorch:
+            class cuda:
+                @staticmethod
+                def is_available() -> bool:
+                    return False
+
+                @staticmethod
+                def is_bf16_supported() -> bool:
+                    return False
+
+        class FakeDataset:
+            @staticmethod
+            def from_list(records):
+                return records
+
+        class FakeTokenizer:
+            def __init__(self) -> None:
+                self.pad_token = None
+                self.eos_token = "</s>"
+
+            def save_pretrained(self, path: str) -> None:
+                return None
+
+        class FakeAutoTokenizer:
+            @classmethod
+            def from_pretrained(cls, model_name: str) -> FakeTokenizer:
+                return FakeTokenizer()
+
+        class FakeTrainingArguments:
+            last_kwargs: dict[str, object] | None = None
+
+            def __init__(self, **kwargs) -> None:
+                self.kwargs = kwargs
+                FakeTrainingArguments.last_kwargs = kwargs
+
+        class FakeLoraConfig:
+            def __init__(self, **kwargs) -> None:
+                self.kwargs = kwargs
+
+        class FakeTaskType:
+            CAUSAL_LM = "CAUSAL_LM"
+
+        class FakeTrainer:
+            def __init__(self, **kwargs) -> None:
+                self.kwargs = kwargs
+
+            def train(self) -> None:
+                return None
+
+            def save_model(self, path: str) -> None:
+                return None
+
+        train_records = [{"prompt": "Question:", "completion": "Answer", "anchors": []}]
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_dir = Path(temp_dir)
+            models_dir = config_dir / "models"
+            local_model_dir = models_dir / "demo-model"
+            local_model_dir.mkdir(parents=True)
+            (local_model_dir / "config.json").write_text("{}", encoding="utf-8")
+            (config_dir / "config.json").write_text(
+                json.dumps({"models_dir": str(models_dir)}),
+                encoding="utf-8",
+            )
+            file_store = FileStore(config_dir)
+            training_file = file_store.create_file(
+                filename="train.jsonl",
+                purpose="fine-tune",
+                content="\n".join(json.dumps(item) for item in train_records).encode("utf-8"),
+                content_type="application/jsonl",
+            )
+            job = {
+                "id": "ftjob-lawf-default-epochs",
+                "model": "demo-model",
+                "training_file": training_file["id"],
+                "method": {"type": "lawf", "lawf": {"hyperparameters": {}}},
+            }
+
+            with mock.patch(
+                "lawftune.train.lawf_runner._load_dependencies",
+                return_value={
+                    "torch": FakeTorch,
+                    "Dataset": FakeDataset,
+                    "LoraConfig": FakeLoraConfig,
+                    "TaskType": FakeTaskType,
+                    "AutoTokenizer": FakeAutoTokenizer,
+                    "TrainingArguments": FakeTrainingArguments,
+                    "LAwFTrainer": FakeTrainer,
+                },
+            ):
+                run_lawf_training(job, config_dir)
+
+        self.assertIsNotNone(FakeTrainingArguments.last_kwargs)
+        self.assertEqual(FakeTrainingArguments.last_kwargs["num_train_epochs"], 32.0)
 
 
 if __name__ == "__main__":

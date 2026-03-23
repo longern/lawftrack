@@ -662,6 +662,9 @@ class ServerTests(unittest.TestCase):
                 if line.strip()
             ]
             self.assertEqual(len(lawf_records), 2)
+            self.assertIn("prompt", lawf_records[0])
+            self.assertNotIn("messages", lawf_records[0])
+            self.assertNotIn("completion_message_index", lawf_records[0])
             self.assertEqual(lawf_records[0]["completion"][0]["content"], "answer-1")
             self.assertEqual(lawf_records[0]["anchors"][0]["token_index"], 0)
             self.assertEqual(lawf_records[1]["completion"][0]["content"], "answer-2")

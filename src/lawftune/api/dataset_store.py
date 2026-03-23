@@ -393,8 +393,6 @@ class DatasetStore:
             ]
             records.append(
                 {
-                    "messages": prompt_messages + completion_messages,
-                    "completion_message_index": assistant_index,
                     "prompt": prompt_messages,
                     "completion": completion_messages,
                     "anchors": anchors,

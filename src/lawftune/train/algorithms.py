@@ -3,6 +3,7 @@ from __future__ import annotations
 import signal
 import subprocess
 import sys
+import traceback
 from dataclasses import dataclass
 from pathlib import Path
 import re
@@ -172,8 +173,8 @@ def run_lawf_job(job: dict[str, Any], config_dir: Path) -> int:
 
         run_lawf_training(job, config_dir)
         return 0
-    except Exception as exc:
-        print(str(exc), file=sys.stderr)
+    except Exception:
+        traceback.print_exc(file=sys.stderr)
         return 1
 
 

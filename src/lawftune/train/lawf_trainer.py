@@ -87,6 +87,8 @@ class LAwFDataCollator:
         prompt, completion, anchor_records, tools = _resolve_prompt_completion_row(row)
         is_conversational_format = isinstance(prompt, list)
         if is_conversational_format:
+            prompt_messages = prompt
+            completion_messages = completion if isinstance(completion, list) else []
             prompt = self.tokenizer.apply_chat_template(
                 prompt,
                 tools=tools,
@@ -94,7 +96,7 @@ class LAwFDataCollator:
                 tokenize=False,
             )
             prompt_completion = self.tokenizer.apply_chat_template(
-                prompt + completion,
+                prompt_messages + completion_messages,
                 tools=tools,
                 tokenize=False,
             )

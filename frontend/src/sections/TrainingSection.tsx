@@ -61,6 +61,8 @@ import {
 import { useI18n } from "../i18n";
 
 type TrainingMethodType = "sft" | "lawf";
+const DEFAULT_SFT_N_EPOCHS = "3";
+const DEFAULT_LAWF_N_EPOCHS = "32";
 
 interface TrainingFormState {
   model: string;
@@ -87,7 +89,7 @@ function buildDefaultForm(model: string): TrainingFormState {
     validationFileId: "",
     suffix: "",
     seed: "",
-    nEpochs: "3",
+    nEpochs: DEFAULT_SFT_N_EPOCHS,
     batchSize: "1",
     learningRate: "0.00005",
     loggingSteps: "1",
@@ -121,7 +123,7 @@ function buildMethodConfig(form: TrainingFormState): FineTuningMethodConfig {
       type: "sft",
       sft: {
         hyperparameters: {
-          n_epochs: Number(form.nEpochs || 1),
+          n_epochs: Number(form.nEpochs || DEFAULT_SFT_N_EPOCHS),
         },
       },
     };
@@ -131,7 +133,7 @@ function buildMethodConfig(form: TrainingFormState): FineTuningMethodConfig {
     type: "lawf",
     lawf: {
       hyperparameters: {
-        n_epochs: Number(form.nEpochs || 1),
+        n_epochs: Number(form.nEpochs || DEFAULT_LAWF_N_EPOCHS),
         batch_size: Number(form.batchSize || 1),
         learning_rate: Number(form.learningRate || 5e-5),
         logging_steps: Number(form.loggingSteps || 1),
@@ -391,6 +393,29 @@ function TrainingSection() {
     value: TrainingFormState[K],
   ) {
     setForm((current) => ({ ...current, [key]: value }));
+  }
+
+  function updateMethodType(nextMethodType: TrainingMethodType) {
+    setForm((current) => {
+      if (current.methodType === nextMethodType) {
+        return current;
+      }
+      const previousDefaultEpochs =
+        current.methodType === "lawf"
+          ? DEFAULT_LAWF_N_EPOCHS
+          : DEFAULT_SFT_N_EPOCHS;
+      const nextDefaultEpochs =
+        nextMethodType === "lawf"
+          ? DEFAULT_LAWF_N_EPOCHS
+          : DEFAULT_SFT_N_EPOCHS;
+      const shouldResetEpochs =
+        !current.nEpochs.trim() || current.nEpochs === previousDefaultEpochs;
+      return {
+        ...current,
+        methodType: nextMethodType,
+        nEpochs: shouldResetEpochs ? nextDefaultEpochs : current.nEpochs,
+      };
+    });
   }
 
   function handleSelectDataset(datasetId: string) {
@@ -1392,8 +1417,7 @@ function CreateTrainingJobDialog({
                     label={t("Training method")}
                     value={form.methodType}
                     onChange={(event) =>
-                      onChangeForm(
-                        "methodType",
+                      updateMethodType(
                         event.target.value as TrainingMethodType,
                       )
                     }

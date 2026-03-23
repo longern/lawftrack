@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import traceback
 from pathlib import Path
 import time
 from typing import Any
@@ -69,6 +70,22 @@ def fail_job(config_dir: Path, job: dict[str, Any], *, code: str, message: str) 
     write_job(config_dir, job)
 
 
+def summarize_job_stderr(config_dir: Path, job_id: str, fallback: str) -> str:
+    stderr_path = config_dir / "fine_tuning" / "jobs" / job_id / "stderr.log"
+    if not stderr_path.is_file():
+        return fallback
+
+    lines = [
+        line.strip()
+        for line in stderr_path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    if not lines:
+        return fallback
+
+    return lines[-1]
+
+
 def get_local_vllm_sleep_config(config_dir: Path) -> tuple[bool, int]:
     payload = load_raw_config(config_dir)
     training_config = payload.get("training")
@@ -132,10 +149,15 @@ def finalize_job(config_dir: Path, job: dict[str, Any], exit_code: int) -> None:
     job["finished_at"] = now
 
     if exit_code != 0:
+        summary = summarize_job_stderr(
+            config_dir,
+            str(job["id"]),
+            f"Fine-tuning worker exited with code {exit_code}.",
+        )
         job["status"] = "failed"
         job["error"] = {
             "code": "training_failed",
-            "message": f"Fine-tuning worker exited with code {exit_code}.",
+            "message": summary,
         }
         write_job(config_dir, job)
         return
@@ -196,11 +218,12 @@ def run_train_worker(args: argparse.Namespace) -> int:
         else:
             exit_code = run_algorithm_job(args.action, job, config_dir)
     except Exception as exc:
+        traceback.print_exc(file=sys.stderr)
         fail_job(
             config_dir,
             job,
             code="worker_error",
-            message=str(exc),
+            message=summarize_job_stderr(config_dir, str(job["id"]), str(exc)),
         )
         return 1
     finally:

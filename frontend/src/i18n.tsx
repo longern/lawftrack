@@ -165,6 +165,8 @@ const ZH_MESSAGES: Record<string, string> = {
   "Training console": "训练控制台",
   "Create training job": "创建训练任务",
   "Training files": "训练文件库",
+  Refresh: "刷新",
+  Upload: "上传",
   "Uploading...": "上传中...",
   "No training files yet. Upload a JSON/JSONL/CSV/Parquet file first.":
     "还没有训练文件。先上传一个 JSON/JSONL/CSV/Parquet 文件。",

@@ -103,7 +103,6 @@ export interface DatasetSample {
   created_at: number;
   updated_at: number;
   messages: DatasetMessage[];
-  source_messages: DatasetMessage[];
   edits: DatasetTokenEdit[];
   anchors?: DatasetTokenEdit[];
 }

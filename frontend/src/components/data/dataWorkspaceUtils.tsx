@@ -141,15 +141,6 @@ export function serializeSampleAsYaml(sample: DatasetSample): string {
     pushYamlStringField(lines, 2, "content", message.content);
   }
 
-  lines.push("source_messages:");
-  for (const message of sample.source_messages) {
-    lines.push(`${indent(1)}- role: ${formatYamlScalar(message.role)}`);
-    if (message.reasoning) {
-      pushYamlStringField(lines, 2, "reasoning", message.reasoning);
-    }
-    pushYamlStringField(lines, 2, "content", message.content);
-  }
-
   lines.push("anchors:");
   if (anchors.length === 0) {
     lines.push(`${indent(1)}[]`);

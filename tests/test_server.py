@@ -820,7 +820,6 @@ class ServerTests(unittest.TestCase):
                         {"role": "user", "content": updated_user},
                         {"role": "assistant", "content": updated_assistant},
                     ],
-                    "source_messages": sample["source_messages"],
                     "edits": [
                         {
                             "message_index": 1,
@@ -964,7 +963,6 @@ class ServerTests(unittest.TestCase):
                         {"role": "user", "content": updated_user},
                         {"role": "assistant", "content": updated_assistant},
                     ],
-                    "source_messages": sample["source_messages"],
                     "edits": [],
                 },
             )
@@ -1120,7 +1118,6 @@ class ServerTests(unittest.TestCase):
                 json={
                     "title": continued_sample["title"],
                     "messages": continued_sample["messages"],
-                    "source_messages": continued_sample["source_messages"],
                     "edits": [
                         {
                             **continued_sample["edits"][0],
@@ -1420,7 +1417,6 @@ class ServerTests(unittest.TestCase):
                 json={
                     "title": created_sample["title"],
                     "messages": created_sample["messages"],
-                    "source_messages": created_sample["source_messages"],
                     "edits": [
                         {
                             "message_index": 1,

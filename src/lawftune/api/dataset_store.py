@@ -143,7 +143,6 @@ class DatasetStore:
             "created_at": now,
             "updated_at": now,
             "messages": messages,
-            "source_messages": self._normalize_messages(payload.get("source_messages")) or messages,
             "edits": annotations,
             "anchors": annotations,
         }
@@ -169,9 +168,6 @@ class DatasetStore:
                 **sample,
                 "title": payload.get("title") or sample.get("title") or f"样本 {index + 1}",
                 "messages": self._normalize_messages(payload.get("messages")),
-                "source_messages": self._normalize_messages(
-                    payload.get("source_messages") or sample.get("source_messages")
-                ),
                 "edits": annotations,
                 "anchors": annotations,
                 "updated_at": int(time.time()),
@@ -338,7 +334,6 @@ class DatasetStore:
                     "created_at": now,
                     "updated_at": now,
                     "messages": messages,
-                    "source_messages": self._normalize_messages(item.get("source_messages")) or messages,
                     "edits": annotations,
                     "anchors": annotations,
                 }
@@ -530,7 +525,6 @@ class DatasetStore:
             raise ValueError("Dataset sample payload must be a mapping.")
         sample_id = str(payload.get("id") or f"sample-{index + 1:04d}")
         messages = self._extract_messages_from_record(payload)
-        source_messages = self._normalize_messages(payload.get("source_messages")) or messages
         annotations = self._normalize_annotations(payload)
         return {
             "id": sample_id,
@@ -540,7 +534,6 @@ class DatasetStore:
             "created_at": int(payload.get("created_at", time.time())),
             "updated_at": int(payload.get("updated_at", time.time())),
             "messages": messages,
-            "source_messages": source_messages,
             "edits": annotations,
             "anchors": annotations,
         }

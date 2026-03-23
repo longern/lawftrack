@@ -644,7 +644,6 @@ function DataWorkspace({
     const nextSample = updater(selectedSample);
     updateCurrentSample({
       ...nextSample,
-      source_messages: nextSample.messages,
       edits: [],
       updated_at: Math.floor(Date.now() / 1000),
     });
@@ -1589,7 +1588,6 @@ function DataWorkspace({
         body: JSON.stringify({
           title: sample.title,
           messages: sample.messages,
-          source_messages: sample.source_messages,
           edits: sample.edits,
         }),
       },

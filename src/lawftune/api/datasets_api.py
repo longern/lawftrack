@@ -52,7 +52,6 @@ class DatasetTokenEditPayload(BaseModel):
 class UpdateDatasetSampleRequest(BaseModel):
     title: str | None = None
     messages: list[DatasetMessagePayload]
-    source_messages: list[DatasetMessagePayload] | None = None
     edits: list[DatasetTokenEditPayload] | None = None
     anchors: list[DatasetTokenEditPayload] | None = None
 
@@ -60,7 +59,6 @@ class UpdateDatasetSampleRequest(BaseModel):
 class CreateDatasetSampleRequest(BaseModel):
     title: str | None = None
     messages: list[DatasetMessagePayload] | None = None
-    source_messages: list[DatasetMessagePayload] | None = None
     anchors: list[DatasetTokenEditPayload] | None = None
 
 

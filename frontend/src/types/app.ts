@@ -244,6 +244,11 @@ export interface FineTuningJobLogs {
   id: string;
   stdout: string;
   stderr: string;
+  stdout_total_lines: number;
+  stderr_total_lines: number;
+  stdout_truncated: boolean;
+  stderr_truncated: boolean;
+  displayed_line_limit: number;
   status: string;
 }
 

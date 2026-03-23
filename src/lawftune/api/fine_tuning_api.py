@@ -6,11 +6,14 @@ from typing import Iterable
 
 from fastapi import APIRouter
 from fastapi import HTTPException
+from fastapi import Query
+from fastapi import Response
 from pydantic import BaseModel
 from pydantic import Field
 
 from lawftune.api.files_store import FileStore
 from lawftune.api.fine_tuning_jobs import FineTuningJobStore
+from lawftune.api.fine_tuning_jobs import DEFAULT_LOG_TAIL_LINES
 from lawftune.train.algorithms import normalize_training_method
 
 
@@ -126,13 +129,32 @@ def build_router(
             ) from exc
 
     @router.get("/jobs/{job_id}/logs")
-    def retrieve_fine_tuning_job_logs(job_id: str) -> dict[str, Any]:
+    def retrieve_fine_tuning_job_logs(
+        job_id: str,
+        tail_lines: int = Query(default=DEFAULT_LOG_TAIL_LINES, ge=1, le=10000),
+    ) -> dict[str, Any]:
         try:
-            return store.get_job_logs(job_id)
+            return store.get_job_logs(job_id, tail_lines=tail_lines)
         except FileNotFoundError as exc:
             raise HTTPException(
                 status_code=404, detail=f"Fine-tuning job not found: {job_id}"
             ) from exc
+
+    @router.get("/jobs/{job_id}/logs/download")
+    def download_fine_tuning_job_logs(job_id: str) -> Response:
+        try:
+            content = store.get_job_logs_download_text(job_id)
+        except FileNotFoundError as exc:
+            raise HTTPException(
+                status_code=404, detail=f"Fine-tuning job not found: {job_id}"
+            ) from exc
+        return Response(
+            content=content,
+            media_type="text/plain; charset=utf-8",
+            headers={
+                "Content-Disposition": f'attachment; filename="{job_id}-logs.txt"'
+            },
+        )
 
     @router.post("/jobs/{job_id}/cancel")
     def cancel_fine_tuning_job(job_id: str) -> dict[str, Any]:

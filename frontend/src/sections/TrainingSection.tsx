@@ -26,6 +26,7 @@ import {
   FormControlLabel,
   Grid,
   InputLabel,
+  Link,
   MenuItem,
   Paper,
   Skeleton,
@@ -1058,6 +1059,12 @@ function RawLogsPanel({ logs }: { logs: FineTuningJobLogs | null }) {
   const { t } = useI18n();
   const stdout = logs?.stdout.trim() || "";
   const stderr = logs?.stderr.trim() || "";
+  const isTruncated = Boolean(
+    logs && (logs.stdout_truncated || logs.stderr_truncated),
+  );
+  const downloadHref = logs
+    ? `/api/fine_tuning/jobs/${encodeURIComponent(logs.id)}/logs/download`
+    : "";
   if (!stdout && !stderr) {
     return (
       <Paper
@@ -1071,6 +1078,23 @@ function RawLogsPanel({ logs }: { logs: FineTuningJobLogs | null }) {
 
   return (
     <Stack spacing={2} sx={{ mt: 2 }}>
+      <Stack
+        direction={{ xs: "column", sm: "row" }}
+        spacing={1}
+        alignItems={{ xs: "flex-start", sm: "center" }}
+        justifyContent="space-between"
+      >
+        <Typography variant="caption" color="text.secondary">
+          {isTruncated
+            ? t("Showing the last {count} lines from each log stream.", {
+                count: String(logs?.displayed_line_limit ?? 0),
+              })
+            : " "}
+        </Typography>
+        <Link href={downloadHref} underline="hover">
+          {t("Download full logs")}
+        </Link>
+      </Stack>
       <LogBlock title="stdout" content={stdout} />
       <LogBlock title="stderr" content={stderr} tone="error" />
     </Stack>

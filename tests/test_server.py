@@ -777,6 +777,70 @@ class ServerTests(unittest.TestCase):
             self.assertEqual(logs_response.status_code, 200)
             self.assertIn("training finished", logs_response.json()["stdout"])
             self.assertIn("fallback tokenizer", logs_response.json()["stderr"])
+            self.assertEqual(logs_response.json()["displayed_line_limit"], 2000)
+
+            download_response = client.get(
+                "/api/fine_tuning/jobs/ftjob-demo/logs/download"
+            )
+            self.assertEqual(download_response.status_code, 200)
+            self.assertIn("attachment;", download_response.headers["content-disposition"])
+            self.assertIn("===== stdout =====", download_response.text)
+            self.assertIn("===== stderr =====", download_response.text)
+
+    def test_fine_tuning_job_logs_endpoint_returns_tail_only(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            client = self._create_client(temp_dir)
+            job_dir = Path(temp_dir) / "fine_tuning" / "jobs" / "ftjob-demo"
+            job_dir.mkdir(parents=True, exist_ok=True)
+            (job_dir / "job.json").write_text(
+                json.dumps(
+                    {
+                        "id": "ftjob-demo",
+                        "object": "fine_tuning.job",
+                        "created_at": 1000,
+                        "error": None,
+                        "estimated_finish": None,
+                        "fine_tuned_model": None,
+                        "finished_at": None,
+                        "hyperparameters": {},
+                        "integrations": [],
+                        "metadata": {},
+                        "method": {"type": "sft"},
+                        "model": "demo-model",
+                        "organization_id": "org-lawftune",
+                        "result_files": [],
+                        "seed": None,
+                        "status": "running",
+                        "trained_tokens": None,
+                        "training_file": "file-training",
+                        "validation_file": None,
+                        "suffix": None,
+                        "lora_adapter": None,
+                        "process": {"pid": None, "started_at": 1000, "exit_code": None},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (job_dir / "stdout.log").write_text(
+                "line-1\nline-2\nline-3\n",
+                encoding="utf-8",
+            )
+            (job_dir / "stderr.log").write_text(
+                "warn-1\nwarn-2\nwarn-3\n",
+                encoding="utf-8",
+            )
+
+            response = client.get("/api/fine_tuning/jobs/ftjob-demo/logs?tail_lines=2")
+
+            self.assertEqual(response.status_code, 200)
+            payload = response.json()
+            self.assertEqual(payload["stdout"], "line-2\nline-3\n")
+            self.assertEqual(payload["stderr"], "warn-2\nwarn-3\n")
+            self.assertTrue(payload["stdout_truncated"])
+            self.assertTrue(payload["stderr_truncated"])
+            self.assertEqual(payload["stdout_total_lines"], 3)
+            self.assertEqual(payload["stderr_total_lines"], 3)
+            self.assertEqual(payload["displayed_line_limit"], 2)
 
     def test_datasets_api_lists_and_updates_dataset_samples(self) -> None:
         initial_assistant = "Hello, I am your legal assistant"

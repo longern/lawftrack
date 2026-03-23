@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+from collections import deque
 import json
 import os
 import re
@@ -35,6 +36,7 @@ METRIC_ALIAS_MAP = {
 INLINE_METRIC_PATTERN = re.compile(
     r"([A-Za-z_][A-Za-z0-9_ ]*?)\s*[:=]\s*(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)"
 )
+DEFAULT_LOG_TAIL_LINES = 2000
 
 
 def process_is_running(pid: int) -> bool:
@@ -125,18 +127,56 @@ class FineTuningJobStore:
         self._write_job(job)
         return job
 
-    def get_job_logs(self, job_id: str) -> dict[str, Any]:
+    def get_job_logs(
+        self,
+        job_id: str,
+        *,
+        tail_lines: int = DEFAULT_LOG_TAIL_LINES,
+    ) -> dict[str, Any]:
         job = self.get_job(job_id)
         job_dir = self.jobs_dir / job_id
         stdout_path = job_dir / "stdout.log"
         stderr_path = job_dir / "stderr.log"
+        stdout, stdout_total_lines, stdout_truncated = self._read_log_tail(
+            stdout_path,
+            tail_lines,
+        )
+        stderr, stderr_total_lines, stderr_truncated = self._read_log_tail(
+            stderr_path,
+            tail_lines,
+        )
         return {
             "object": "fine_tuning.job.logs",
             "id": job_id,
-            "stdout": stdout_path.read_text(encoding="utf-8") if stdout_path.is_file() else "",
-            "stderr": stderr_path.read_text(encoding="utf-8") if stderr_path.is_file() else "",
+            "stdout": stdout,
+            "stderr": stderr,
+            "stdout_total_lines": stdout_total_lines,
+            "stderr_total_lines": stderr_total_lines,
+            "stdout_truncated": stdout_truncated,
+            "stderr_truncated": stderr_truncated,
+            "displayed_line_limit": tail_lines,
             "status": job["status"],
         }
+
+    def get_job_logs_download_text(self, job_id: str) -> str:
+        self.get_job(job_id)
+        job_dir = self.jobs_dir / job_id
+        stdout_path = job_dir / "stdout.log"
+        stderr_path = job_dir / "stderr.log"
+        stdout = stdout_path.read_text(encoding="utf-8") if stdout_path.is_file() else ""
+        stderr = stderr_path.read_text(encoding="utf-8") if stderr_path.is_file() else ""
+        return "\n".join(
+            [
+                f"Fine-tuning job logs: {job_id}",
+                "",
+                "===== stdout =====",
+                stdout.rstrip("\n"),
+                "",
+                "===== stderr =====",
+                stderr.rstrip("\n"),
+                "",
+            ]
+        )
 
     def list_job_events(self, job_id: str) -> list[dict[str, Any]]:
         job = self.get_job(job_id)
@@ -255,6 +295,19 @@ class FineTuningJobStore:
         job_dir.mkdir(parents=True, exist_ok=True)
         job_path = job_dir / "job.json"
         job_path.write_text(json.dumps(job, indent=2) + "\n", encoding="utf-8")
+
+    def _read_log_tail(self, log_path: Path, tail_lines: int) -> tuple[str, int, bool]:
+        if not log_path.is_file():
+            return "", 0, False
+
+        total_lines = 0
+        buffer: deque[str] = deque(maxlen=tail_lines)
+        with log_path.open("r", encoding="utf-8") as handle:
+            for line in handle:
+                total_lines += 1
+                buffer.append(line)
+
+        return "".join(buffer), total_lines, total_lines > tail_lines
 
     def _reconcile_job(self, job: dict[str, Any]) -> dict[str, Any]:
         if job["status"] in TERMINAL_JOB_STATUSES:

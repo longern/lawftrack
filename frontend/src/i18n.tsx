@@ -189,6 +189,9 @@ const ZH_MESSAGES: Record<string, string> = {
   "Logs and events": "日志与事件",
   Events: "事件",
   "Raw logs": "原始日志",
+  "Download full logs": "下载完整日志",
+  "Showing the last {count} lines from each log stream.":
+    "当前仅显示每个日志流最后 {count} 行。",
   "No events.": "暂无事件。",
   "No raw logs.": "暂无原始日志。",
   "No content": "暂无内容",

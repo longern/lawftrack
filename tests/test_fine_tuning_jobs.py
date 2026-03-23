@@ -46,6 +46,65 @@ class FineTuningJobStoreTests(unittest.TestCase):
             self.assertEqual(job["process"]["pid"], 5150)
             self.assertIsNone(job["lora_adapter"])
 
+    def test_get_job_logs_returns_tail_and_download_keeps_full_content(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            store = FineTuningJobStore(Path(temp_dir))
+            job_dir = store.jobs_dir / "ftjob-demo"
+            job_dir.mkdir(parents=True, exist_ok=True)
+            (job_dir / "job.json").write_text(
+                json.dumps(
+                    {
+                        "id": "ftjob-demo",
+                        "object": "fine_tuning.job",
+                        "created_at": 1000,
+                        "error": None,
+                        "estimated_finish": None,
+                        "fine_tuned_model": None,
+                        "finished_at": None,
+                        "hyperparameters": {},
+                        "integrations": [],
+                        "metadata": {},
+                        "method": {"type": "sft"},
+                        "model": "demo-model",
+                        "organization_id": "org-lawftune",
+                        "result_files": [],
+                        "seed": None,
+                        "status": "running",
+                        "trained_tokens": None,
+                        "training_file": "file-training",
+                        "validation_file": None,
+                        "suffix": None,
+                        "lora_adapter": None,
+                        "process": {"pid": None, "started_at": 1000, "exit_code": None},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (job_dir / "stdout.log").write_text(
+                "line-1\nline-2\nline-3\n",
+                encoding="utf-8",
+            )
+            (job_dir / "stderr.log").write_text(
+                "warn-1\nwarn-2\nwarn-3\n",
+                encoding="utf-8",
+            )
+
+            payload = store.get_job_logs("ftjob-demo", tail_lines=2)
+
+            self.assertEqual(payload["stdout"], "line-2\nline-3\n")
+            self.assertEqual(payload["stderr"], "warn-2\nwarn-3\n")
+            self.assertEqual(payload["stdout_total_lines"], 3)
+            self.assertEqual(payload["stderr_total_lines"], 3)
+            self.assertTrue(payload["stdout_truncated"])
+            self.assertTrue(payload["stderr_truncated"])
+            self.assertEqual(payload["displayed_line_limit"], 2)
+
+            download_text = store.get_job_logs_download_text("ftjob-demo")
+            self.assertIn("===== stdout =====", download_text)
+            self.assertIn("line-1\nline-2\nline-3", download_text)
+            self.assertIn("===== stderr =====", download_text)
+            self.assertIn("warn-1\nwarn-2\nwarn-3", download_text)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -66,6 +66,7 @@ class CreateDatasetSampleRequest(BaseModel):
 
 class TokenizeDatasetSampleRequest(BaseModel):
     model: str
+    messages: list[DatasetMessagePayload] | None = None
 
 
 class ContinueDatasetSampleRequest(BaseModel):
@@ -107,9 +108,7 @@ def extract_message_text(value: Any) -> str:
         return value
     if isinstance(value, list):
         return "".join(
-            str(item.get("text") or "")
-            for item in value
-            if isinstance(item, dict)
+            str(item.get("text") or "") for item in value if isinstance(item, dict)
         )
     return ""
 
@@ -213,7 +212,9 @@ def parse_prefilled_assistant_text(text: str) -> tuple[str | None, str]:
     return reasoning, content
 
 
-def extract_completion_logprob_candidates(payload: dict[str, Any]) -> list[dict[str, Any]]:
+def extract_completion_logprob_candidates(
+    payload: dict[str, Any],
+) -> list[dict[str, Any]]:
     choices = payload.get("choices") or []
     if not choices:
         return []
@@ -241,6 +242,160 @@ def extract_completion_logprob_candidates(payload: dict[str, Any]) -> list[dict[
     return []
 
 
+def prepare_sample_continuation(
+    *,
+    sample: dict[str, Any],
+    payload: ContinueDatasetSampleRequest,
+    config_dir: Path,
+) -> dict[str, Any]:
+    messages = list(sample.get("messages", []))
+    if payload.message_index < 0 or payload.message_index >= len(messages):
+        raise HTTPException(status_code=400, detail="Message index is out of range.")
+
+    target_message = messages[payload.message_index]
+    if target_message.get("role") != "assistant":
+        raise HTTPException(
+            status_code=400,
+            detail="Only assistant messages support token continuation.",
+        )
+    target = (payload.target or "content").strip().lower()
+    if target not in {"content", "reasoning"}:
+        raise HTTPException(
+            status_code=400, detail="Target must be `content` or `reasoning`."
+        )
+
+    try:
+        prefix, original_token, replacement_token = build_continuation_prefix(
+            model=payload.model,
+            text=str(target_message.get(target) or ""),
+            token_index=payload.token_index,
+            replacement_text=payload.replacement_token,
+        )
+        replacement_token_count = count_text_tokens(
+            model=payload.model,
+            text=replacement_token,
+        )
+    except TokenizerDependencyError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    current_config = load_config(config_dir)
+    headers = {"content-type": "application/json"}
+    if current_config.get("api_key"):
+        headers["authorization"] = f"Bearer {current_config['api_key']}"
+
+    try:
+        assistant_prefill = build_completion_prefill(
+            target_message=target_message,
+            target=target,
+            prefix=prefix,
+        )
+        prompt = build_completion_prompt(
+            model=payload.model,
+            prompt_messages=messages[: payload.message_index],
+            assistant_prefill=assistant_prefill,
+        )
+    except TokenizerDependencyError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    max_tokens = (
+        payload.max_tokens
+        if payload.max_tokens is not None
+        else suggest_completion_max_tokens(model=payload.model, prompt=prompt)
+    )
+    upstream_payload: dict[str, Any] = {
+        "model": payload.model,
+        "prompt": prompt,
+        "temperature": payload.temperature,
+        "max_tokens": max_tokens,
+    }
+
+    return {
+        "messages": messages,
+        "target_message": target_message,
+        "target": target,
+        "prefix": prefix,
+        "original_token": original_token,
+        "replacement_token": replacement_token,
+        "replacement_token_count": replacement_token_count,
+        "assistant_prefill": assistant_prefill,
+        "headers": headers,
+        "upstream_url": build_vllm_url(current_config["vllm_endpoint"], "completions"),
+        "upstream_payload": upstream_payload,
+    }
+
+
+def build_continued_sample(
+    *,
+    sample: dict[str, Any],
+    payload: ContinueDatasetSampleRequest,
+    target_message: dict[str, Any],
+    target: str,
+    prefix: str,
+    original_token: str,
+    replacement_token: str,
+    replacement_token_count: int,
+    completion_text: str,
+) -> dict[str, Any]:
+    messages = list(sample.get("messages", []))
+    existing_reasoning = extract_reasoning_from_message(target_message)
+    if target == "reasoning":
+        merged_reasoning, content = parse_prefilled_assistant_text(
+            build_completion_prefill(
+                target_message=target_message,
+                target=target,
+                prefix=prefix,
+            )
+            + completion_text
+        )
+    else:
+        content = f"{prefix}{completion_text}"
+        merged_reasoning = existing_reasoning
+    next_messages = messages[: payload.message_index] + [
+        build_sample_message(
+            role="assistant",
+            content=content,
+            reasoning=merged_reasoning,
+        )
+    ]
+    previous_edits = [
+        dict(edit)
+        for edit in sample.get("edits", [])
+        if isinstance(edit, dict)
+        and (
+            int(edit.get("message_index", -1)) < payload.message_index
+            or (
+                int(edit.get("message_index", -1)) == payload.message_index
+                and (
+                    str(edit.get("target") or "content") != target
+                    or int(edit.get("token_index", -1)) < payload.token_index
+                )
+            )
+        )
+    ]
+    next_edits = previous_edits + [
+        {
+            "message_index": payload.message_index,
+            "token_index": payload.token_index,
+            "target": target,
+            "original_token": original_token,
+            "replacement_token": replacement_token,
+            "regenerated_from_token_index": payload.token_index
+            + replacement_token_count,
+        }
+    ]
+
+    return {
+        **sample,
+        "messages": next_messages,
+        "edits": next_edits,
+        "anchors": next_edits,
+    }
+
+
 def suggest_completion_max_tokens(*, model: str, prompt: str) -> int | None:
     prompt_tokens = count_text_tokens(model=model, text=prompt)
     model_max_length = get_tokenizer_max_length(model=model)
@@ -264,8 +419,14 @@ def build_sample_tokenization_payload(
         if message.get("role") == "assistant":
             reasoning_text = str(message.get("reasoning") or "")
             content_text = str(message.get("content") or "")
-            reasoning_tokens = tokenize_text(model=model, text=reasoning_text) if reasoning_text else []
-            tokens = tokenize_text(model=model, text=content_text) if content_text else []
+            reasoning_tokens = (
+                tokenize_text(model=model, text=reasoning_text)
+                if reasoning_text
+                else []
+            )
+            tokens = (
+                tokenize_text(model=model, text=content_text) if content_text else []
+            )
         else:
             reasoning_text = ""
             reasoning_tokens = []
@@ -333,14 +494,18 @@ def build_router(config_dir: Path | None = None) -> APIRouter:
         try:
             return store.get_dataset(dataset_id)
         except FileNotFoundError as exc:
-            raise HTTPException(status_code=404, detail=f"Dataset not found: {dataset_id}") from exc
+            raise HTTPException(
+                status_code=404, detail=f"Dataset not found: {dataset_id}"
+            ) from exc
 
     @router.get("/{dataset_id}/samples")
     def list_dataset_samples(dataset_id: str) -> dict[str, Any]:
         try:
             samples = store.list_samples(dataset_id)
         except FileNotFoundError as exc:
-            raise HTTPException(status_code=404, detail=f"Dataset not found: {dataset_id}") from exc
+            raise HTTPException(
+                status_code=404, detail=f"Dataset not found: {dataset_id}"
+            ) from exc
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -367,12 +532,17 @@ def build_router(config_dir: Path | None = None) -> APIRouter:
                 method_type=str(method["type"]),
             )
         except FileNotFoundError as exc:
-            raise HTTPException(status_code=404, detail=f"Dataset not found: {dataset_id}") from exc
+            raise HTTPException(
+                status_code=404, detail=f"Dataset not found: {dataset_id}"
+            ) from exc
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
         if record_count <= 0:
-            raise HTTPException(status_code=400, detail="Dataset does not contain any exportable training samples.")
+            raise HTTPException(
+                status_code=400,
+                detail="Dataset does not contain any exportable training samples.",
+            )
 
         return {
             "object": "dataset.training_file",
@@ -390,7 +560,9 @@ def build_router(config_dir: Path | None = None) -> APIRouter:
         try:
             return store.create_sample(dataset_id, serialize_model(payload))
         except FileNotFoundError as exc:
-            raise HTTPException(status_code=404, detail=f"Dataset not found: {dataset_id}") from exc
+            raise HTTPException(
+                status_code=404, detail=f"Dataset not found: {dataset_id}"
+            ) from exc
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -415,7 +587,11 @@ def build_router(config_dir: Path | None = None) -> APIRouter:
             return build_sample_tokenization_payload(
                 sample_id=sample_id,
                 model=payload.model,
-                messages=list(sample.get("messages", [])),
+                messages=(
+                    [serialize_model(message) for message in payload.messages]
+                    if payload.messages is not None
+                    else list(sample.get("messages", []))
+                ),
             )
         except TokenizerDependencyError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
@@ -429,7 +605,9 @@ def build_router(config_dir: Path | None = None) -> APIRouter:
         try:
             prompt = build_completion_prompt(
                 model=payload.model,
-                prompt_messages=[serialize_model(message) for message in payload.messages],
+                prompt_messages=[
+                    serialize_model(message) for message in payload.messages
+                ],
                 assistant_prefill=payload.assistant_prefill,
             )
         except TokenizerDependencyError as exc:
@@ -444,6 +622,40 @@ def build_router(config_dir: Path | None = None) -> APIRouter:
                 model=payload.model,
                 prompt=prompt,
             ),
+        }
+
+    @router.post("/{dataset_id}/samples/{sample_id}/continue_prepare")
+    def prepare_dataset_sample_continuation(
+        dataset_id: str,
+        sample_id: str,
+        payload: ContinueDatasetSampleRequest,
+    ) -> dict[str, Any]:
+        try:
+            sample = store.get_sample(dataset_id, sample_id)
+        except FileNotFoundError as exc:
+            missing_key = sample_id if str(exc) == sample_id else dataset_id
+            detail = (
+                f"Dataset sample not found: {sample_id}"
+                if missing_key == sample_id
+                else f"Dataset not found: {dataset_id}"
+            )
+            raise HTTPException(status_code=404, detail=detail) from exc
+
+        prepared = prepare_sample_continuation(
+            sample=sample,
+            payload=payload,
+            config_dir=config_dir,
+        )
+        return {
+            "object": "dataset.sample.continuation_preparation",
+            "prompt": prepared["upstream_payload"]["prompt"],
+            "suggested_max_tokens": prepared["upstream_payload"]["max_tokens"],
+            "prefix": prepared["prefix"],
+            "target": prepared["target"],
+            "original_token": prepared["original_token"],
+            "replacement_token": prepared["replacement_token"],
+            "regenerated_from_token_index": payload.token_index
+            + prepared["replacement_token_count"],
         }
 
     @router.post("/{dataset_id}/samples/{sample_id}/candidate_tokens")
@@ -465,14 +677,21 @@ def build_router(config_dir: Path | None = None) -> APIRouter:
 
         messages = list(sample.get("messages", []))
         if payload.message_index < 0 or payload.message_index >= len(messages):
-            raise HTTPException(status_code=400, detail="Message index is out of range.")
+            raise HTTPException(
+                status_code=400, detail="Message index is out of range."
+            )
 
         target_message = messages[payload.message_index]
         if target_message.get("role") != "assistant":
-            raise HTTPException(status_code=400, detail="Only assistant messages support token continuation.")
+            raise HTTPException(
+                status_code=400,
+                detail="Only assistant messages support token continuation.",
+            )
         target = (payload.target or "content").strip().lower()
         if target not in {"content", "reasoning"}:
-            raise HTTPException(status_code=400, detail="Target must be `content` or `reasoning`.")
+            raise HTTPException(
+                status_code=400, detail="Target must be `content` or `reasoning`."
+            )
 
         target_text = str(
             extract_reasoning_from_message(target_message)
@@ -524,12 +743,19 @@ def build_router(config_dir: Path | None = None) -> APIRouter:
             )
 
         if not upstream_response.is_success:
-            detail = upstream_response.text or f"Upstream completion failed: {upstream_response.status_code}"
-            raise HTTPException(status_code=upstream_response.status_code, detail=detail)
+            detail = (
+                upstream_response.text
+                or f"Upstream completion failed: {upstream_response.status_code}"
+            )
+            raise HTTPException(
+                status_code=upstream_response.status_code, detail=detail
+            )
 
         seen: set[str] = set()
         candidates = []
-        for candidate in extract_completion_logprob_candidates(upstream_response.json()):
+        for candidate in extract_completion_logprob_candidates(
+            upstream_response.json()
+        ):
             token_text = str(candidate.get("token") or "")
             if not token_text or token_text in seen:
                 continue
@@ -537,9 +763,11 @@ def build_router(config_dir: Path | None = None) -> APIRouter:
             candidates.append(
                 {
                     "text": token_text,
-                    "logprob": candidate.get("logprob")
-                    if isinstance(candidate.get("logprob"), (int, float))
-                    else None,
+                    "logprob": (
+                        candidate.get("logprob")
+                        if isinstance(candidate.get("logprob"), (int, float))
+                        else None
+                    ),
                 }
             )
 
@@ -562,134 +790,53 @@ def build_router(config_dir: Path | None = None) -> APIRouter:
             )
             raise HTTPException(status_code=404, detail=detail) from exc
 
-        messages = list(sample.get("messages", []))
-        if payload.message_index < 0 or payload.message_index >= len(messages):
-            raise HTTPException(status_code=400, detail="Message index is out of range.")
-
-        target_message = messages[payload.message_index]
-        if target_message.get("role") != "assistant":
-            raise HTTPException(status_code=400, detail="Only assistant messages support token continuation.")
-        target = (payload.target or "content").strip().lower()
-        if target not in {"content", "reasoning"}:
-            raise HTTPException(status_code=400, detail="Target must be `content` or `reasoning`.")
-
-        try:
-            prefix, original_token, replacement_token = build_continuation_prefix(
-                model=payload.model,
-                text=str(target_message.get(target) or ""),
-                token_index=payload.token_index,
-                replacement_text=payload.replacement_token,
-            )
-            replacement_token_count = count_text_tokens(
-                model=payload.model,
-                text=replacement_token,
-            )
-        except TokenizerDependencyError as exc:
-            raise HTTPException(status_code=503, detail=str(exc)) from exc
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-        current_config = load_config(config_dir)
-        headers = {"content-type": "application/json"}
-        if current_config.get("api_key"):
-            headers["authorization"] = f"Bearer {current_config['api_key']}"
-        upstream_url = build_vllm_url(current_config["vllm_endpoint"], "completions")
-        try:
-            prompt = build_completion_prompt(
-                model=payload.model,
-                prompt_messages=messages[: payload.message_index],
-                assistant_prefill=build_completion_prefill(
-                    target_message=target_message,
-                    target=target,
-                    prefix=prefix,
-                ),
-            )
-        except TokenizerDependencyError as exc:
-            raise HTTPException(status_code=503, detail=str(exc)) from exc
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        prepared = prepare_sample_continuation(
+            sample=sample,
+            payload=payload,
+            config_dir=config_dir,
+        )
+        target_message = prepared["target_message"]
+        target = prepared["target"]
+        prefix = prepared["prefix"]
+        original_token = prepared["original_token"]
+        replacement_token = prepared["replacement_token"]
+        replacement_token_count = prepared["replacement_token_count"]
 
         async with httpx.AsyncClient(follow_redirects=True, timeout=120.0) as client:
-            upstream_payload: dict[str, Any] = {
-                "model": payload.model,
-                "prompt": prompt,
-                "temperature": payload.temperature,
-            }
-            upstream_payload["max_tokens"] = (
-                payload.max_tokens
-                if payload.max_tokens is not None
-                else suggest_completion_max_tokens(model=payload.model, prompt=prompt)
-            )
             upstream_response = await client.post(
-                upstream_url,
-                headers=headers,
-                json=upstream_payload,
+                prepared["upstream_url"],
+                headers=prepared["headers"],
+                json=prepared["upstream_payload"],
             )
 
         if not upstream_response.is_success:
-            detail = upstream_response.text or f"Upstream completion failed: {upstream_response.status_code}"
-            raise HTTPException(status_code=upstream_response.status_code, detail=detail)
+            detail = (
+                upstream_response.text
+                or f"Upstream completion failed: {upstream_response.status_code}"
+            )
+            raise HTTPException(
+                status_code=upstream_response.status_code, detail=detail
+            )
 
         completion_payload = upstream_response.json()
         completion_text = extract_completion_text(completion_payload)
-        existing_reasoning = extract_reasoning_from_message(target_message)
-        if target == "reasoning":
-            merged_reasoning, content = parse_prefilled_assistant_text(
-                build_completion_prefill(
-                    target_message=target_message,
-                    target=target,
-                    prefix=prefix,
-                )
-                + completion_text
-            )
-        else:
-            content = f"{prefix}{completion_text}"
-            merged_reasoning = existing_reasoning
-        next_messages = messages[: payload.message_index] + [
-            build_sample_message(
-                role="assistant",
-                content=content,
-                reasoning=merged_reasoning,
-            )
-        ]
-        previous_edits = [
-            dict(edit)
-            for edit in sample.get("edits", [])
-            if isinstance(edit, dict)
-            and (
-                int(edit.get("message_index", -1)) < payload.message_index
-                or (
-                    int(edit.get("message_index", -1)) == payload.message_index
-                    and (
-                        str(edit.get("target") or "content") != target
-                        or int(edit.get("token_index", -1)) < payload.token_index
-                    )
-                )
-            )
-        ]
-        next_edits = previous_edits + [
-            {
-                "message_index": payload.message_index,
-                "token_index": payload.token_index,
-                "target": target,
-                "original_token": original_token,
-                "replacement_token": replacement_token,
-                "regenerated_from_token_index": payload.token_index + replacement_token_count,
-            }
-        ]
-
-        next_sample = {
-            **sample,
-            "messages": next_messages,
-            "edits": next_edits,
-            "anchors": next_edits,
-        }
+        next_sample = build_continued_sample(
+            sample=sample,
+            payload=payload,
+            target_message=target_message,
+            target=target,
+            prefix=prefix,
+            original_token=original_token,
+            replacement_token=replacement_token,
+            replacement_token_count=replacement_token_count,
+            completion_text=completion_text,
+        )
 
         try:
             tokenization = build_sample_tokenization_payload(
                 sample_id=sample_id,
                 model=payload.model,
-                messages=next_messages,
+                messages=next_sample["messages"],
             )
         except TokenizerDependencyError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
@@ -732,18 +879,24 @@ def build_router(config_dir: Path | None = None) -> APIRouter:
         return {"id": sample_id, "object": "dataset.sample.deleted", "deleted": True}
 
     @router.patch("/{dataset_id}")
-    def update_dataset(dataset_id: str, payload: UpdateDatasetRequest) -> dict[str, Any]:
+    def update_dataset(
+        dataset_id: str, payload: UpdateDatasetRequest
+    ) -> dict[str, Any]:
         try:
             return store.update_dataset(dataset_id, serialize_model(payload))
         except FileNotFoundError as exc:
-            raise HTTPException(status_code=404, detail=f"Dataset not found: {dataset_id}") from exc
+            raise HTTPException(
+                status_code=404, detail=f"Dataset not found: {dataset_id}"
+            ) from exc
 
     @router.delete("/{dataset_id}")
     def delete_dataset(dataset_id: str) -> dict[str, Any]:
         try:
             store.delete_dataset(dataset_id)
         except FileNotFoundError as exc:
-            raise HTTPException(status_code=404, detail=f"Dataset not found: {dataset_id}") from exc
+            raise HTTPException(
+                status_code=404, detail=f"Dataset not found: {dataset_id}"
+            ) from exc
         return {"id": dataset_id, "object": "dataset.deleted", "deleted": True}
 
     return router

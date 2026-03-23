@@ -222,6 +222,7 @@ const ZH_MESSAGES: Record<string, string> = {
   "Accept and save": "接受并保存",
   "Discard rewrite": "放弃改写",
   "Replace and continue": "替换并继续生成",
+  Revert: "还原",
   "Click any token in an assistant message to replace it and continue generation from that point.":
     "点击 assistant 消息中的任意 token 后，可将它替换为新 token，并让模型从该位置继续生成。",
   "Click a token in an assistant message to start rewriting.":

@@ -85,6 +85,7 @@ export interface WorkspaceShellProps {
   selectedSampleId: string | null;
   dirtySampleIds: string[];
   selectedToken: TokenSelection | null;
+  selectedTokenHasRewriteMark: boolean;
   replacementToken: string;
   hasContinuationDraft: boolean;
   generating: boolean;
@@ -98,6 +99,7 @@ export interface WorkspaceShellProps {
   onAcceptContinuationDraft: () => void;
   onGenerateAssistantMessage: () => void;
   onGenerateContinuation: () => void;
+  onGenerateTopCandidateWithoutRewriteMark: () => void;
   onDiscardContinuationDraft: () => void;
   onSaveSample: () => void;
   onClearSelectedToken: () => void;
@@ -158,6 +160,7 @@ export function WorkspaceShell({
   selectedSampleId,
   dirtySampleIds,
   selectedToken,
+  selectedTokenHasRewriteMark,
   tokenCandidates,
   candidatesLoading,
   hasContinuationDraft,
@@ -171,6 +174,7 @@ export function WorkspaceShell({
   onAcceptContinuationDraft,
   onGenerateAssistantMessage,
   onGenerateContinuation,
+  onGenerateTopCandidateWithoutRewriteMark,
   onDiscardContinuationDraft,
   onClearSelectedToken,
   onSaveSample,
@@ -189,9 +193,13 @@ export function WorkspaceShell({
       <TokenActionPanel
         generating={generating}
         hasContinuationDraft={hasContinuationDraft}
+        selectedTokenHasRewriteMark={selectedTokenHasRewriteMark}
         onAcceptContinuationDraft={onAcceptContinuationDraft}
         onDiscardContinuationDraft={onDiscardContinuationDraft}
         onGenerateContinuation={onGenerateContinuation}
+        onGenerateTopCandidateWithoutRewriteMark={
+          onGenerateTopCandidateWithoutRewriteMark
+        }
         onSetReplacementToken={onSetReplacementToken}
         replacementToken={replacementToken}
         savingSample={savingSample}
@@ -466,9 +474,13 @@ export function WorkspaceShell({
               <TokenActionMiniPanel
                 generating={generating}
                 hasContinuationDraft={hasContinuationDraft}
+                selectedTokenHasRewriteMark={selectedTokenHasRewriteMark}
                 onAcceptContinuationDraft={onAcceptContinuationDraft}
                 onDiscardContinuationDraft={onDiscardContinuationDraft}
                 onGenerateContinuation={onGenerateContinuation}
+                onGenerateTopCandidateWithoutRewriteMark={
+                  onGenerateTopCandidateWithoutRewriteMark
+                }
                 onSetReplacementToken={onSetReplacementToken}
                 replacementToken={replacementToken}
                 savingSample={savingSample}

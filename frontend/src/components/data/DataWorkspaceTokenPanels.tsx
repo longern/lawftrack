@@ -16,9 +16,11 @@ export function TokenActionPanel({
   candidatesLoading,
   generating,
   hasContinuationDraft,
+  selectedTokenHasRewriteMark,
   onAcceptContinuationDraft,
   onDiscardContinuationDraft,
   onGenerateContinuation,
+  onGenerateTopCandidateWithoutRewriteMark,
   onSetReplacementToken,
   replacementToken,
   savingSample,
@@ -29,9 +31,11 @@ export function TokenActionPanel({
   candidatesLoading: boolean;
   generating: boolean;
   hasContinuationDraft: boolean;
+  selectedTokenHasRewriteMark: boolean;
   onAcceptContinuationDraft: () => void;
   onDiscardContinuationDraft: () => void;
   onGenerateContinuation: () => void;
+  onGenerateTopCandidateWithoutRewriteMark: () => void;
   onSetReplacementToken: (value: string) => void;
   replacementToken: string;
   savingSample: boolean;
@@ -144,7 +148,7 @@ export function TokenActionPanel({
                     </Typography>
                   )}
                 </Stack>
-                {hasContinuationDraft ? (
+                {hasContinuationDraft && !generating ? (
                   <Stack direction="row" spacing={1}>
                     <Button
                       variant="contained"
@@ -168,15 +172,37 @@ export function TokenActionPanel({
                     </Button>
                   </Stack>
                 ) : (
-                  <Button
-                    variant="contained"
-                    onClick={onGenerateContinuation}
-                    disabled={generating || savingSample}
-                  >
-                    {generating
-                      ? t("Generating...")
-                      : t("Replace and continue")}
-                  </Button>
+                  <Stack direction="row" spacing={1}>
+                    <Button
+                      variant="contained"
+                      onClick={onGenerateContinuation}
+                      disabled={generating || savingSample}
+                      sx={{ flex: 1 }}
+                    >
+                      {generating
+                        ? t("Generating...")
+                        : t("Replace and continue")}
+                    </Button>
+                    {selectedTokenHasRewriteMark ? (
+                      <Button
+                        variant="outlined"
+                        onClick={onGenerateTopCandidateWithoutRewriteMark}
+                        disabled={
+                          generating ||
+                          savingSample ||
+                          candidatesLoading ||
+                          tokenCandidates.length === 0
+                        }
+                        sx={{
+                          flex: 1,
+                          color: "text.primary",
+                          borderColor: "divider",
+                        }}
+                      >
+                        {t("Revert")}
+                      </Button>
+                    ) : null}
+                  </Stack>
                 )}
               </>
             ) : (
@@ -197,9 +223,11 @@ export function TokenActionMiniPanel({
   candidatesLoading,
   generating,
   hasContinuationDraft,
+  selectedTokenHasRewriteMark,
   onAcceptContinuationDraft,
   onDiscardContinuationDraft,
   onGenerateContinuation,
+  onGenerateTopCandidateWithoutRewriteMark,
   onSetReplacementToken,
   replacementToken,
   savingSample,
@@ -211,9 +239,11 @@ export function TokenActionMiniPanel({
   candidatesLoading: boolean;
   generating: boolean;
   hasContinuationDraft: boolean;
+  selectedTokenHasRewriteMark: boolean;
   onAcceptContinuationDraft: () => void;
   onDiscardContinuationDraft: () => void;
   onGenerateContinuation: () => void;
+  onGenerateTopCandidateWithoutRewriteMark: () => void;
   onSetReplacementToken: (value: string) => void;
   replacementToken: string;
   savingSample: boolean;
@@ -296,7 +326,7 @@ export function TokenActionMiniPanel({
         )}
       </Stack>
       <Stack direction="row" spacing={1}>
-        {hasContinuationDraft ? (
+        {hasContinuationDraft && !generating ? (
           <>
             <Button
               variant="contained"
@@ -318,15 +348,33 @@ export function TokenActionMiniPanel({
             </Button>
           </>
         ) : (
-          <Button
-            variant="contained"
-            size="small"
-            onClick={onGenerateContinuation}
-            disabled={generating || savingSample}
-            sx={{ flex: 1 }}
-          >
-            {generating ? t("Generating...") : t("Continue generation")}
-          </Button>
+          <>
+            <Button
+              variant="contained"
+              size="small"
+              onClick={onGenerateContinuation}
+              disabled={generating || savingSample}
+              sx={{ flex: 1 }}
+            >
+              {generating ? t("Generating...") : t("Continue generation")}
+            </Button>
+            {selectedTokenHasRewriteMark ? (
+              <Button
+                variant="outlined"
+                size="small"
+                onClick={onGenerateTopCandidateWithoutRewriteMark}
+                disabled={
+                  generating ||
+                  savingSample ||
+                  candidatesLoading ||
+                  tokenCandidates.length === 0
+                }
+                sx={{ flex: 1, color: "text.primary", borderColor: "divider" }}
+              >
+                {t("Revert")}
+              </Button>
+            ) : null}
+          </>
         )}
       </Stack>
     </Stack>

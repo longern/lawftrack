@@ -83,6 +83,67 @@ function decodeCandidateToken(token?: string, bytes?: number[]): string {
   return token ?? "";
 }
 
+function buildContinuationPreviewEditList(
+  sample: DatasetSample,
+  selection: TokenSelection,
+  originalToken: string,
+  replacementToken: string,
+  regeneratedFromTokenIndex: number,
+  keepRewriteMark = true,
+) {
+  const target = selection.target;
+  const previousEdits = sample.edits.filter(
+    (edit) =>
+      edit.message_index < selection.messageIndex ||
+      (edit.message_index === selection.messageIndex &&
+        ((edit.target ?? "content") !== target ||
+          edit.token_index < selection.tokenIndex)),
+  );
+  if (!keepRewriteMark) {
+    return previousEdits;
+  }
+  return [
+    ...previousEdits,
+    {
+      message_index: selection.messageIndex,
+      token_index: selection.tokenIndex,
+      target,
+      original_token: originalToken,
+      replacement_token: replacementToken,
+      regenerated_from_token_index: regeneratedFromTokenIndex,
+      created_at: Math.floor(Date.now() / 1000),
+    },
+  ];
+}
+
+function buildContinuationPreviewTokenization(
+  tokenization: DatasetSampleTokenization,
+  selection: TokenSelection,
+) {
+  return {
+    ...tokenization,
+    messages: tokenization.messages.map((message) => {
+      if (message.message_index !== selection.messageIndex) {
+        return message;
+      }
+      if (selection.target === "reasoning") {
+        return {
+          ...message,
+          reasoning_tokens: message.reasoning_tokens.filter(
+            (token) => token.token_index < selection.tokenIndex,
+          ),
+        };
+      }
+      return {
+        ...message,
+        tokens: message.tokens.filter(
+          (token) => token.token_index < selection.tokenIndex,
+        ),
+      };
+    }),
+  };
+}
+
 function DataWorkspace({
   dataSummary,
   isMobile,
@@ -159,6 +220,17 @@ function DataWorkspace({
   const visibleSample = continuationDraft?.sample ?? selectedSample;
   const visibleSampleTokenization =
     continuationDraft?.tokenization ?? selectedSampleTokenization;
+  const selectedTokenHasRewriteMark = Boolean(
+    !continuationDraft &&
+      selectedSample &&
+      selectedToken &&
+      selectedSample.edits.find(
+        (edit) =>
+          edit.message_index === selectedToken.messageIndex &&
+          edit.token_index === selectedToken.tokenIndex &&
+          (edit.target ?? "content") === selectedToken.target,
+      ),
+  );
   const tokenSequence = useMemo(
     () =>
       (visibleSampleTokenization?.messages ?? []).flatMap((message) =>
@@ -815,6 +887,18 @@ function DataWorkspace({
           seen.add(candidate.text);
           return true;
         })
+        .sort((left, right) => {
+          if (left.logprob === null && right.logprob === null) {
+            return 0;
+          }
+          if (left.logprob === null) {
+            return 1;
+          }
+          if (right.logprob === null) {
+            return -1;
+          }
+          return right.logprob - left.logprob;
+        })
         .slice(0, 10);
       if (tokenCandidatesRequestRef.current === requestId) {
         setTokenCandidates(nextCandidates);
@@ -830,12 +914,17 @@ function DataWorkspace({
     }
   }
 
-  async function handleGenerateContinuation() {
+  async function handleGenerateContinuation(options?: {
+    replacementTokenOverride?: string;
+    keepRewriteMark?: boolean;
+  }) {
     if (!activeDataset || !draft || !selectedSample || !selectedToken) {
       return;
     }
+    const keepRewriteMark = options?.keepRewriteMark ?? true;
     const submittedReplacementToken =
-      replacementToken === "" ? selectedToken.currentToken : replacementToken;
+      options?.replacementTokenOverride ??
+      (replacementToken === "" ? selectedToken.currentToken : replacementToken);
     const model = draft.base_model.trim() || activeDataset.base_model || "";
     if (!model) {
       setError(
@@ -851,11 +940,15 @@ function DataWorkspace({
     }
     setGenerating(true);
     try {
-      const continuation = await fetchJson<{
-        sample: DatasetSample;
-        tokenization: DatasetSampleTokenization;
+      const preparation = await fetchJson<{
+        prompt: string;
+        suggested_max_tokens?: number | null;
+        prefix: string;
+        original_token: string;
+        replacement_token: string;
+        regenerated_from_token_index: number;
       }>(
-        `/api/datasets/${activeDataset.id}/samples/${selectedSample.id}/continue`,
+        `/api/datasets/${activeDataset.id}/samples/${selectedSample.id}/continue_prepare`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -868,20 +961,198 @@ function DataWorkspace({
           }),
         },
       );
+      const previewTokenization = buildContinuationPreviewTokenization(
+        baseTokenization,
+        selectedToken,
+      );
+      const previewEdits = buildContinuationPreviewEditList(
+        selectedSample,
+        selectedToken,
+        preparation.original_token,
+        preparation.replacement_token,
+        preparation.regenerated_from_token_index,
+        keepRewriteMark,
+      );
+      const previewSample: DatasetSample = {
+        ...selectedSample,
+        messages: selectedSample.messages.map((message, index) =>
+          index !== selectedToken.messageIndex
+            ? message
+            : selectedToken.target === "reasoning"
+              ? {
+                  ...message,
+                  reasoning: preparation.prefix,
+                }
+              : {
+                  ...message,
+                  content: preparation.prefix,
+                },
+        ),
+        edits: previewEdits,
+        anchors: previewEdits,
+      };
+      setContinuationDraft({
+        sample: previewSample,
+        tokenization: previewTokenization,
+        baseTokenization,
+      });
+      const response = await fetch("/v1/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model,
+          stream: true,
+          prompt: preparation.prompt,
+          max_tokens:
+            typeof preparation.suggested_max_tokens === "number"
+              ? preparation.suggested_max_tokens
+              : 8192,
+          temperature: 0.7,
+        }),
+      });
+      if (!response.ok || !response.body) {
+        let message = `Request failed: ${response.status}`;
+        try {
+          const payload = (await response.json()) as { detail?: string };
+          if (payload.detail) {
+            message = payload.detail;
+          }
+        } catch {
+          message = response.statusText || message;
+        }
+        throw new Error(message);
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let latestSample = previewSample;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
+          break;
+        }
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+
+        for (const rawLine of lines) {
+          const line = rawLine.trim();
+          if (!line || !line.startsWith("data:")) {
+            continue;
+          }
+          const data = line.slice(5).trim();
+          if (!data || data === "[DONE]") {
+            continue;
+          }
+          const payload = JSON.parse(data) as {
+            choices?: Array<{
+              text?: string;
+            }>;
+            error?: { message?: string };
+          };
+          if (payload.error?.message) {
+            throw new Error(payload.error.message);
+          }
+          const delta = payload.choices?.[0]?.text ?? "";
+          if (!delta) {
+            continue;
+          }
+          latestSample = {
+            ...latestSample,
+            messages: latestSample.messages.map((message, index) =>
+              index !== selectedToken.messageIndex
+                ? message
+                : selectedToken.target === "reasoning"
+                  ? {
+                      ...message,
+                      reasoning: `${message.reasoning ?? ""}${delta}`,
+                    }
+                  : {
+                      ...message,
+                      content: `${message.content}${delta}`,
+                    },
+            ),
+          };
+          const nextSample = latestSample;
+          setContinuationDraft((current) =>
+            current
+              ? {
+                  ...current,
+                  sample: nextSample,
+                }
+              : current,
+          );
+        }
+      }
+      const finalizedSample: DatasetSample = {
+        ...latestSample,
+        edits: latestSample.edits.map((edit) =>
+          edit.message_index === selectedToken.messageIndex &&
+          edit.token_index === selectedToken.tokenIndex &&
+          (edit.target ?? "content") === selectedToken.target
+            ? {
+                ...edit,
+                original_token: preparation.original_token,
+                replacement_token: preparation.replacement_token,
+                regenerated_from_token_index:
+                  preparation.regenerated_from_token_index,
+              }
+            : edit,
+        ),
+        anchors:
+          latestSample.anchors?.map((edit) =>
+            edit.message_index === selectedToken.messageIndex &&
+            edit.token_index === selectedToken.tokenIndex &&
+            (edit.target ?? "content") === selectedToken.target
+              ? {
+                  ...edit,
+                  original_token: preparation.original_token,
+                  replacement_token: preparation.replacement_token,
+                  regenerated_from_token_index:
+                    preparation.regenerated_from_token_index,
+                }
+              : edit,
+          ) ?? latestSample.edits,
+      };
+      const finalTokenization = await fetchJson<DatasetSampleTokenization>(
+        `/api/datasets/${activeDataset.id}/samples/${selectedSample.id}/tokenize`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model,
+            messages: finalizedSample.messages,
+          }),
+        },
+      );
       setSampleTokenizations((current) => ({
         ...current,
-        [selectedSample.id]: continuation.tokenization,
+        [selectedSample.id]: finalTokenization,
       }));
       setContinuationDraft({
-        ...continuation,
+        sample: finalizedSample,
+        tokenization: finalTokenization,
         baseTokenization,
       });
       setSelectedToken({
         ...selectedToken,
-        currentToken: submittedReplacementToken,
+        currentToken: preparation.replacement_token,
       });
+      setReplacementToken(preparation.replacement_token);
       setError("");
     } catch (generateError) {
+      setContinuationDraft(null);
+      setSelectedToken((current) =>
+        current
+          ? {
+              ...current,
+              currentToken: current.originalToken,
+            }
+          : current,
+      );
+      setReplacementToken(selectedToken.originalToken);
       setError(
         generateError instanceof Error
           ? generateError.message
@@ -890,6 +1161,32 @@ function DataWorkspace({
     } finally {
       setGenerating(false);
     }
+  }
+
+  async function handleGenerateTopCandidateWithoutRewriteMark() {
+    if (!selectedToken || tokenCandidates.length === 0) {
+      return;
+    }
+    const [topCandidate] = [...tokenCandidates].sort((left, right) => {
+      if (left.logprob === null && right.logprob === null) {
+        return 0;
+      }
+      if (left.logprob === null) {
+        return 1;
+      }
+      if (right.logprob === null) {
+        return -1;
+      }
+      return right.logprob - left.logprob;
+    });
+    if (!topCandidate?.text) {
+      return;
+    }
+    setReplacementToken(topCandidate.text);
+    await handleGenerateContinuation({
+      replacementTokenOverride: topCandidate.text,
+      keepRewriteMark: false,
+    });
   }
 
   async function handleAcceptContinuationDraft() {
@@ -1363,6 +1660,7 @@ function DataWorkspace({
         tokenCandidates={tokenCandidates}
         candidatesLoading={candidatesLoading}
         hasContinuationDraft={Boolean(continuationDraft)}
+        selectedTokenHasRewriteMark={selectedTokenHasRewriteMark}
         replacementToken={replacementToken}
         generating={generating}
         generatingAssistant={generatingAssistant}
@@ -1372,6 +1670,9 @@ function DataWorkspace({
         onDeleteSample={(sample) => setSampleToDelete(sample)}
         onGenerateAssistantMessage={() => void handleGenerateAssistantMessage()}
         onGenerateContinuation={() => void handleGenerateContinuation()}
+        onGenerateTopCandidateWithoutRewriteMark={() =>
+          void handleGenerateTopCandidateWithoutRewriteMark()
+        }
         onAcceptContinuationDraft={handleAcceptContinuationDraft}
         onDiscardContinuationDraft={handleDiscardContinuationDraft}
         onSaveSample={() => void handleSaveSample()}

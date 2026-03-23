@@ -1132,6 +1132,145 @@ class ServerTests(unittest.TestCase):
             self.assertEqual(save_response.status_code, 200)
             self.assertEqual(save_response.json()["messages"][1]["reasoning"], initial_reasoning)
 
+    def test_continue_prepare_returns_prompt_metadata_for_frontend_streaming(self) -> None:
+        sys.path.insert(0, str(ROOT / "src"))
+        try:
+            import lawftune.api.datasets_api as datasets_api_module
+        finally:
+            sys.path.pop(0)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "config.json"
+            config_path.write_text(
+                json.dumps({"vllm_endpoint": "http://localhost:8000/v1", "api_key": ""}),
+                encoding="utf-8",
+            )
+
+            client = self._create_client(temp_dir)
+            created_dataset = client.post(
+                "/api/datasets/import",
+                files={
+                    "file": (
+                        "train.jsonl",
+                        b'{"messages":[{"role":"user","content":"hi"},{"role":"assistant","content":"Hello"}]}\n',
+                        "application/jsonl",
+                    )
+                },
+            ).json()
+            sample = client.get(f"/api/datasets/{created_dataset['id']}/samples").json()["data"][0]
+
+            with mock.patch.object(
+                datasets_api_module,
+                "build_continuation_prefix",
+                return_value=("Updated", "Hello", "Updated"),
+            ):
+                with mock.patch.object(datasets_api_module, "count_text_tokens", return_value=1):
+                    with mock.patch.object(
+                        datasets_api_module,
+                        "build_completion_prompt",
+                        return_value="PROMPT:Updated",
+                    ):
+                        with mock.patch.object(
+                            datasets_api_module,
+                            "suggest_completion_max_tokens",
+                            return_value=4096,
+                        ):
+                            prepare_response = client.post(
+                                f"/api/datasets/{created_dataset['id']}/samples/{sample['id']}/continue_prepare",
+                                json={
+                                    "model": "Qwen/Qwen2.5-7B-Instruct",
+                                    "message_index": 1,
+                                    "token_index": 0,
+                                    "replacement_token": "Updated",
+                                },
+                            )
+
+            self.assertEqual(prepare_response.status_code, 200)
+            self.assertEqual(
+                prepare_response.json(),
+                {
+                    "object": "dataset.sample.continuation_preparation",
+                    "prompt": "PROMPT:Updated",
+                    "suggested_max_tokens": 4096,
+                    "prefix": "Updated",
+                    "target": "content",
+                    "original_token": "Hello",
+                    "replacement_token": "Updated",
+                    "regenerated_from_token_index": 1,
+                },
+            )
+
+    def test_tokenize_dataset_sample_accepts_frontend_preview_messages(self) -> None:
+        sys.path.insert(0, str(ROOT / "src"))
+        try:
+            import lawftune.api.datasets_api as datasets_api_module
+        finally:
+            sys.path.pop(0)
+
+        reasoning_tokens = [
+            {"token_index": 0, "token_id": 31, "token": "Initial", "text": "Initial", "start": 0, "end": 7},
+            {"token_index": 1, "token_id": 32, "token": " reasoning", "text": " reasoning", "start": 7, "end": 17},
+        ]
+        continued_tokens = [
+            {"token_index": 0, "token_id": 21, "token": "Updated", "text": "Updated", "start": 0, "end": 7},
+            {"token_index": 1, "token_id": 22, "token": " completion", "text": " completion", "start": 7, "end": 18},
+            {"token_index": 2, "token_id": 23, "token": " tail", "text": " tail", "start": 18, "end": 23},
+        ]
+
+        def fake_tokenize(model, text):
+            if text == "Updated completion tail":
+                return continued_tokens
+            if text == "Initial reasoning":
+                return reasoning_tokens
+            raise AssertionError(text)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "config.json"
+            config_path.write_text(
+                json.dumps({"vllm_endpoint": "http://localhost:8000/v1", "api_key": ""}),
+                encoding="utf-8",
+            )
+
+            client = self._create_client(temp_dir)
+            created_dataset = client.post(
+                "/api/datasets/import",
+                files={
+                    "file": (
+                        "train.jsonl",
+                        b'{"messages":[{"role":"user","content":"hi"},{"role":"assistant","content":"Hello","reasoning":"Initial reasoning"}]}\n',
+                        "application/jsonl",
+                    )
+                },
+            ).json()
+            sample = client.get(f"/api/datasets/{created_dataset['id']}/samples").json()["data"][0]
+
+            with mock.patch.object(datasets_api_module, "tokenize_text", side_effect=fake_tokenize):
+                tokenize_response = client.post(
+                    f"/api/datasets/{created_dataset['id']}/samples/{sample['id']}/tokenize",
+                    json={
+                        "model": "Qwen/Qwen2.5-7B-Instruct",
+                        "messages": [
+                            {"role": "user", "content": "hi"},
+                            {
+                                "role": "assistant",
+                                "content": "Updated completion tail",
+                                "reasoning": "Initial reasoning",
+                            },
+                        ],
+                    },
+                )
+
+            self.assertEqual(tokenize_response.status_code, 200)
+            tokenization_payload = tokenize_response.json()
+            self.assertEqual(
+                tokenization_payload["messages"][1]["tokens"][0]["text"],
+                "Updated",
+            )
+            self.assertEqual(
+                tokenization_payload["messages"][1]["reasoning_tokens"][0]["text"],
+                "Initial",
+            )
+
     def test_continue_uses_replacement_token_count_for_regeneration_start(self) -> None:
         sys.path.insert(0, str(ROOT / "src"))
         try:
@@ -1830,4 +1969,3 @@ class ServerTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

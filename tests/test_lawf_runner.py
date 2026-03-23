@@ -57,9 +57,11 @@ class LAwFRunnerTests(unittest.TestCase):
 
         class FakeAutoTokenizer:
             last_tokenizer: FakeTokenizer | None = None
+            last_model_name: str | None = None
 
             @classmethod
             def from_pretrained(cls, model_name: str) -> FakeTokenizer:
+                cls.last_model_name = model_name
                 cls.last_tokenizer = FakeTokenizer()
                 return cls.last_tokenizer
 
@@ -106,6 +108,14 @@ class LAwFRunnerTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as temp_dir:
             config_dir = Path(temp_dir)
+            models_dir = config_dir / "models"
+            local_model_dir = models_dir / "demo-model"
+            local_model_dir.mkdir(parents=True)
+            (local_model_dir / "config.json").write_text("{}", encoding="utf-8")
+            (config_dir / "config.json").write_text(
+                json.dumps({"models_dir": str(models_dir)}),
+                encoding="utf-8",
+            )
             file_store = FileStore(config_dir)
             training_file = file_store.create_file(
                 filename="train.jsonl",
@@ -148,7 +158,7 @@ class LAwFRunnerTests(unittest.TestCase):
 
             self.assertIsNotNone(FakeTrainer.last_instance)
             trainer = FakeTrainer.last_instance
-            self.assertEqual(trainer.kwargs["model"], "demo-model")
+            self.assertEqual(trainer.kwargs["model"], str(local_model_dir))
             self.assertEqual(trainer.kwargs["train_dataset"], train_records)
             self.assertEqual(trainer.kwargs["eval_dataset"], valid_records)
             self.assertTrue(trainer.trained)
@@ -158,6 +168,7 @@ class LAwFRunnerTests(unittest.TestCase):
 
             tokenizer = FakeAutoTokenizer.last_tokenizer
             self.assertIsNotNone(tokenizer)
+            self.assertEqual(FakeAutoTokenizer.last_model_name, str(local_model_dir))
             self.assertIs(trainer.kwargs["processing_class"], tokenizer)
             self.assertNotIn("tokenizer", trainer.kwargs)
             self.assertEqual(tokenizer.pad_token, "</s>")

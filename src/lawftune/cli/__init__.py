@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from lawftune.config import DEFAULT_API_KEY
+from lawftune.config import DEFAULT_MODELS_DIR
 from lawftune.config import DEFAULT_VLLM_ENDPOINT
 from lawftune.config import get_config_dir
 from lawftune.config import get_config_value
@@ -33,6 +34,7 @@ def run_wizard(args) -> int:
         args,
         default_vllm_endpoint=DEFAULT_VLLM_ENDPOINT,
         default_api_key=DEFAULT_API_KEY,
+        default_models_dir=DEFAULT_MODELS_DIR,
         default_gateway_port=DEFAULT_GATEWAY_PORT,
         get_config_dir=get_config_dir,
         save_config=save_config,

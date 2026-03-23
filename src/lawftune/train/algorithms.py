@@ -9,6 +9,7 @@ import re
 from typing import Any
 
 from lawftune.api.files_store import FileStore
+from lawftune.model_resolution import resolve_model_reference
 
 
 DEFAULT_TRAINING_ALGORITHM = "sft"
@@ -135,11 +136,12 @@ def build_sft_command(job: dict[str, Any], config_dir: Path) -> list[str]:
         file_id=str(job["training_file"]),
         target_dir=data_dir,
     )
+    resolved_model = resolve_model_reference(str(job["model"]), config_dir=config_dir)
     return [
         "trl",
         "sft",
         "--model_name_or_path",
-        str(job["model"]),
+        resolved_model,
         "--dataset_name",
         str(training_file_path),
         "--output_dir",

@@ -8,6 +8,7 @@ from lawftune.train.algorithms import export_uploaded_file_for_job
 from lawftune.train.algorithms import get_job_dir
 from lawftune.train.algorithms import get_job_output_dir
 from lawftune.train.algorithms import get_method_hyperparameters
+from lawftune.model_resolution import resolve_model_reference
 
 
 def _load_dependencies():
@@ -97,7 +98,8 @@ def run_lawf_training(job: dict[str, Any], config_dir: Path) -> None:
         eval_dataset = Dataset.from_list(_load_training_records(validation_file_path))
 
     hyperparameters = get_method_hyperparameters(job)
-    tokenizer = AutoTokenizer.from_pretrained(str(job["model"]))
+    resolved_model = resolve_model_reference(str(job["model"]), config_dir=config_dir)
+    tokenizer = AutoTokenizer.from_pretrained(resolved_model)
     if tokenizer.pad_token is None and tokenizer.eos_token is not None:
         tokenizer.pad_token = tokenizer.eos_token
 
@@ -132,7 +134,7 @@ def run_lawf_training(job: dict[str, Any], config_dir: Path) -> None:
     )
 
     trainer = LAwFTrainer(
-        model=str(job["model"]),
+        model=resolved_model,
         args=training_args,
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,

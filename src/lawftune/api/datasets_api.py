@@ -159,9 +159,10 @@ def build_completion_prompt(
     model: str,
     prompt_messages: list[dict[str, Any]],
     assistant_prefill: str,
+    config_dir: Path | None = None,
 ) -> str:
     if prompt_messages:
-        tokenizer = load_tokenizer(model)
+        tokenizer = load_tokenizer(model, config_dir=config_dir)
         if not hasattr(tokenizer, "apply_chat_template"):
             raise TokenizerDependencyError(
                 f"Model tokenizer for `{model}` does not expose a chat template."
@@ -268,10 +269,12 @@ def prepare_sample_continuation(
             text=str(target_message.get(target) or ""),
             token_index=payload.token_index,
             replacement_text=payload.replacement_token,
+            config_dir=config_dir,
         )
         replacement_token_count = count_text_tokens(
             model=payload.model,
             text=replacement_token,
+            config_dir=config_dir,
         )
     except TokenizerDependencyError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
@@ -293,6 +296,7 @@ def prepare_sample_continuation(
             model=payload.model,
             prompt_messages=messages[: payload.message_index],
             assistant_prefill=assistant_prefill,
+            config_dir=config_dir,
         )
     except TokenizerDependencyError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
@@ -302,7 +306,11 @@ def prepare_sample_continuation(
     max_tokens = (
         payload.max_tokens
         if payload.max_tokens is not None
-        else suggest_completion_max_tokens(model=payload.model, prompt=prompt)
+        else suggest_completion_max_tokens(
+            model=payload.model,
+            prompt=prompt,
+            config_dir=config_dir,
+        )
     )
     upstream_payload: dict[str, Any] = {
         "model": payload.model,
@@ -394,9 +402,21 @@ def build_continued_sample(
     }
 
 
-def suggest_completion_max_tokens(*, model: str, prompt: str) -> int | None:
-    prompt_tokens = count_text_tokens(model=model, text=prompt)
-    model_max_length = get_tokenizer_max_length(model=model)
+def suggest_completion_max_tokens(
+    *,
+    model: str,
+    prompt: str,
+    config_dir: Path | None = None,
+) -> int | None:
+    prompt_tokens = count_text_tokens(
+        model=model,
+        text=prompt,
+        config_dir=config_dir,
+    )
+    model_max_length = get_tokenizer_max_length(
+        model=model,
+        config_dir=config_dir,
+    )
     if model_max_length is None:
         return 8192
 
@@ -411,6 +431,7 @@ def build_sample_tokenization_payload(
     sample_id: str,
     model: str,
     messages: list[dict[str, Any]],
+    config_dir: Path | None = None,
 ) -> dict[str, Any]:
     tokenized_messages = []
     for index, message in enumerate(messages):
@@ -418,12 +439,22 @@ def build_sample_tokenization_payload(
             reasoning_text = str(message.get("reasoning") or "")
             content_text = str(message.get("content") or "")
             reasoning_tokens = (
-                tokenize_text(model=model, text=reasoning_text)
+                tokenize_text(
+                    model=model,
+                    text=reasoning_text,
+                    config_dir=config_dir,
+                )
                 if reasoning_text
                 else []
             )
             tokens = (
-                tokenize_text(model=model, text=content_text) if content_text else []
+                tokenize_text(
+                    model=model,
+                    text=content_text,
+                    config_dir=config_dir,
+                )
+                if content_text
+                else []
             )
         else:
             reasoning_text = ""
@@ -590,6 +621,7 @@ def build_router(config_dir: Path | None = None) -> APIRouter:
                     if payload.messages is not None
                     else list(sample.get("messages", []))
                 ),
+                config_dir=config_dir,
             )
         except TokenizerDependencyError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
@@ -607,6 +639,7 @@ def build_router(config_dir: Path | None = None) -> APIRouter:
                     serialize_model(message) for message in payload.messages
                 ],
                 assistant_prefill=payload.assistant_prefill,
+                config_dir=config_dir,
             )
         except TokenizerDependencyError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
@@ -619,6 +652,7 @@ def build_router(config_dir: Path | None = None) -> APIRouter:
             "suggested_max_tokens": suggest_completion_max_tokens(
                 model=payload.model,
                 prompt=prompt,
+                config_dir=config_dir,
             ),
         }
 
@@ -701,6 +735,7 @@ def build_router(config_dir: Path | None = None) -> APIRouter:
                 model=payload.model,
                 text=target_text,
                 token_index=payload.token_index,
+                config_dir=config_dir,
             )
         except TokenizerDependencyError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
@@ -721,6 +756,7 @@ def build_router(config_dir: Path | None = None) -> APIRouter:
                     target=target,
                     prefix=prefix,
                 ),
+                config_dir=config_dir,
             )
         except TokenizerDependencyError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
@@ -835,6 +871,7 @@ def build_router(config_dir: Path | None = None) -> APIRouter:
                 sample_id=sample_id,
                 model=payload.model,
                 messages=next_sample["messages"],
+                config_dir=config_dir,
             )
         except TokenizerDependencyError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc

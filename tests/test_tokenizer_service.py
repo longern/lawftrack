@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 import sys
+import tempfile
 from pathlib import Path
 import unittest
 from unittest import mock
@@ -38,6 +40,9 @@ class FakeTokenizer:
 
 
 class TokenizerServiceTests(unittest.TestCase):
+    def tearDown(self) -> None:
+        tokenizer_service.load_tokenizer.cache_clear()
+
     def test_build_continuation_prefix_preserves_leading_space(self) -> None:
         with mock.patch.object(tokenizer_service, "load_tokenizer", return_value=FakeTokenizer()):
             prefix, original_token, replacement_token = tokenizer_service.build_continuation_prefix(
@@ -63,6 +68,76 @@ class TokenizerServiceTests(unittest.TestCase):
         self.assertEqual(prefix, " there!")
         self.assertEqual(original_token, "Hello")
         self.assertEqual(replacement_token, " there!")
+
+    def test_load_tokenizer_prefers_models_dir_nested_candidate(self) -> None:
+        class FakeAutoTokenizer:
+            called_with: list[tuple[str, bool]] = []
+
+            @classmethod
+            def from_pretrained(cls, model_name: str, use_fast: bool = False):
+                cls.called_with.append((model_name, use_fast))
+                return mock.Mock(is_fast=True)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_dir = Path(temp_dir)
+            models_dir = config_dir / "models"
+            model_dir = models_dir / "Qwen" / "Qwen3.5-27B"
+            model_dir.mkdir(parents=True)
+            (model_dir / "config.json").write_text("{}", encoding="utf-8")
+            (config_dir / "config.json").write_text(
+                json.dumps({"models_dir": str(models_dir)}),
+                encoding="utf-8",
+            )
+
+            with mock.patch.object(
+                tokenizer_service,
+                "_import_auto_tokenizer",
+                return_value=FakeAutoTokenizer,
+            ):
+                tokenizer_service.load_tokenizer(
+                    "Qwen/Qwen3.5-27B",
+                    config_dir=config_dir,
+                )
+
+        self.assertEqual(
+            FakeAutoTokenizer.called_with,
+            [(str(model_dir), True)],
+        )
+
+    def test_load_tokenizer_prefers_models_dir_basename_candidate(self) -> None:
+        class FakeAutoTokenizer:
+            called_with: list[tuple[str, bool]] = []
+
+            @classmethod
+            def from_pretrained(cls, model_name: str, use_fast: bool = False):
+                cls.called_with.append((model_name, use_fast))
+                return mock.Mock(is_fast=True)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_dir = Path(temp_dir)
+            models_dir = config_dir / "models"
+            model_dir = models_dir / "Qwen3.5-27B"
+            model_dir.mkdir(parents=True)
+            (model_dir / "config.json").write_text("{}", encoding="utf-8")
+            (config_dir / "config.json").write_text(
+                json.dumps({"models_dir": str(models_dir)}),
+                encoding="utf-8",
+            )
+
+            with mock.patch.object(
+                tokenizer_service,
+                "_import_auto_tokenizer",
+                return_value=FakeAutoTokenizer,
+            ):
+                tokenizer_service.load_tokenizer(
+                    "Qwen/Qwen3.5-27B",
+                    config_dir=config_dir,
+                )
+
+        self.assertEqual(
+            FakeAutoTokenizer.called_with,
+            [(str(model_dir), True)],
+        )
 
 
 if __name__ == "__main__":

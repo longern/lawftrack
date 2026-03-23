@@ -1031,7 +1031,7 @@ class ServerTests(unittest.TestCase):
             {"token_index": 1, "token_id": 32, "token": " reasoning", "text": " reasoning", "start": 7, "end": 17},
         ]
 
-        def fake_tokenize(model, text):
+        def fake_tokenize(model, text, config_dir=None):
             if text == initial_content:
                 return initial_tokens
             if text == continued_content:
@@ -1214,7 +1214,7 @@ class ServerTests(unittest.TestCase):
             {"token_index": 2, "token_id": 23, "token": " tail", "text": " tail", "start": 18, "end": 23},
         ]
 
-        def fake_tokenize(model, text):
+        def fake_tokenize(model, text, config_dir=None):
             if text == "Updated completion tail":
                 return continued_tokens
             if text == "Initial reasoning":
@@ -1511,7 +1511,7 @@ class ServerTests(unittest.TestCase):
                 captured_request["json"] = json
                 return DummyResponse({"choices": [{"text": " plan</think>Updated answer"}]})
 
-        def fake_tokenize(model, text):
+        def fake_tokenize(model, text, config_dir=None):
             if text == initial_reasoning:
                 return [
                     {"token_index": 0, "token_id": 1, "token": "Step", "text": "Step", "start": 0, "end": 4},

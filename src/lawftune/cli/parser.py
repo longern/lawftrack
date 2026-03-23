@@ -39,6 +39,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="API key for the vLLM endpoint (default: empty)",
     )
     wizard_parser.add_argument(
+        "--models-dir",
+        default=None,
+        help="optional local models root; matching subdirectories are preferred before remote downloads",
+    )
+    wizard_parser.add_argument(
         "--config-dir",
         type=Path,
         default=None,

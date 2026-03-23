@@ -57,7 +57,7 @@ class CliTests(unittest.TestCase):
                 [sys.executable, "-m", "lawftune", "wizard"],
                 cwd=ROOT,
                 env=make_env(LAWFTUNE_HOME=temp_dir),
-                input="\n\nn\nn\n",
+                input="\n\n\nn\nn\n",
                 capture_output=True,
                 text=True,
                 check=False,
@@ -79,6 +79,7 @@ class CliTests(unittest.TestCase):
                     },
                     "vllm_endpoint": "http://localhost:8000/v1",
                     "api_key": "",
+                    "models_dir": "",
                 },
             )
 
@@ -88,7 +89,7 @@ class CliTests(unittest.TestCase):
                 [sys.executable, "-m", "lawftune", "wizard"],
                 cwd=ROOT,
                 env=make_env(LAWFTUNE_HOME=temp_dir),
-                input="http://127.0.0.1:9000\nsecret-key\nn\nn\n",
+                input="http://127.0.0.1:9000\nsecret-key\n/models\nn\nn\n",
                 capture_output=True,
                 text=True,
                 check=False,
@@ -108,6 +109,7 @@ class CliTests(unittest.TestCase):
                     },
                     "vllm_endpoint": "http://127.0.0.1:9000",
                     "api_key": "secret-key",
+                    "models_dir": "/models",
                 },
             )
 
@@ -140,7 +142,7 @@ class CliTests(unittest.TestCase):
             with mock.patch(
                 "lawftune.cli.get_service_manager", return_value=mocked_manager
             ):
-                with mock.patch("builtins.input", side_effect=["", "", "n", "y"]):
+                with mock.patch("builtins.input", side_effect=["", "", "", "n", "y"]):
                     with mock.patch("builtins.print") as mocked_print:
                         exit_code = main(["wizard", "--config-dir", temp_dir])
 
@@ -174,7 +176,7 @@ class CliTests(unittest.TestCase):
             with mock.patch(
                 "lawftune.cli.get_service_manager", return_value=mocked_manager
             ):
-                with mock.patch("builtins.input", side_effect=["", "", "n", "n"]):
+                with mock.patch("builtins.input", side_effect=["", "", "", "n", "n"]):
                     exit_code = main(["wizard", "--config-dir", temp_dir])
 
             self.assertEqual(exit_code, 0)
@@ -188,7 +190,7 @@ class CliTests(unittest.TestCase):
             sys.path.pop(0)
 
         with tempfile.TemporaryDirectory() as temp_dir:
-            with mock.patch("builtins.input", side_effect=["", "", "y", "n"]):
+            with mock.patch("builtins.input", side_effect=["", "", "", "y", "n"]):
                 exit_code = main(["wizard", "--config-dir", temp_dir])
 
             self.assertEqual(exit_code, 0)
@@ -490,6 +492,44 @@ class CliTests(unittest.TestCase):
 
             self.assertIn("--num_train_epochs", command)
             self.assertEqual(command[command.index("--num_train_epochs") + 1], "3")
+
+    def test_build_sft_command_uses_local_models_dir_when_available(self) -> None:
+        sys.path.insert(0, str(ROOT / "src"))
+        try:
+            from lawftune.api.files_store import FileStore
+            from lawftune.train.algorithms import build_sft_command
+        finally:
+            sys.path.pop(0)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_dir = Path(temp_dir)
+            models_dir = config_dir / "models"
+            local_model_dir = models_dir / "Qwen" / "Qwen2.5-7B-Instruct"
+            local_model_dir.mkdir(parents=True)
+            (local_model_dir / "config.json").write_text("{}", encoding="utf-8")
+            (config_dir / "config.json").write_text(
+                json.dumps({"models_dir": str(models_dir)}),
+                encoding="utf-8",
+            )
+
+            file_store = FileStore(config_dir)
+            created_file = file_store.create_file(
+                filename="train.jsonl",
+                purpose="fine-tune",
+                content=b'{"messages": []}\n',
+                content_type="application/jsonl",
+            )
+
+            command = build_sft_command(
+                {
+                    "id": "ftjob-125",
+                    "model": "Qwen/Qwen2.5-7B-Instruct",
+                    "training_file": created_file["id"],
+                },
+                config_dir,
+            )
+
+            self.assertEqual(command[3], str(local_model_dir))
 
     def test_train_worker_marks_success_and_loads_lora_adapter(self) -> None:
         sys.path.insert(0, str(ROOT / "src"))

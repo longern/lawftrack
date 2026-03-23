@@ -8,6 +8,7 @@ from typing import Any
 
 DEFAULT_VLLM_ENDPOINT = "http://localhost:8000/v1"
 DEFAULT_API_KEY = ""
+DEFAULT_MODELS_DIR = ""
 DEFAULT_CONFIG_DIRNAME = ".lawftune"
 CONFIG_FILENAME = "config.json"
 
@@ -16,6 +17,7 @@ def default_config() -> dict[str, Any]:
     return {
         "vllm_endpoint": DEFAULT_VLLM_ENDPOINT,
         "api_key": DEFAULT_API_KEY,
+        "models_dir": DEFAULT_MODELS_DIR,
     }
 
 
@@ -50,9 +52,11 @@ def load_config(config_dir: Path | None = None) -> dict[str, str]:
     payload = load_raw_config(config_dir)
     endpoint = str(payload.get("vllm_endpoint", DEFAULT_VLLM_ENDPOINT))
     api_key = str(payload.get("api_key", DEFAULT_API_KEY))
+    models_dir = str(payload.get("models_dir", DEFAULT_MODELS_DIR))
     return {
         "vllm_endpoint": endpoint,
         "api_key": api_key,
+        "models_dir": models_dir,
     }
 
 
@@ -71,11 +75,14 @@ def save_config(
     *,
     endpoint: str,
     api_key: str,
+    models_dir: str | None = None,
     config_dir: Path | None = None,
 ) -> Path:
     payload = load_raw_config(config_dir)
     payload["vllm_endpoint"] = endpoint
     payload["api_key"] = api_key
+    if models_dir is not None:
+        payload["models_dir"] = models_dir
     return save_raw_config(payload, config_dir)
 
 

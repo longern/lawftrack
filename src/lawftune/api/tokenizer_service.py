@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from pathlib import Path
 from typing import Any
+
+from lawftune.model_resolution import resolve_model_reference
 
 
 class TokenizerDependencyError(RuntimeError):
@@ -19,12 +22,13 @@ def _import_auto_tokenizer():
 
 
 @lru_cache(maxsize=8)
-def load_tokenizer(model: str):
+def load_tokenizer(model: str, config_dir: Path | None = None):
     AutoTokenizer = _import_auto_tokenizer()
+    resolved_model = resolve_model_reference(model, config_dir=config_dir)
     try:
-        return AutoTokenizer.from_pretrained(model, use_fast=True)
+        return AutoTokenizer.from_pretrained(resolved_model, use_fast=True)
     except TypeError:
-        tokenizer = AutoTokenizer.from_pretrained(model)
+        tokenizer = AutoTokenizer.from_pretrained(resolved_model)
     if not getattr(tokenizer, "is_fast", False):
         raise TokenizerDependencyError(
             f"Model tokenizer for `{model}` does not expose fast offset mappings."
@@ -32,8 +36,13 @@ def load_tokenizer(model: str):
     return tokenizer
 
 
-def tokenize_text(*, model: str, text: str) -> list[dict[str, Any]]:
-    tokenizer = load_tokenizer(model)
+def tokenize_text(
+    *,
+    model: str,
+    text: str,
+    config_dir: Path | None = None,
+) -> list[dict[str, Any]]:
+    tokenizer = load_tokenizer(model, config_dir=config_dir)
     encoded = tokenizer(
         text,
         add_special_tokens=False,
@@ -69,8 +78,9 @@ def build_continuation_prefix(
     text: str,
     token_index: int,
     replacement_text: str,
+    config_dir: Path | None = None,
 ) -> tuple[str, str, str]:
-    tokenizer = load_tokenizer(model)
+    tokenizer = load_tokenizer(model, config_dir=config_dir)
     encoded = tokenizer(text, add_special_tokens=False)
     input_ids = list(encoded["input_ids"])
     if token_index < 0 or token_index >= len(input_ids):
@@ -98,8 +108,9 @@ def build_prefix_before_token(
     model: str,
     text: str,
     token_index: int,
+    config_dir: Path | None = None,
 ) -> str:
-    tokenizer = load_tokenizer(model)
+    tokenizer = load_tokenizer(model, config_dir=config_dir)
     encoded = tokenizer(text, add_special_tokens=False)
     input_ids = list(encoded["input_ids"])
     if token_index < 0 or token_index >= len(input_ids):
@@ -109,14 +120,23 @@ def build_prefix_before_token(
     return tokenizer.decode(prefix_ids, clean_up_tokenization_spaces=False)
 
 
-def count_text_tokens(*, model: str, text: str) -> int:
-    tokenizer = load_tokenizer(model)
+def count_text_tokens(
+    *,
+    model: str,
+    text: str,
+    config_dir: Path | None = None,
+) -> int:
+    tokenizer = load_tokenizer(model, config_dir=config_dir)
     encoded = tokenizer(text, add_special_tokens=False)
     return len(list(encoded["input_ids"]))
 
 
-def get_tokenizer_max_length(*, model: str) -> int | None:
-    tokenizer = load_tokenizer(model)
+def get_tokenizer_max_length(
+    *,
+    model: str,
+    config_dir: Path | None = None,
+) -> int | None:
+    tokenizer = load_tokenizer(model, config_dir=config_dir)
     max_length = getattr(tokenizer, "model_max_length", None)
     if not isinstance(max_length, int) or max_length <= 0:
         return None

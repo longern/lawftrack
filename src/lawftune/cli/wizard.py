@@ -12,6 +12,7 @@ def run_wizard(
     *,
     default_vllm_endpoint: str,
     default_api_key: str,
+    default_models_dir: str,
     default_gateway_port: int,
     get_config_dir: Callable[[], Path],
     save_config: Callable[..., Path],
@@ -34,9 +35,14 @@ def run_wizard(
             "API key",
             default_api_key,
         )
+        models_dir = args.models_dir if args.models_dir is not None else prompt_value(
+            "Local models directory",
+            default_models_dir,
+        )
         config_path = save_config(
             endpoint=endpoint,
             api_key=api_key,
+            models_dir=models_dir,
             config_dir=target_dir,
         )
 

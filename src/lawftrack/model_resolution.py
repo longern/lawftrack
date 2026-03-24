@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from lawftune.config import load_raw_config
+from .config import load_raw_config
 
 
 MODEL_MARKER_FILENAMES = (

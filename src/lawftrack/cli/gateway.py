@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from lawftune.service import ServiceManagerError
+from ..service import ServiceManagerError
 
 
 def gateway_access_url(host: str, port: int) -> str:
@@ -23,7 +23,7 @@ def run_gateway(args: argparse.Namespace, *, get_config_dir) -> int:
             '`python3 -m pip install ".[server]"`.'
         ) from exc
 
-    from lawftune.server import create_app
+    from ..server import create_app
 
     config_dir = args.config_dir.expanduser() if args.config_dir is not None else get_config_dir()
     app = create_app(config_dir)

@@ -7,7 +7,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from lawftune.config import get_config_dir
+from ..config import get_config_dir
 
 
 class FileStore:

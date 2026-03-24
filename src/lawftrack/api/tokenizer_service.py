@@ -4,7 +4,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from lawftune.model_resolution import resolve_model_reference
+from ..model_resolution import resolve_model_reference
 
 
 class TokenizerDependencyError(RuntimeError):

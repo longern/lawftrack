@@ -3,9 +3,9 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from lawftune import __version__
-from lawftune.config import DEFAULT_API_KEY
-from lawftune.config import DEFAULT_VLLM_ENDPOINT
+from .. import __version__
+from ..config import DEFAULT_API_KEY
+from ..config import DEFAULT_VLLM_ENDPOINT
 
 
 DEFAULT_GATEWAY_PORT = 5293
@@ -13,8 +13,8 @@ DEFAULT_GATEWAY_PORT = 5293
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="lawftune",
-        description="lawftune command line interface",
+        prog="lawftrack",
+        description="lawftrack command line interface",
     )
     parser.add_argument(
         "--version",
@@ -26,7 +26,7 @@ def build_parser() -> argparse.ArgumentParser:
     wizard_parser = subparsers.add_parser(
         "wizard",
         help="run the setup wizard",
-        description="Configure lawftune for a vLLM endpoint.",
+        description="Configure lawftrack for a vLLM endpoint.",
     )
     wizard_parser.add_argument(
         "--endpoint",
@@ -47,13 +47,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--config-dir",
         type=Path,
         default=None,
-        help="directory used to store config (default: ~/.lawftune or LAWFTUNE_HOME)",
+        help="directory used to store config (default: ~/.lawftrack or LAWFTRACK_HOME)",
     )
 
     train_parser = subparsers.add_parser(
         "train",
         help="run a training worker",
-        description="Run a lawftune training worker.",
+        description="Run a lawftrack training worker.",
     )
     train_parser.add_argument(
         "--config-dir",
@@ -70,7 +70,7 @@ def build_parser() -> argparse.ArgumentParser:
     config_parser = subparsers.add_parser(
         "config",
         help="show or update runtime config",
-        description="Show or update lawftune runtime config.",
+        description="Show or update lawftrack runtime config.",
     )
     config_parser.add_argument(
         "action",
@@ -93,13 +93,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--config-dir",
         type=Path,
         default=None,
-        help="directory used to load config (default: ~/.lawftune or LAWFTUNE_HOME)",
+        help="directory used to load config (default: ~/.lawftrack or LAWFTRACK_HOME)",
     )
 
     update_parser = subparsers.add_parser(
         "update",
-        help="update lawftune",
-        description="Update lawftune from the current install source, a local path, or a git repository.",
+        help="update lawftrack",
+        description="Update lawftrack from the current install source, a local path, or a git repository.",
     )
     update_parser.add_argument(
         "source",
@@ -120,8 +120,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     gateway_parser = subparsers.add_parser(
         "gateway",
-        help="run or manage the lawftune gateway",
-        description="Run or manage the lawftune gateway.",
+        help="run or manage the lawftrack gateway",
+        description="Run or manage the lawftrack gateway.",
     )
     gateway_parser.add_argument(
         "action",
@@ -145,6 +145,6 @@ def build_parser() -> argparse.ArgumentParser:
         "--config-dir",
         type=Path,
         default=None,
-        help="directory used to load config (default: ~/.lawftune or LAWFTUNE_HOME)",
+        help="directory used to load config (default: ~/.lawftrack or LAWFTRACK_HOME)",
     )
     return parser

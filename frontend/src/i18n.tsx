@@ -78,7 +78,7 @@ const ZH_MESSAGES: Record<string, string> = {
   "Health check": "健康检查",
   "Upstream endpoint": "上游地址",
   "Not configured": "未配置",
-  "lawftune Workspace": "lawftune 工作台",
+  "lawftrack Workspace": "lawftrack 工作台",
   "See datasets, training jobs, and gateway health in one place, then jump straight into the next task.":
     "在一个界面里查看数据集、训练任务和网关状态，快速切到正在处理的工作。",
   "Open data workspace": "打开数据工作区",
@@ -295,7 +295,7 @@ interface I18nContextValue {
   formatTaskCount: (count?: number | null) => string;
 }
 
-const LOCALE_STORAGE_KEY = "lawftune:locale";
+const LOCALE_STORAGE_KEY = "lawftrack:locale";
 
 const I18nContext = createContext<I18nContextValue | null>(null);
 

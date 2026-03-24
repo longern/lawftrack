@@ -199,7 +199,7 @@ function DataWorkspace({
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const tokenCandidatesRequestRef = useRef(0);
   const samplesRef = useRef<DatasetSample[]>([]);
-  const lastOpenedDatasetStorageKey = "lawftune:last-opened-dataset-id";
+  const lastOpenedDatasetStorageKey = "lawftrack:last-opened-dataset-id";
 
   const activeDataset =
     datasetTabs.find((tab) => tab.id === activeDatasetId) ?? null;

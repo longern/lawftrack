@@ -11,7 +11,7 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from lawftune.api.fine_tuning_jobs import FineTuningJobStore  # noqa: E402
+from lawftrack.api.fine_tuning_jobs import FineTuningJobStore  # noqa: E402
 
 sys.path.pop(0)
 
@@ -66,7 +66,7 @@ class FineTuningJobStoreTests(unittest.TestCase):
                         "metadata": {},
                         "method": {"type": "sft"},
                         "model": "demo-model",
-                        "organization_id": "org-lawftune",
+                        "organization_id": "org-lawftrack",
                         "result_files": [],
                         "seed": None,
                         "status": "running",

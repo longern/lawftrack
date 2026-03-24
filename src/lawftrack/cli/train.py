@@ -4,7 +4,7 @@ import argparse
 
 
 def run_train_command(args: argparse.Namespace) -> int:
-    from lawftune.train.cli import run_train_worker
+    from ..train.cli import run_train_worker
 
     args.config_dir = args.config_dir.expanduser()
     return run_train_worker(args)

@@ -6,11 +6,11 @@ from contextlib import nullcontext
 from pathlib import Path
 from typing import Any
 
-from lawftune.train.algorithms import export_uploaded_file_for_job
-from lawftune.train.algorithms import get_job_dir
-from lawftune.train.algorithms import get_job_output_dir
-from lawftune.train.algorithms import get_method_hyperparameters
-from lawftune.model_resolution import resolve_model_reference
+from .algorithms import export_uploaded_file_for_job
+from .algorithms import get_job_dir
+from .algorithms import get_job_output_dir
+from .algorithms import get_method_hyperparameters
+from ..model_resolution import resolve_model_reference
 
 DEFAULT_LAWF_N_EPOCHS = 32
 
@@ -24,7 +24,7 @@ def _load_dependencies():
         from transformers import AutoTokenizer
         from transformers import TrainingArguments
 
-        from lawftune.train.lawf_trainer import LAwFTrainer
+        from .lawf_trainer import LAwFTrainer
     except ModuleNotFoundError as exc:
         raise RuntimeError(
             "LAwF training dependencies are missing. Install torch, transformers, "

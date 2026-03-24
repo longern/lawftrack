@@ -15,7 +15,7 @@ class UpdateTests(unittest.TestCase):
     def test_resolve_update_target_for_local_directory(self) -> None:
         sys.path.insert(0, str(ROOT / "src"))
         try:
-            from lawftune.update import resolve_update_target
+            from lawftrack.update import resolve_update_target
         finally:
             sys.path.pop(0)
 
@@ -27,18 +27,18 @@ class UpdateTests(unittest.TestCase):
     def test_resolve_update_target_for_git_repository(self) -> None:
         sys.path.insert(0, str(ROOT / "src"))
         try:
-            from lawftune.update import resolve_update_target
+            from lawftrack.update import resolve_update_target
         finally:
             sys.path.pop(0)
 
         target = resolve_update_target("https://github.com/longern/LAwF.git")
 
-        self.assertEqual(target, "lawftune[server] @ git+https://github.com/longern/LAwF.git")
+        self.assertEqual(target, "lawftrack[server] @ git+https://github.com/longern/LAwF.git")
 
     def test_infer_update_target_from_editable_install_metadata(self) -> None:
         sys.path.insert(0, str(ROOT / "src"))
         try:
-            import lawftune.update as update_module
+            import lawftrack.update as update_module
         finally:
             sys.path.pop(0)
 
@@ -47,7 +47,7 @@ class UpdateTests(unittest.TestCase):
                 self.filename = filename
                 return json.dumps(
                     {
-                        "url": "file:///Users/demo/workspace/lawftune",
+                        "url": "file:///Users/demo/workspace/lawftrack",
                         "dir_info": {"editable": True},
                     }
                 )
@@ -55,24 +55,24 @@ class UpdateTests(unittest.TestCase):
         with mock.patch.object(update_module.metadata, "distribution", return_value=DummyDistribution()):
             target = update_module.infer_update_target()
 
-        self.assertEqual(target, "/Users/demo/workspace/lawftune[server]")
+        self.assertEqual(target, "/Users/demo/workspace/lawftrack[server]")
 
     def test_build_update_command_uses_default_source_when_none_is_given(self) -> None:
         sys.path.insert(0, str(ROOT / "src"))
         try:
-            import lawftune.update as update_module
+            import lawftrack.update as update_module
         finally:
             sys.path.pop(0)
 
-        with mock.patch.object(update_module, "infer_update_target", return_value="lawftune[server]"):
+        with mock.patch.object(update_module, "infer_update_target", return_value="lawftrack[server]"):
             command = update_module.build_update_command(None)
 
-        self.assertEqual(command[-1], "lawftune[server]")
+        self.assertEqual(command[-1], "lawftrack[server]")
 
     def test_maybe_restart_gateway_prompts_when_service_is_installed(self) -> None:
         sys.path.insert(0, str(ROOT / "src"))
         try:
-            import lawftune.update as update_module
+            import lawftrack.update as update_module
         finally:
             sys.path.pop(0)
 
@@ -93,7 +93,7 @@ class UpdateTests(unittest.TestCase):
     def test_maybe_restart_gateway_prints_manual_restart_when_service_is_not_installed(self) -> None:
         sys.path.insert(0, str(ROOT / "src"))
         try:
-            import lawftune.update as update_module
+            import lawftrack.update as update_module
         finally:
             sys.path.pop(0)
 
@@ -105,4 +105,4 @@ class UpdateTests(unittest.TestCase):
                 update_module.maybe_restart_gateway()
 
         mocked_print.assert_any_call("If the gateway is running, restart it to load the updated version:")
-        mocked_print.assert_any_call("lawftune gateway restart")
+        mocked_print.assert_any_call("lawftrack gateway restart")

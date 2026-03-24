@@ -23,7 +23,7 @@ def make_env(**extra: str) -> dict[str, str]:
 class CliTests(unittest.TestCase):
     def test_module_invocation(self) -> None:
         result = subprocess.run(
-            [sys.executable, "-m", "lawftune"],
+            [sys.executable, "-m", "lawftrack"],
             cwd=ROOT,
             env=make_env(),
             capture_output=True,
@@ -32,7 +32,7 @@ class CliTests(unittest.TestCase):
         )
 
         self.assertEqual(result.returncode, 0)
-        self.assertIn("usage: lawftune", result.stdout)
+        self.assertIn("usage: lawftrack", result.stdout)
         self.assertIn("wizard", result.stdout)
         self.assertIn("train", result.stdout)
         self.assertIn("update", result.stdout)
@@ -40,7 +40,7 @@ class CliTests(unittest.TestCase):
 
     def test_version_flag(self) -> None:
         result = subprocess.run(
-            [sys.executable, "-m", "lawftune", "--version"],
+            [sys.executable, "-m", "lawftrack", "--version"],
             cwd=ROOT,
             env=make_env(),
             capture_output=True,
@@ -49,14 +49,14 @@ class CliTests(unittest.TestCase):
         )
 
         self.assertEqual(result.returncode, 0)
-        self.assertIn("lawftune 0.1.0", result.stdout)
+        self.assertIn("lawftrack 0.1.0", result.stdout)
 
     def test_wizard_uses_defaults(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             result = subprocess.run(
-                [sys.executable, "-m", "lawftune", "wizard"],
+                [sys.executable, "-m", "lawftrack", "wizard"],
                 cwd=ROOT,
-                env=make_env(LAWFTUNE_HOME=temp_dir),
+                env=make_env(LAWFTRACK_HOME=temp_dir),
                 input="\n\n\nn\nn\n",
                 capture_output=True,
                 text=True,
@@ -86,9 +86,9 @@ class CliTests(unittest.TestCase):
     def test_wizard_accepts_custom_values(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             result = subprocess.run(
-                [sys.executable, "-m", "lawftune", "wizard"],
+                [sys.executable, "-m", "lawftrack", "wizard"],
                 cwd=ROOT,
-                env=make_env(LAWFTUNE_HOME=temp_dir),
+                env=make_env(LAWFTRACK_HOME=temp_dir),
                 input="http://127.0.0.1:9000\nsecret-key\n/models\nn\nn\n",
                 capture_output=True,
                 text=True,
@@ -116,9 +116,9 @@ class CliTests(unittest.TestCase):
     def test_wizard_exits_cleanly_when_input_stream_is_closed(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             result = subprocess.run(
-                [sys.executable, "-m", "lawftune", "wizard"],
+                [sys.executable, "-m", "lawftrack", "wizard"],
                 cwd=ROOT,
-                env=make_env(LAWFTUNE_HOME=temp_dir),
+                env=make_env(LAWFTRACK_HOME=temp_dir),
                 input="",
                 capture_output=True,
                 text=True,
@@ -131,7 +131,7 @@ class CliTests(unittest.TestCase):
     def test_wizard_can_install_gateway_service(self) -> None:
         sys.path.insert(0, str(ROOT / "src"))
         try:
-            from lawftune.cli import main
+            from lawftrack.cli import main
         finally:
             sys.path.pop(0)
 
@@ -140,7 +140,7 @@ class CliTests(unittest.TestCase):
             mocked_manager.install.return_value = "gateway installed"
 
             with mock.patch(
-                "lawftune.cli.get_service_manager", return_value=mocked_manager
+                "lawftrack.cli.get_service_manager", return_value=mocked_manager
             ):
                 with mock.patch("builtins.input", side_effect=["", "", "", "n", "y"]):
                     with mock.patch("builtins.print") as mocked_print:
@@ -166,7 +166,7 @@ class CliTests(unittest.TestCase):
     def test_wizard_skips_gateway_service_when_declined(self) -> None:
         sys.path.insert(0, str(ROOT / "src"))
         try:
-            from lawftune.cli import main
+            from lawftrack.cli import main
         finally:
             sys.path.pop(0)
 
@@ -174,7 +174,7 @@ class CliTests(unittest.TestCase):
             mocked_manager = mock.Mock()
 
             with mock.patch(
-                "lawftune.cli.get_service_manager", return_value=mocked_manager
+                "lawftrack.cli.get_service_manager", return_value=mocked_manager
             ):
                 with mock.patch("builtins.input", side_effect=["", "", "", "n", "n"]):
                     exit_code = main(["wizard", "--config-dir", temp_dir])
@@ -185,7 +185,7 @@ class CliTests(unittest.TestCase):
     def test_wizard_can_enable_local_vllm_sleep_setting(self) -> None:
         sys.path.insert(0, str(ROOT / "src"))
         try:
-            from lawftune.cli import main
+            from lawftrack.cli import main
         finally:
             sys.path.pop(0)
 
@@ -210,7 +210,7 @@ class CliTests(unittest.TestCase):
     ) -> None:
         sys.path.insert(0, str(ROOT / "src"))
         try:
-            from lawftune.cli import main
+            from lawftrack.cli import main
         finally:
             sys.path.pop(0)
 
@@ -220,7 +220,7 @@ class CliTests(unittest.TestCase):
             fake_server.create_app.return_value = mock.sentinel.app
             with mock.patch.dict(
                 sys.modules,
-                {"uvicorn": fake_uvicorn, "lawftune.server": fake_server},
+                {"uvicorn": fake_uvicorn, "lawftrack.server": fake_server},
             ):
                 exit_code = main(
                     [
@@ -243,7 +243,7 @@ class CliTests(unittest.TestCase):
 
     def test_gateway_help(self) -> None:
         result = subprocess.run(
-            [sys.executable, "-m", "lawftune", "gateway", "--help"],
+            [sys.executable, "-m", "lawftrack", "gateway", "--help"],
             cwd=ROOT,
             env=make_env(),
             capture_output=True,
@@ -252,18 +252,18 @@ class CliTests(unittest.TestCase):
         )
 
         self.assertEqual(result.returncode, 0)
-        self.assertIn("Run or manage the lawftune gateway.", result.stdout)
+        self.assertIn("Run or manage the lawftrack gateway.", result.stdout)
 
     def test_train_command_dispatches_to_worker(self) -> None:
         sys.path.insert(0, str(ROOT / "src"))
         try:
-            from lawftune.cli import main
+            from lawftrack.cli import main
         finally:
             sys.path.pop(0)
 
         with tempfile.TemporaryDirectory() as temp_dir:
             with mock.patch(
-                "lawftune.train.cli.run_train_worker", return_value=0
+                "lawftrack.train.cli.run_train_worker", return_value=0
             ) as mocked_run:
                 exit_code = main(
                     ["train", "--config-dir", temp_dir, "--job-id", "ftjob-123"]
@@ -277,7 +277,7 @@ class CliTests(unittest.TestCase):
 
     def test_train_module_help(self) -> None:
         result = subprocess.run(
-            [sys.executable, "-m", "lawftune.train", "--help"],
+            [sys.executable, "-m", "lawftrack.train", "--help"],
             cwd=ROOT,
             env=make_env(),
             capture_output=True,
@@ -286,27 +286,27 @@ class CliTests(unittest.TestCase):
         )
 
         self.assertEqual(result.returncode, 0)
-        self.assertIn("Run a lawftune training worker.", result.stdout)
+        self.assertIn("Run a lawftrack training worker.", result.stdout)
 
     def test_update_command_dispatches_to_updater(self) -> None:
         sys.path.insert(0, str(ROOT / "src"))
         try:
-            from lawftune.cli import main
+            from lawftrack.cli import main
         finally:
             sys.path.pop(0)
 
-        with mock.patch("lawftune.update.run_update", return_value=0) as mocked_run:
-            exit_code = main(["update", "/tmp/lawftune-src", "--dry-run", "--yes"])
+        with mock.patch("lawftrack.update.run_update", return_value=0) as mocked_run:
+            exit_code = main(["update", "/tmp/lawftrack-src", "--dry-run", "--yes"])
 
         self.assertEqual(exit_code, 0)
         mocked_run.assert_called_once_with(
-            "/tmp/lawftune-src", dry_run=True, assume_yes=True
+            "/tmp/lawftrack-src", dry_run=True, assume_yes=True
         )
 
     def test_config_set_supports_nested_dot_paths(self) -> None:
         sys.path.insert(0, str(ROOT / "src"))
         try:
-            from lawftune.cli import main
+            from lawftrack.cli import main
         finally:
             sys.path.pop(0)
 
@@ -328,7 +328,7 @@ class CliTests(unittest.TestCase):
     def test_config_get_reads_nested_values(self) -> None:
         sys.path.insert(0, str(ROOT / "src"))
         try:
-            from lawftune.cli import main
+            from lawftrack.cli import main
         finally:
             sys.path.pop(0)
 
@@ -349,7 +349,7 @@ class CliTests(unittest.TestCase):
     def test_config_show_prints_full_merged_config(self) -> None:
         sys.path.insert(0, str(ROOT / "src"))
         try:
-            from lawftune.cli import main
+            from lawftrack.cli import main
         finally:
             sys.path.pop(0)
 
@@ -372,7 +372,7 @@ class CliTests(unittest.TestCase):
     def test_save_config_preserves_existing_nested_values(self) -> None:
         sys.path.insert(0, str(ROOT / "src"))
         try:
-            from lawftune.config import save_config
+            from lawftrack.config import save_config
         finally:
             sys.path.pop(0)
 
@@ -397,7 +397,7 @@ class CliTests(unittest.TestCase):
     def test_train_worker_dispatches_to_normalized_method(self) -> None:
         sys.path.insert(0, str(ROOT / "src"))
         try:
-            from lawftune.train.cli import main
+            from lawftrack.train.cli import main
         finally:
             sys.path.pop(0)
 
@@ -417,7 +417,7 @@ class CliTests(unittest.TestCase):
             )
 
             with mock.patch(
-                "lawftune.train.cli.run_algorithm_job", return_value=0
+                "lawftrack.train.cli.run_algorithm_job", return_value=0
             ) as mocked_run:
                 exit_code = main(["--config-dir", temp_dir, "--job-id", "ftjob-123"])
 
@@ -428,8 +428,8 @@ class CliTests(unittest.TestCase):
     def test_build_sft_command_exports_uploaded_training_file(self) -> None:
         sys.path.insert(0, str(ROOT / "src"))
         try:
-            from lawftune.api.files_store import FileStore
-            from lawftune.train.algorithms import build_sft_command
+            from lawftrack.api.files_store import FileStore
+            from lawftrack.train.algorithms import build_sft_command
         finally:
             sys.path.pop(0)
 
@@ -459,8 +459,8 @@ class CliTests(unittest.TestCase):
     def test_build_sft_command_maps_openai_style_n_epochs_hyperparameter(self) -> None:
         sys.path.insert(0, str(ROOT / "src"))
         try:
-            from lawftune.api.files_store import FileStore
-            from lawftune.train.algorithms import build_sft_command
+            from lawftrack.api.files_store import FileStore
+            from lawftrack.train.algorithms import build_sft_command
         finally:
             sys.path.pop(0)
 
@@ -496,8 +496,8 @@ class CliTests(unittest.TestCase):
     def test_build_sft_command_uses_local_models_dir_when_available(self) -> None:
         sys.path.insert(0, str(ROOT / "src"))
         try:
-            from lawftune.api.files_store import FileStore
-            from lawftune.train.algorithms import build_sft_command
+            from lawftrack.api.files_store import FileStore
+            from lawftrack.train.algorithms import build_sft_command
         finally:
             sys.path.pop(0)
 
@@ -534,8 +534,8 @@ class CliTests(unittest.TestCase):
     def test_train_worker_marks_success_and_loads_lora_adapter(self) -> None:
         sys.path.insert(0, str(ROOT / "src"))
         try:
-            from lawftune.train.cli import main
-            from lawftune.vllm import RuntimeLoRAUpdateResult
+            from lawftrack.train.cli import main
+            from lawftrack.vllm import RuntimeLoRAUpdateResult
         finally:
             sys.path.pop(0)
 
@@ -570,10 +570,10 @@ class CliTests(unittest.TestCase):
             )
 
             with mock.patch(
-                "lawftune.train.cli.run_algorithm_job", return_value=0
+                "lawftrack.train.cli.run_algorithm_job", return_value=0
             ) as mocked_run:
                 with mock.patch(
-                    "lawftune.train.cli.load_lora_adapter",
+                    "lawftrack.train.cli.load_lora_adapter",
                     return_value=RuntimeLoRAUpdateResult(
                         ok=True,
                         status_code=200,
@@ -605,7 +605,7 @@ class CliTests(unittest.TestCase):
     def test_train_worker_marks_failed_when_training_command_fails(self) -> None:
         sys.path.insert(0, str(ROOT / "src"))
         try:
-            from lawftune.train.cli import main
+            from lawftrack.train.cli import main
         finally:
             sys.path.pop(0)
 
@@ -627,7 +627,7 @@ class CliTests(unittest.TestCase):
             )
 
             with mock.patch(
-                "lawftune.train.cli.run_algorithm_job", return_value=7
+                "lawftrack.train.cli.run_algorithm_job", return_value=7
             ) as mocked_run:
                 exit_code = main(["--config-dir", temp_dir, "--job-id", "ftjob-999"])
 
@@ -642,7 +642,7 @@ class CliTests(unittest.TestCase):
     def test_gateway_install_dispatches_to_service_manager(self) -> None:
         sys.path.insert(0, str(ROOT / "src"))
         try:
-            from lawftune.cli import main
+            from lawftrack.cli import main
         finally:
             sys.path.pop(0)
 
@@ -651,7 +651,7 @@ class CliTests(unittest.TestCase):
             mocked_manager.install.return_value = "installed"
 
             with mock.patch(
-                "lawftune.cli.get_service_manager", return_value=mocked_manager
+                "lawftrack.cli.get_service_manager", return_value=mocked_manager
             ):
                 with mock.patch("builtins.print") as mocked_print:
                     exit_code = main(
@@ -686,7 +686,7 @@ class CliTests(unittest.TestCase):
     def test_gateway_status_dispatches_to_service_manager(self) -> None:
         sys.path.insert(0, str(ROOT / "src"))
         try:
-            from lawftune.cli import main
+            from lawftrack.cli import main
         finally:
             sys.path.pop(0)
 
@@ -694,7 +694,7 @@ class CliTests(unittest.TestCase):
         mocked_manager.status.return_value = "running"
 
         with mock.patch(
-            "lawftune.cli.get_service_manager", return_value=mocked_manager
+            "lawftrack.cli.get_service_manager", return_value=mocked_manager
         ):
             with mock.patch("builtins.print") as mocked_print:
                 exit_code = main(["gateway", "status"])
@@ -705,7 +705,7 @@ class CliTests(unittest.TestCase):
 
     def test_gateway_action_help(self) -> None:
         result = subprocess.run(
-            [sys.executable, "-m", "lawftune", "gateway", "--help"],
+            [sys.executable, "-m", "lawftrack", "gateway", "--help"],
             cwd=ROOT,
             env=make_env(),
             capture_output=True,
@@ -714,7 +714,7 @@ class CliTests(unittest.TestCase):
         )
 
         self.assertEqual(result.returncode, 0)
-        self.assertIn("Run or manage the lawftune gateway.", result.stdout)
+        self.assertIn("Run or manage the lawftrack gateway.", result.stdout)
 
 
 if __name__ == "__main__":

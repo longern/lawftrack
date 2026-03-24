@@ -10,17 +10,17 @@ from fastapi import UploadFile
 import httpx
 from pydantic import BaseModel
 
-from lawftune.api.dataset_store import DatasetStore
-from lawftune.api.tokenizer_service import TokenizerDependencyError
-from lawftune.api.tokenizer_service import build_prefix_before_token
-from lawftune.api.tokenizer_service import build_continuation_prefix
-from lawftune.api.tokenizer_service import count_text_tokens
-from lawftune.api.tokenizer_service import get_tokenizer_max_length
-from lawftune.api.tokenizer_service import load_tokenizer
-from lawftune.api.tokenizer_service import tokenize_text
-from lawftune.config import load_config
-from lawftune.train.algorithms import normalize_training_method
-from lawftune.vllm import build_vllm_url
+from .dataset_store import DatasetStore
+from .tokenizer_service import TokenizerDependencyError
+from .tokenizer_service import build_prefix_before_token
+from .tokenizer_service import build_continuation_prefix
+from .tokenizer_service import count_text_tokens
+from .tokenizer_service import get_tokenizer_max_length
+from .tokenizer_service import load_tokenizer
+from .tokenizer_service import tokenize_text
+from ..config import load_config
+from ..train.algorithms import normalize_training_method
+from ..vllm import build_vllm_url
 
 
 class CreateDatasetRequest(BaseModel):

@@ -10,7 +10,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from lawftune.train.cli import finalize_job  # noqa: E402
+from lawftrack.train.cli import finalize_job  # noqa: E402
 
 sys.path.pop(0)
 
@@ -34,7 +34,7 @@ class TrainCliTests(unittest.TestCase):
                 "metadata": {},
                 "method": {"type": "lawf"},
                 "model": "demo-model",
-                "organization_id": "org-lawftune",
+                "organization_id": "org-lawftrack",
                 "result_files": [],
                 "seed": None,
                 "status": "running",

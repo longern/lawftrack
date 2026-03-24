@@ -14,9 +14,9 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from lawftune.api.files_store import FileStore  # noqa: E402
-from lawftune.train.algorithms import run_lawf_job  # noqa: E402
-from lawftune.train.lawf_runner import run_lawf_training  # noqa: E402
+from lawftrack.api.files_store import FileStore  # noqa: E402
+from lawftrack.train.algorithms import run_lawf_job  # noqa: E402
+from lawftrack.train.lawf_runner import run_lawf_training  # noqa: E402
 
 sys.path.pop(0)
 
@@ -26,7 +26,7 @@ class LAwFRunnerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             job = {"id": "ftjob-lawf-123", "model": "demo-model", "training_file": "file-123"}
             with mock.patch(
-                "lawftune.train.lawf_runner.run_lawf_training"
+                "lawftrack.train.lawf_runner.run_lawf_training"
             ) as mocked_runner:
                 exit_code = run_lawf_job(job, Path(temp_dir))
 
@@ -38,7 +38,7 @@ class LAwFRunnerTests(unittest.TestCase):
             job = {"id": "ftjob-lawf-err", "model": "demo-model", "training_file": "file-123"}
             stderr_buffer = io.StringIO()
             with mock.patch(
-                "lawftune.train.lawf_runner.run_lawf_training",
+                "lawftrack.train.lawf_runner.run_lawf_training",
                 side_effect=ValueError("boom"),
             ):
                 with redirect_stderr(stderr_buffer):
@@ -161,7 +161,7 @@ class LAwFRunnerTests(unittest.TestCase):
             }
 
             with mock.patch(
-                "lawftune.train.lawf_runner._load_dependencies",
+                "lawftrack.train.lawf_runner._load_dependencies",
                 return_value={
                     "torch": FakeTorch,
                     "Dataset": FakeDataset,
@@ -282,7 +282,7 @@ class LAwFRunnerTests(unittest.TestCase):
             }
 
             with mock.patch(
-                "lawftune.train.lawf_runner._load_dependencies",
+                "lawftrack.train.lawf_runner._load_dependencies",
                 return_value={
                     "torch": FakeTorch,
                     "Dataset": FakeDataset,

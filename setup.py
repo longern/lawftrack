@@ -7,9 +7,9 @@ ROOT = Path(__file__).parent
 
 
 setup(
-    name="lawftune",
+    name="lawftrack",
     version="0.1.0",
-    description="lawftune command line interface",
+    description="lawftrack command line interface",
     long_description=(ROOT / "README.md").read_text(encoding="utf-8"),
     long_description_content_type="text/markdown",
     author="longsiyu",
@@ -22,7 +22,7 @@ setup(
     ],
     include_package_data=True,
     package_data={
-        "lawftune": [
+        "lawftrack": [
             "_frontend/index.html",
             "_frontend/assets/*",
         ]
@@ -39,7 +39,7 @@ setup(
     },
     entry_points={
         "console_scripts": [
-            "lawftune=lawftune.cli:main",
+            "lawftrack=lawftrack.cli:main",
         ]
     },
 )

@@ -10,8 +10,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
-SERVICE_NAME = "lawftune-gateway"
-MACOS_LABEL = "io.lawftune.gateway"
+SERVICE_NAME = "lawftrack-gateway"
+MACOS_LABEL = "io.lawftrack.gateway"
 
 
 @dataclass(frozen=True)
@@ -25,7 +25,7 @@ class ServiceConfig:
         return [
             self.python_executable,
             "-m",
-            "lawftune",
+            "lawftrack",
             "gateway",
             "run",
             "--host",
@@ -186,7 +186,7 @@ class SystemdUserServiceManager(BaseServiceManager):
         service_text = "\n".join(
             [
                 "[Unit]",
-                "Description=lawftune gateway",
+                "Description=lawftrack gateway",
                 "",
                 "[Service]",
                 "Type=simple",

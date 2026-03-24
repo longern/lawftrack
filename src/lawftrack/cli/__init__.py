@@ -1,16 +1,16 @@
 from __future__ import annotations
 
-from lawftune.config import DEFAULT_API_KEY
-from lawftune.config import DEFAULT_MODELS_DIR
-from lawftune.config import DEFAULT_VLLM_ENDPOINT
-from lawftune.config import get_config_dir
-from lawftune.config import get_config_value
-from lawftune.config import load_raw_config
-from lawftune.config import parse_config_value
-from lawftune.config import save_config
-from lawftune.config import set_config_value
-from lawftune.service import build_service_config
-from lawftune.service import get_service_manager
+from ..config import DEFAULT_API_KEY
+from ..config import DEFAULT_MODELS_DIR
+from ..config import DEFAULT_VLLM_ENDPOINT
+from ..config import get_config_dir
+from ..config import get_config_value
+from ..config import load_raw_config
+from ..config import parse_config_value
+from ..config import save_config
+from ..config import set_config_value
+from ..service import build_service_config
+from ..service import get_service_manager
 
 from .config_command import run_config_command
 from .gateway import gateway_access_url
@@ -23,7 +23,7 @@ from .prompts import prompt_yes_no
 from .train import run_train_command
 from .update_command import run_update_command
 from .wizard import run_wizard as run_wizard_impl
-from lawftune.vllm import is_local_vllm_endpoint
+from ..vllm import is_local_vllm_endpoint
 
 
 DEFAULT_LOCAL_VLLM_SLEEP_LEVEL = 1

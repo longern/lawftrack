@@ -20,7 +20,7 @@ class LAwFTrainerTests(unittest.TestCase):
         sys.path.insert(0, str(ROOT / "src"))
         try:
             import torch
-            from lawftune.train.lawf_trainer import LAwFDataCollator
+            from lawftrack.train.lawf_trainer import LAwFDataCollator
         finally:
             sys.path.pop(0)
 

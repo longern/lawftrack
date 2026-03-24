@@ -9,8 +9,8 @@ from pathlib import Path
 import re
 from typing import Any
 
-from lawftune.api.files_store import FileStore
-from lawftune.model_resolution import resolve_model_reference
+from ..api.files_store import FileStore
+from ..model_resolution import resolve_model_reference
 
 
 DEFAULT_TRAINING_ALGORITHM = "sft"
@@ -33,7 +33,7 @@ TRAINING_ALGORITHMS: dict[str, TrainingAlgorithm] = {
     ),
     "lawf": TrainingAlgorithm(
         name="lawf",
-        aliases=("lawftune",),
+        aliases=("lawftrack",),
         description="Run the native LAwF-style training worker.",
     ),
 }
@@ -169,7 +169,7 @@ def run_sft_job(job: dict[str, Any], config_dir: Path) -> int:
 
 def run_lawf_job(job: dict[str, Any], config_dir: Path) -> int:
     try:
-        from lawftune.train.lawf_runner import run_lawf_training
+        from .lawf_runner import run_lawf_training
 
         run_lawf_training(job, config_dir)
         return 0

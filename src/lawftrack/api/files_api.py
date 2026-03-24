@@ -10,7 +10,7 @@ from fastapi import HTTPException
 from fastapi import UploadFile
 from fastapi.responses import Response
 
-from lawftune.api.files_store import FileStore
+from .files_store import FileStore
 
 
 def build_router(

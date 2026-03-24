@@ -9,7 +9,7 @@ from typing import Any
 DEFAULT_VLLM_ENDPOINT = "http://localhost:8000/v1"
 DEFAULT_API_KEY = ""
 DEFAULT_MODELS_DIR = ""
-DEFAULT_CONFIG_DIRNAME = ".lawftune"
+DEFAULT_CONFIG_DIRNAME = ".lawftrack"
 CONFIG_FILENAME = "config.json"
 
 
@@ -22,7 +22,7 @@ def default_config() -> dict[str, Any]:
 
 
 def get_config_dir() -> Path:
-    configured_home = os.environ.get("LAWFTUNE_HOME")
+    configured_home = os.environ.get("LAWFTRACK_HOME")
     if configured_home:
         return Path(configured_home).expanduser()
 

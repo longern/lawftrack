@@ -27,7 +27,7 @@ function AppSidebar({ activeView, items, onSelect }: AppSidebarProps) {
         </Avatar>
         <Box>
           <Typography variant="subtitle1" fontWeight={700}>
-            lawftune
+            lawftrack
           </Typography>
         </Box>
       </Box>

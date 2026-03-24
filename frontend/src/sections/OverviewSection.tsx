@@ -233,7 +233,7 @@ function OverviewSection({
               >
                 <Box>
                   <Typography variant="h5" fontWeight={700}>
-                    {t("lawftune Workspace")}
+                    {t("lawftrack Workspace")}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
                     {t(

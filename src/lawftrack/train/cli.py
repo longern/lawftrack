@@ -8,23 +8,23 @@ from pathlib import Path
 import time
 from typing import Any
 
-from lawftune.config import load_config
-from lawftune.config import load_raw_config
-from lawftune.train.algorithms import normalize_training_method
-from lawftune.train.algorithms import build_fine_tuned_model_name
-from lawftune.train.algorithms import get_job_output_dir
-from lawftune.train.algorithms import is_lora_adapter_artifact
-from lawftune.train.algorithms import run_algorithm_job
-from lawftune.vllm import is_local_vllm_endpoint
-from lawftune.vllm import load_lora_adapter
-from lawftune.vllm import sleep_vllm
-from lawftune.vllm import wake_up_vllm
+from ..config import load_config
+from ..config import load_raw_config
+from .algorithms import normalize_training_method
+from .algorithms import build_fine_tuned_model_name
+from .algorithms import get_job_output_dir
+from .algorithms import is_lora_adapter_artifact
+from .algorithms import run_algorithm_job
+from ..vllm import is_local_vllm_endpoint
+from ..vllm import load_lora_adapter
+from ..vllm import sleep_vllm
+from ..vllm import wake_up_vllm
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="lawftune train",
-        description="Run a lawftune training worker.",
+        prog="lawftrack train",
+        description="Run a lawftrack training worker.",
     )
     parser.add_argument(
         "action",

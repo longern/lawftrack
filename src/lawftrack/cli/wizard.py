@@ -4,7 +4,7 @@ import argparse
 from pathlib import Path
 from typing import Callable
 
-from lawftune.service import ServiceManagerError
+from ..service import ServiceManagerError
 
 
 def run_wizard(

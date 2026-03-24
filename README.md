@@ -1,6 +1,6 @@
-# lawftune
+# lawftrack
 
-`lawftune` is a low-friction fine-tuning platform for vLLM-compatible models. It includes:
+`lawftrack` is a low-friction fine-tuning platform for vLLM-compatible models. It includes:
 
 - a Python CLI for installation, configuration, updates, and service management
 - a local gateway that proxies OpenAI-compatible APIs and serves the web console
@@ -25,7 +25,7 @@ For end users, use the installer:
 You can also run the installer remotely:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/longern/lawftune/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/longern/lawftrack/main/install.sh | sh
 ```
 
 If you want to skip packaging the browser UI:
@@ -43,11 +43,11 @@ If you want to finish installation without launching the setup wizard immediatel
 That installer will:
 
 - build the Vite frontend bundle
-- create an isolated virtualenv under `~/.lawftune/runtime`
-- install `lawftune` and the gateway dependencies
-- create a `lawftune` launcher script
+- create an isolated virtualenv under `~/.lawftrack/runtime`
+- install `lawftrack` and the gateway dependencies
+- create a `lawftrack` launcher script
 - offer to add the launcher directory to your shell `PATH`
-- automatically start the `lawftune wizard` setup flow unless `--skip-wizard` is used
+- automatically start the `lawftrack wizard` setup flow unless `--skip-wizard` is used
 
 When `--headless` is used, the gateway API is still installed, but the packaged web UI is omitted.
 
@@ -70,20 +70,20 @@ npm install
 Run the setup wizard:
 
 ```bash
-lawftune wizard
+lawftrack wizard
 ```
 
 The wizard will:
 
 - ask for the vLLM endpoint, default `http://localhost:8000/v1`
 - ask for the API key, default empty
-- save the config to `~/.lawftune/config.json`
+- save the config to `~/.lawftrack/config.json`
 - ask whether the gateway should also be installed as a system service
 
 Start the gateway in the foreground:
 
 ```bash
-lawftune gateway
+lawftrack gateway
 ```
 
 The default bind address is `127.0.0.1:5293`.
@@ -103,28 +103,28 @@ The packaged web console is the main end-user interface. It currently supports:
 ## Common Commands
 
 ```bash
-lawftune --version
-lawftune wizard
-lawftune config
-lawftune config get vllm_endpoint
-lawftune config set a.b.c xxx
-lawftune update
-lawftune gateway
-lawftune gateway status
-lawftune gateway start
-lawftune gateway stop
+lawftrack --version
+lawftrack wizard
+lawftrack config
+lawftrack config get vllm_endpoint
+lawftrack config set a.b.c xxx
+lawftrack update
+lawftrack gateway
+lawftrack gateway status
+lawftrack gateway start
+lawftrack gateway stop
 ```
 
 You can also launch the package as a module:
 
 ```bash
-python3 -m lawftune
+python3 -m lawftrack
 ```
 
 ## Gateway
 
-`lawftune gateway` runs the local FastAPI gateway and loads config from `~/.lawftune/config.json` by default.
-The browser UI is served from the standalone [frontend/](/Users/longsiyu/workspace/lawftune/frontend) workspace so it can evolve separately from the Python backend.
+`lawftrack gateway` runs the local FastAPI gateway and loads config from `~/.lawftrack/config.json` by default.
+The browser UI is served from the standalone `frontend/` workspace so it can evolve separately from the Python backend.
 
 For frontend development:
 
@@ -140,7 +140,7 @@ cd frontend
 npm run build
 ```
 
-That build outputs packaged assets into [src/lawftune/_frontend](/Users/longsiyu/workspace/lawftune/src/lawftune/_frontend).
+That build outputs packaged assets into `src/lawftrack/_frontend`.
 
 The gateway exposes two kinds of HTTP surface:
 
@@ -162,12 +162,12 @@ The `/v1/...` surface is intended for model inference and OpenAI-compatible clie
 You can override runtime options when starting it in the foreground:
 
 ```bash
-lawftune gateway --host 127.0.0.1 --port 5293
+lawftrack gateway --host 127.0.0.1 --port 5293
 ```
 
 ## Dynamic LoRA Loading
 
-When an SFT job finishes successfully, `lawftune` now checks whether the training artifact directory contains a LoRA adapter and, if it does, automatically sends a runtime load request to the configured vLLM endpoint.
+When an SFT job finishes successfully, `lawftrack` now checks whether the training artifact directory contains a LoRA adapter and, if it does, automatically sends a runtime load request to the configured vLLM endpoint.
 
 To make that work on the vLLM side, start `vllm serve` with LoRA enabled and turn on runtime LoRA updates:
 
@@ -182,28 +182,28 @@ vLLM's official documentation for dynamic LoRA loading is here:
 
 ## Updates
 
-`lawftune update` upgrades the current installation using the same Python runtime that is running the CLI.
+`lawftrack update` upgrades the current installation using the same Python runtime that is running the CLI.
 
 ```bash
-lawftune update
-lawftune update /path/to/lawftune
-lawftune update https://github.com/your-org/lawftune.git
-lawftune update --dry-run
+lawftrack update
+lawftrack update /path/to/lawftrack
+lawftrack update https://github.com/your-org/lawftrack.git
+lawftrack update --dry-run
 ```
 
-When no source is provided, `lawftune` tries to reuse the current installation source. If that cannot be detected, it falls back to `lawftune[server]`.
+When no source is provided, `lawftrack` tries to reuse the current installation source. If that cannot be detected, it falls back to `lawftrack[server]`.
 
 ## System Service
 
 The gateway can also be managed as a user-level system service:
 
 ```bash
-lawftune gateway install
-lawftune gateway start
-lawftune gateway stop
-lawftune gateway restart
-lawftune gateway status
-lawftune gateway uninstall
+lawftrack gateway install
+lawftrack gateway start
+lawftrack gateway stop
+lawftrack gateway restart
+lawftrack gateway status
+lawftrack gateway uninstall
 ```
 
 Supported backends:
@@ -215,10 +215,10 @@ Supported backends:
 You can define the gateway host, port, and config directory during installation:
 
 ```bash
-lawftune gateway install --host 127.0.0.1 --port 5293
+lawftrack gateway install --host 127.0.0.1 --port 5293
 ```
 
-After successful service installation, `lawftune` prints the local gateway URL so users can open it directly.
+After successful service installation, `lawftrack` prints the local gateway URL so users can open it directly.
 
 ## Tests
 

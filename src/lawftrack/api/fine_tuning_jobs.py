@@ -13,8 +13,8 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from lawftune.config import get_config_dir
-from lawftune.train.algorithms import normalize_training_method
+from ..config import get_config_dir
+from ..train.algorithms import normalize_training_method
 
 
 TERMINAL_JOB_STATUSES = {"cancelled", "failed", "succeeded"}
@@ -94,7 +94,7 @@ class FineTuningJobStore:
             "metadata": payload.get("metadata", {}),
             "method": method,
             "model": payload["model"],
-            "organization_id": "org-lawftune",
+            "organization_id": "org-lawftrack",
             "result_files": [],
             "seed": payload.get("seed"),
             "status": "running",
@@ -266,7 +266,7 @@ class FineTuningJobStore:
         command = [
             sys.executable,
             "-m",
-            "lawftune.train",
+            "lawftrack.train",
             "--config-dir",
             str(self.config_dir),
             "--job-id",

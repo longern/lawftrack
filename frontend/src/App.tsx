@@ -38,7 +38,7 @@ import type {
   NavView,
 } from "./types/app";
 
-const LAST_OPENED_DATASET_STORAGE_KEY = "lawftune:last-opened-dataset-id";
+const LAST_OPENED_DATASET_STORAGE_KEY = "lawftrack:last-opened-dataset-id";
 
 async function fetchJson<T>(url: string): Promise<T> {
   const response = await fetch(url);

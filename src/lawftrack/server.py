@@ -16,11 +16,11 @@ from fastapi.responses import Response
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from lawftune.api.datasets_api import build_router as build_datasets_router
-from lawftune.api.fine_tuning_api import build_router as build_fine_tuning_router
-from lawftune.api.files_api import build_router as build_files_router
-from lawftune.config import load_config
-from lawftune.vllm import build_vllm_url
+from .api.datasets_api import build_router as build_datasets_router
+from .api.fine_tuning_api import build_router as build_fine_tuning_router
+from .api.files_api import build_router as build_files_router
+from .config import load_config
+from .vllm import build_vllm_url
 
 
 PACKAGE_FRONTEND_DIR = Path(__file__).resolve().parent / "_frontend"
@@ -91,7 +91,7 @@ def build_status_payload() -> dict[str, object]:
     system_name = platform.system() or "Unknown"
     release_name = platform.release() or "Unknown"
     return {
-        "name": "lawftune",
+        "name": "lawftrack",
         "status": "running",
         "hostname": socket.gethostname() or "Unknown",
         "operating_system": f"{system_name} {release_name}".strip(),
@@ -129,8 +129,8 @@ async def close_streaming_upstream(
 
 
 def build_cors_middleware_options() -> dict[str, object]:
-    configured_origins = os.environ.get("LAWFTUNE_CORS_ALLOW_ORIGINS", "").strip()
-    configured_regex = os.environ.get("LAWFTUNE_CORS_ALLOW_ORIGIN_REGEX", "").strip()
+    configured_origins = os.environ.get("LAWFTRACK_CORS_ALLOW_ORIGINS", "").strip()
+    configured_regex = os.environ.get("LAWFTRACK_CORS_ALLOW_ORIGIN_REGEX", "").strip()
     options: dict[str, object] = {
         "allow_credentials": True,
         "allow_methods": ["*"],
@@ -149,7 +149,7 @@ def build_cors_middleware_options() -> dict[str, object]:
 
 
 def create_app(config_dir: Path | None = None) -> FastAPI:
-    app = FastAPI(title="lawftune", version="0.1.0")
+    app = FastAPI(title="lawftrack", version="0.1.0")
     app.add_middleware(CORSMiddleware, **build_cors_middleware_options())
     app.include_router(build_datasets_router(config_dir))
     app.include_router(
@@ -170,7 +170,7 @@ def create_app(config_dir: Path | None = None) -> FastAPI:
         if PACKAGE_FRONTEND_INDEX.exists():
             return FileResponse(PACKAGE_FRONTEND_INDEX)
         return HTMLResponse(
-            "<!DOCTYPE html><html><body><h1>lawftune gateway</h1>"
+            "<!DOCTYPE html><html><body><h1>lawftrack gateway</h1>"
             "<p>The frontend UI is not bundled in this installation.</p>"
             "<p>Reinstall without <code>--headless</code> to enable the web UI.</p>"
             "</body></html>",

@@ -24,7 +24,7 @@ class ServerTests(unittest.TestCase):
         sys.path.insert(0, str(ROOT / "src"))
         try:
             from fastapi.testclient import TestClient
-            from lawftune.server import create_app
+            from lawftrack.server import create_app
         finally:
             sys.path.pop(0)
 
@@ -37,7 +37,7 @@ class ServerTests(unittest.TestCase):
 
             self.assertEqual(response.status_code, 200)
             self.assertIn("text/html", response.headers["content-type"])
-            self.assertIn("lawftune console", response.text)
+            self.assertIn("lawftrack console", response.text)
             self.assertTrue(
                 "/src/main.js" in response.text or "/assets/" in response.text
             )
@@ -67,7 +67,7 @@ class ServerTests(unittest.TestCase):
         sys.path.insert(0, str(ROOT / "src"))
         try:
             from fastapi.testclient import TestClient
-            import lawftune.server as server_module
+            import lawftrack.server as server_module
         finally:
             sys.path.pop(0)
 
@@ -93,7 +93,7 @@ class ServerTests(unittest.TestCase):
 
             self.assertEqual(response.status_code, 200)
             payload = response.json()
-            self.assertEqual(payload["name"], "lawftune")
+            self.assertEqual(payload["name"], "lawftrack")
             self.assertEqual(payload["status"], "running")
             self.assertIn("hostname", payload)
             self.assertIn("operating_system", payload)
@@ -106,7 +106,7 @@ class ServerTests(unittest.TestCase):
     def test_query_gpu_metrics_parses_nvidia_smi_output(self) -> None:
         sys.path.insert(0, str(ROOT / "src"))
         try:
-            import lawftune.server as server_module
+            import lawftrack.server as server_module
         finally:
             sys.path.pop(0)
 
@@ -198,7 +198,7 @@ class ServerTests(unittest.TestCase):
     def test_default_cors_regex_allows_localhost_with_any_port(self) -> None:
         sys.path.insert(0, str(ROOT / "src"))
         try:
-            import lawftune.server as server_module
+            import lawftrack.server as server_module
         finally:
             sys.path.pop(0)
 
@@ -214,14 +214,14 @@ class ServerTests(unittest.TestCase):
     def test_cors_origins_can_be_overridden_by_environment(self) -> None:
         sys.path.insert(0, str(ROOT / "src"))
         try:
-            import lawftune.server as server_module
+            import lawftrack.server as server_module
         finally:
             sys.path.pop(0)
 
         with mock.patch.dict(
             os.environ,
             {
-                "LAWFTUNE_CORS_ALLOW_ORIGINS": "http://10.0.0.8:4173,https://lab.example.com"
+                "LAWFTRACK_CORS_ALLOW_ORIGINS": "http://10.0.0.8:4173,https://lab.example.com"
             },
             clear=False,
         ):
@@ -242,7 +242,7 @@ class ServerTests(unittest.TestCase):
             self.assertEqual(
                 response.json(),
                 {
-                    "name": "lawftune fine_tuning",
+                    "name": "lawftrack fine_tuning",
                     "status": "ready",
                 },
             )
@@ -251,8 +251,8 @@ class ServerTests(unittest.TestCase):
         sys.path.insert(0, str(ROOT / "src"))
         try:
             from fastapi.testclient import TestClient
-            import lawftune.api.fine_tuning_jobs as jobs_module
-            import lawftune.server as server_module
+            import lawftrack.api.fine_tuning_jobs as jobs_module
+            import lawftrack.server as server_module
         finally:
             sys.path.pop(0)
 
@@ -357,8 +357,8 @@ class ServerTests(unittest.TestCase):
         sys.path.insert(0, str(ROOT / "src"))
         try:
             from fastapi.testclient import TestClient
-            import lawftune.api.fine_tuning_jobs as jobs_module
-            import lawftune.server as server_module
+            import lawftrack.api.fine_tuning_jobs as jobs_module
+            import lawftrack.server as server_module
         finally:
             sys.path.pop(0)
 
@@ -673,7 +673,7 @@ class ServerTests(unittest.TestCase):
     def test_exported_dataset_file_can_be_used_for_fine_tuning_job(self) -> None:
         sys.path.insert(0, str(ROOT / "src"))
         try:
-            import lawftune.api.fine_tuning_jobs as jobs_module
+            import lawftrack.api.fine_tuning_jobs as jobs_module
         finally:
             sys.path.pop(0)
 
@@ -738,7 +738,7 @@ class ServerTests(unittest.TestCase):
                         "metadata": {},
                         "method": {"type": "lawf"},
                         "model": "Qwen/Qwen2.5-7B-Instruct",
-                        "organization_id": "org-lawftune",
+                        "organization_id": "org-lawftrack",
                         "result_files": [],
                         "seed": None,
                         "status": "running",
@@ -810,7 +810,7 @@ class ServerTests(unittest.TestCase):
                         "metadata": {},
                         "method": {"type": "sft"},
                         "model": "demo-model",
-                        "organization_id": "org-lawftune",
+                        "organization_id": "org-lawftrack",
                         "result_files": [],
                         "seed": None,
                         "status": "running",
@@ -1049,8 +1049,8 @@ class ServerTests(unittest.TestCase):
     def test_dataset_sample_tokenize_and_continue_use_model_tokenizer(self) -> None:
         sys.path.insert(0, str(ROOT / "src"))
         try:
-            import lawftune.api.datasets_api as datasets_api_module
-            import lawftune.server as server_module
+            import lawftrack.api.datasets_api as datasets_api_module
+            import lawftrack.server as server_module
         finally:
             sys.path.pop(0)
 
@@ -1199,7 +1199,7 @@ class ServerTests(unittest.TestCase):
     def test_continue_prepare_returns_prompt_metadata_for_frontend_streaming(self) -> None:
         sys.path.insert(0, str(ROOT / "src"))
         try:
-            import lawftune.api.datasets_api as datasets_api_module
+            import lawftrack.api.datasets_api as datasets_api_module
         finally:
             sys.path.pop(0)
 
@@ -1267,7 +1267,7 @@ class ServerTests(unittest.TestCase):
     def test_tokenize_dataset_sample_accepts_frontend_preview_messages(self) -> None:
         sys.path.insert(0, str(ROOT / "src"))
         try:
-            import lawftune.api.datasets_api as datasets_api_module
+            import lawftrack.api.datasets_api as datasets_api_module
         finally:
             sys.path.pop(0)
 
@@ -1338,8 +1338,8 @@ class ServerTests(unittest.TestCase):
     def test_continue_uses_replacement_token_count_for_regeneration_start(self) -> None:
         sys.path.insert(0, str(ROOT / "src"))
         try:
-            import lawftune.api.datasets_api as datasets_api_module
-            import lawftune.server as server_module
+            import lawftrack.api.datasets_api as datasets_api_module
+            import lawftrack.server as server_module
         finally:
             sys.path.pop(0)
 
@@ -1431,8 +1431,8 @@ class ServerTests(unittest.TestCase):
     def test_continue_preserves_edits_before_current_token(self) -> None:
         sys.path.insert(0, str(ROOT / "src"))
         try:
-            import lawftune.api.datasets_api as datasets_api_module
-            import lawftune.server as server_module
+            import lawftrack.api.datasets_api as datasets_api_module
+            import lawftrack.server as server_module
         finally:
             sys.path.pop(0)
 
@@ -1544,8 +1544,8 @@ class ServerTests(unittest.TestCase):
     def test_dataset_sample_reasoning_can_be_tokenized_and_continued(self) -> None:
         sys.path.insert(0, str(ROOT / "src"))
         try:
-            import lawftune.api.datasets_api as datasets_api_module
-            import lawftune.server as server_module
+            import lawftrack.api.datasets_api as datasets_api_module
+            import lawftrack.server as server_module
         finally:
             sys.path.pop(0)
 
@@ -1677,8 +1677,8 @@ class ServerTests(unittest.TestCase):
     def test_dataset_sample_candidate_tokens_use_completions(self) -> None:
         sys.path.insert(0, str(ROOT / "src"))
         try:
-            import lawftune.api.datasets_api as datasets_api_module
-            import lawftune.server as server_module
+            import lawftrack.api.datasets_api as datasets_api_module
+            import lawftrack.server as server_module
         finally:
             sys.path.pop(0)
 
@@ -1777,7 +1777,7 @@ class ServerTests(unittest.TestCase):
     def test_render_completion_prompt_uses_chat_template(self) -> None:
         sys.path.insert(0, str(ROOT / "src"))
         try:
-            import lawftune.api.datasets_api as datasets_api_module
+            import lawftrack.api.datasets_api as datasets_api_module
         finally:
             sys.path.pop(0)
 
@@ -1831,7 +1831,7 @@ class ServerTests(unittest.TestCase):
         sys.path.insert(0, str(ROOT / "src"))
         try:
             from fastapi.testclient import TestClient
-            import lawftune.server as server_module
+            import lawftrack.server as server_module
         finally:
             sys.path.pop(0)
 
@@ -1905,7 +1905,7 @@ class ServerTests(unittest.TestCase):
         sys.path.insert(0, str(ROOT / "src"))
         try:
             from fastapi.testclient import TestClient
-            import lawftune.server as server_module
+            import lawftrack.server as server_module
         finally:
             sys.path.pop(0)
 
@@ -1973,7 +1973,7 @@ class ServerTests(unittest.TestCase):
         sys.path.insert(0, str(ROOT / "src"))
         try:
             from fastapi.testclient import TestClient
-            import lawftune.server as server_module
+            import lawftrack.server as server_module
         finally:
             sys.path.pop(0)
 

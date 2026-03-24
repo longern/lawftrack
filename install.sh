@@ -2,13 +2,13 @@
 
 set -eu
 
-APP_NAME="lawftune"
-REPO_URL="https://github.com/longern/lawftune"
+APP_NAME="lawftrack"
+REPO_URL="https://github.com/longern/lawftrack"
 OS_NAME="$(uname -s)"
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 SOURCE_DIR="$SCRIPT_DIR"
 TEMP_SOURCE_DIR=""
-DEFAULT_INSTALL_DIR="$HOME/.lawftune/runtime"
+DEFAULT_INSTALL_DIR="$HOME/.lawftrack/runtime"
 DEFAULT_BIN_DIR="$HOME/.local/bin"
 INSTALL_DIR="$DEFAULT_INSTALL_DIR"
 BIN_DIR="$DEFAULT_BIN_DIR"
@@ -138,7 +138,7 @@ cleanup_temp_source_dir() {
 
 is_repo_root() {
   candidate_dir="$1"
-  [ -f "${candidate_dir}/setup.py" ] && [ -d "${candidate_dir}/src/lawftune" ]
+  [ -f "${candidate_dir}/setup.py" ] && [ -d "${candidate_dir}/src/lawftrack" ]
 }
 
 
@@ -206,7 +206,7 @@ build_frontend() {
 
 
 clear_packaged_frontend() {
-  packaged_dir="${SOURCE_DIR}/src/lawftune/_frontend"
+  packaged_dir="${SOURCE_DIR}/src/lawftrack/_frontend"
   mkdir -p "$packaged_dir"
   find "$packaged_dir" -mindepth 1 ! -name '.gitignore' -exec rm -rf {} +
 }

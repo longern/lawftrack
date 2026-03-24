@@ -9,8 +9,8 @@ from typing import Any
 
 import yaml
 
-from lawftune.api.files_store import FileStore
-from lawftune.config import get_config_dir
+from .files_store import FileStore
+from ..config import get_config_dir
 
 
 class DatasetStore:

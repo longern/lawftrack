@@ -11,10 +11,10 @@ from fastapi import Response
 from pydantic import BaseModel
 from pydantic import Field
 
-from lawftune.api.files_store import FileStore
-from lawftune.api.fine_tuning_jobs import FineTuningJobStore
-from lawftune.api.fine_tuning_jobs import DEFAULT_LOG_TAIL_LINES
-from lawftune.train.algorithms import normalize_training_method
+from .files_store import FileStore
+from .fine_tuning_jobs import FineTuningJobStore
+from .fine_tuning_jobs import DEFAULT_LOG_TAIL_LINES
+from ..train.algorithms import normalize_training_method
 
 
 class CreateFineTuningJobRequest(BaseModel):
@@ -68,7 +68,7 @@ def build_router(
     @router.get("/")
     def fine_tuning_root() -> dict[str, str]:
         return {
-            "name": "lawftune fine_tuning",
+            "name": "lawftrack fine_tuning",
             "status": "ready",
         }
 

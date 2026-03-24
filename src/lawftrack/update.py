@@ -9,11 +9,11 @@ from pathlib import Path
 from urllib.parse import unquote
 from urllib.parse import urlparse
 
-from lawftune.service import ServiceManagerError
-from lawftune.service import get_service_manager
+from .service import ServiceManagerError
+from .service import get_service_manager
 
 
-PACKAGE_NAME = "lawftune"
+PACKAGE_NAME = "lawftrack"
 DEFAULT_UPDATE_TARGET = f"{PACKAGE_NAME}[server]"
 
 
@@ -116,19 +116,19 @@ def maybe_restart_gateway(*, assume_yes: bool = False) -> None:
         manager = get_service_manager()
     except ServiceManagerError:
         print("If the gateway is running, restart it to load the updated version:")
-        print("lawftune gateway restart")
+        print("lawftrack gateway restart")
         return
 
     if not manager.is_installed():
         print("If the gateway is running, restart it to load the updated version:")
-        print("lawftune gateway restart")
+        print("lawftrack gateway restart")
         return
 
     print("A gateway system service is installed.")
     should_restart = assume_yes or prompt_yes_no("Restart the gateway now?", default=False)
     if not should_restart:
         print("You can restart it later with:")
-        print("lawftune gateway restart")
+        print("lawftrack gateway restart")
         return
 
     try:
@@ -136,7 +136,7 @@ def maybe_restart_gateway(*, assume_yes: bool = False) -> None:
     except ServiceManagerError as exc:
         print(f"Could not restart the gateway automatically: {exc}")
         print("Restart it manually with:")
-        print("lawftune gateway restart")
+        print("lawftrack gateway restart")
 
 
 def run_update(source: str | None = None, dry_run: bool = False, assume_yes: bool = False) -> int:
@@ -147,6 +147,6 @@ def run_update(source: str | None = None, dry_run: bool = False, assume_yes: boo
 
     result = subprocess.run(command, check=False)
     if result.returncode == 0:
-        print("lawftune update completed.")
+        print("lawftrack update completed.")
         maybe_restart_gateway(assume_yes=assume_yes)
     return result.returncode

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { type KeyboardEvent, useEffect, useState } from "react";
 import AddRoundedIcon from "@mui/icons-material/AddRounded";
 import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
 import EditRoundedIcon from "@mui/icons-material/EditRounded";
@@ -82,6 +82,21 @@ function MessageBubble({
   const sortedEdits = [...edits].sort(
     (left, right) => left.token_index - right.token_index,
   );
+
+  function handleUserMessageEditorKeyDown(
+    event: KeyboardEvent<HTMLDivElement>,
+  ) {
+    if (
+      !isUser ||
+      event.key !== "Enter" ||
+      event.shiftKey ||
+      event.nativeEvent.isComposing
+    ) {
+      return;
+    }
+    event.preventDefault();
+    onSetEditing(false);
+  }
 
   function renderLineBreakableText(text: string, keyPrefix: string) {
     return text.split("\n").flatMap((part, partIndex, parts) => {
@@ -466,6 +481,7 @@ function MessageBubble({
               <TextField
                 value={message.content}
                 onChange={(event) => onChangeContent(event.target.value)}
+                onKeyDown={handleUserMessageEditorKeyDown}
                 multiline
                 minRows={message.role === "assistant" ? 6 : 4}
                 fullWidth

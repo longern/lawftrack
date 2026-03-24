@@ -969,6 +969,7 @@ function TrainingSection() {
         fineTuneFiles={fineTuneFiles}
         form={form}
         preferredBaseModel={preferredBaseModel}
+        onChangeMethodType={updateMethodType}
         onChangeForm={updateForm}
         onSelectDataset={handleSelectDataset}
         onSubmit={handleSubmitJob}
@@ -1330,6 +1331,7 @@ interface CreateTrainingJobDialogProps {
   fineTuneFiles: UploadedFile[];
   form: TrainingFormState;
   preferredBaseModel: string;
+  onChangeMethodType: (methodType: TrainingMethodType) => void;
   onChangeForm: <K extends keyof TrainingFormState>(
     key: K,
     value: TrainingFormState[K],
@@ -1350,6 +1352,7 @@ function CreateTrainingJobDialog({
   fineTuneFiles,
   form,
   preferredBaseModel,
+  onChangeMethodType,
   onChangeForm,
   onSelectDataset,
   onSubmit,
@@ -1417,7 +1420,7 @@ function CreateTrainingJobDialog({
                     label={t("Training method")}
                     value={form.methodType}
                     onChange={(event) =>
-                      updateMethodType(
+                      onChangeMethodType(
                         event.target.value as TrainingMethodType,
                       )
                     }

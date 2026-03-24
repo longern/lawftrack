@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-export type NavView = "overview" | "data" | "training" | "service";
+export type NavView = "overview" | "data" | "training" | "chat";
 
 export interface GpuStatus {
   index: number;
@@ -119,16 +119,6 @@ export interface DataSummaryItem {
   title: string;
   value: string;
   icon: SummaryIcon;
-}
-
-export interface ServiceRecord {
-  label: string;
-  value: string;
-}
-
-export interface CommandItem {
-  label: string;
-  value: string;
 }
 
 export interface ApiListResponse<T> {

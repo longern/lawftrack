@@ -1,8 +1,8 @@
 import DataObjectRoundedIcon from "@mui/icons-material/DataObjectRounded";
 import DashboardRoundedIcon from "@mui/icons-material/DashboardRounded";
+import ForumRoundedIcon from "@mui/icons-material/ForumRounded";
 import ModelTrainingRoundedIcon from "@mui/icons-material/ModelTrainingRounded";
-import SettingsEthernetRoundedIcon from "@mui/icons-material/SettingsEthernetRounded";
-import type { CommandItem, NavItem } from "../types/app";
+import type { NavItem } from "../types/app";
 
 export const DRAWER_WIDTH = 280;
 
@@ -18,18 +18,9 @@ export function getNavItems(t: Translate): NavItem[] {
       icon: <ModelTrainingRoundedIcon />,
     },
     {
-      id: "service",
-      label: t("Service"),
-      icon: <SettingsEthernetRoundedIcon />,
+      id: "chat",
+      label: t("Chat"),
+      icon: <ForumRoundedIcon />,
     },
-  ];
-}
-
-export function getServiceCommands(t: Translate): CommandItem[] {
-  return [
-    { label: t("Reinstall"), value: "lawftune install" },
-    { label: t("Run gateway in foreground"), value: "lawftune gateway" },
-    { label: t("Check gateway status"), value: "lawftune gateway status" },
-    { label: t("Start gateway service"), value: "lawftune gateway start" },
   ];
 }

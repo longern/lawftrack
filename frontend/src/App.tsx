@@ -23,10 +23,10 @@ import MenuRoundedIcon from "@mui/icons-material/MenuRounded";
 import AppSidebar from "./components/layout/AppSidebar";
 import DataWorkspace from "./components/data/DataWorkspace";
 import ErrorCard from "./components/shared/ErrorCard";
-import { DRAWER_WIDTH, getNavItems, getServiceCommands } from "./constants/app";
+import { DRAWER_WIDTH, getNavItems } from "./constants/app";
 import { useI18n } from "./i18n";
 import OverviewSection from "./sections/OverviewSection";
-import ServiceSection from "./sections/ServiceSection";
+import ChatSection from "./sections/ChatSection";
 import TrainingSection from "./sections/TrainingSection";
 import { createAppTheme } from "./theme/appTheme";
 import type {
@@ -36,7 +36,6 @@ import type {
   DatasetRecord,
   FineTuningJob,
   NavView,
-  ServiceRecord,
 } from "./types/app";
 
 const LAST_OPENED_DATASET_STORAGE_KEY = "lawftune:last-opened-dataset-id";
@@ -77,7 +76,6 @@ function App() {
   });
 
   const navItems = useMemo(() => getNavItems(t), [t]);
-  const serviceCommands = useMemo(() => getServiceCommands(t), [t]);
 
   useEffect(() => {
     setRecentDatasetId(
@@ -188,33 +186,6 @@ function App() {
     ],
     [apiKey, endpoint, gatewayStatus, healthLabel, t],
   );
-
-  const serviceRecords: ServiceRecord[] = [
-    {
-      label: t("Service name"),
-      value: snapshot.status?.name ?? t("Loading..."),
-    },
-    {
-      label: t("Gateway status"),
-      value: snapshot.status?.status ?? t("Loading..."),
-    },
-    {
-      label: t("Health status"),
-      value: snapshot.health?.status ?? t("Loading..."),
-    },
-    {
-      label: t("vLLM endpoint"),
-      value: snapshot.config?.vllm_endpoint ?? t("Loading..."),
-    },
-    {
-      label: "API Key",
-      value: snapshot.config?.has_api_key
-        ? t("Configured")
-        : loading
-          ? t("Loading...")
-          : t("Not set"),
-    },
-  ];
 
   function handleOpenDataset(dataset: DatasetRecord) {
     window.localStorage.setItem(LAST_OPENED_DATASET_STORAGE_KEY, dataset.id);
@@ -377,6 +348,27 @@ function App() {
                   />
                 </Box>
               </Box>
+            ) : activeView === "chat" ? (
+              <Box
+                sx={{
+                  height: dataViewportHeight,
+                  display: "flex",
+                  flexDirection: "column",
+                  minHeight: 0,
+                  overflow: "hidden",
+                  px: { xs: 2, md: 4 },
+                  py: { xs: 2, md: 4 },
+                }}
+              >
+                {error ? (
+                  <Box sx={{ pb: 2, flexShrink: 0 }}>
+                    <ErrorCard message={error} onClose={() => setError("")} />
+                  </Box>
+                ) : null}
+                <Box sx={{ flex: 1, minHeight: 0 }}>
+                  <ChatSection isMobile={isMobile} />
+                </Box>
+              </Box>
             ) : (
               <Container maxWidth="xl" sx={{ py: { xs: 2, md: 4 } }}>
                 <Box sx={{ display: "grid", gap: 2 }}>
@@ -395,12 +387,6 @@ function App() {
                     />
                   ) : null}
                   {activeView === "training" ? <TrainingSection /> : null}
-                  {activeView === "service" ? (
-                    <ServiceSection
-                      commands={serviceCommands}
-                      records={serviceRecords}
-                    />
-                  ) : null}
                 </Box>
               </Container>
             )}

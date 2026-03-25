@@ -67,6 +67,8 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [recentDatasetId, setRecentDatasetId] = useState<string | null>(null);
+  const [pendingDatasetId, setPendingDatasetId] = useState<string | null>(null);
+  const [pendingJobId, setPendingJobId] = useState<string | null>(null);
   const [datasets, setDatasets] = useState<DatasetRecord[]>([]);
   const [jobs, setJobs] = useState<FineTuningJob[]>([]);
   const [snapshot, setSnapshot] = useState<AppSnapshot>({
@@ -190,6 +192,15 @@ function App() {
   function handleOpenDataset(dataset: DatasetRecord) {
     window.localStorage.setItem(LAST_OPENED_DATASET_STORAGE_KEY, dataset.id);
     setRecentDatasetId(dataset.id);
+  }
+
+  function handleOverviewNavigate(
+    view: NavView,
+    options?: { datasetId?: string; jobId?: string },
+  ) {
+    setActiveView(view);
+    setPendingDatasetId(options?.datasetId ?? null);
+    setPendingJobId(options?.jobId ?? null);
   }
 
   return (
@@ -344,7 +355,9 @@ function App() {
                   <DataWorkspace
                     dataSummary={dataSummary}
                     isMobile={isMobile}
+                    initialDatasetId={pendingDatasetId}
                     onDatasetOpen={handleOpenDataset}
+                    onInitialDatasetHandled={() => setPendingDatasetId(null)}
                   />
                 </Box>
               </Box>
@@ -383,12 +396,15 @@ function App() {
                       status={snapshot.status}
                       health={snapshot.health}
                       config={snapshot.config}
-                      onNavigate={setActiveView}
+                      onNavigate={handleOverviewNavigate}
                     />
                   ) : null}
                   {activeView === "training" ? (
                     <Suspense fallback={<LinearProgress />}>
-                      <TrainingSection />
+                      <TrainingSection
+                        initialJobId={pendingJobId}
+                        onInitialJobHandled={() => setPendingJobId(null)}
+                      />
                     </Suspense>
                   ) : null}
                 </Box>

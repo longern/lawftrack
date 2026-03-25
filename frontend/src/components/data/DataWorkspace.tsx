@@ -34,7 +34,9 @@ import {
 interface DataWorkspaceProps {
   dataSummary: DataSummaryItem[];
   isMobile: boolean;
+  initialDatasetId?: string | null;
   onDatasetOpen?: (dataset: DatasetRecord) => void;
+  onInitialDatasetHandled?: () => void;
 }
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
@@ -147,7 +149,9 @@ function buildContinuationPreviewTokenization(
 function DataWorkspace({
   dataSummary,
   isMobile,
+  initialDatasetId,
   onDatasetOpen,
+  onInitialDatasetHandled,
 }: DataWorkspaceProps) {
   const { t } = useI18n();
   const [datasets, setDatasets] = useState<DatasetRecord[]>([]);
@@ -284,6 +288,25 @@ function DataWorkspace({
       setRecentDatasetIds([savedDatasetId]);
     }
   }, []);
+
+  useEffect(() => {
+    if (!initialDatasetId || activeDatasetId === initialDatasetId) {
+      return;
+    }
+    const initialDataset = datasets.find(
+      (dataset) => dataset.id === initialDatasetId,
+    );
+    if (!initialDataset) {
+      return;
+    }
+    openDataset(initialDataset);
+    onInitialDatasetHandled?.();
+  }, [
+    activeDatasetId,
+    datasets,
+    initialDatasetId,
+    onInitialDatasetHandled,
+  ]);
 
   useEffect(() => {
     if (!activeDataset) {

@@ -30,7 +30,10 @@ interface OverviewSectionProps {
   status: GatewayStatus | null;
   health: GatewayHealth | null;
   config: GatewayConfig | null;
-  onNavigate: (view: NavView) => void;
+  onNavigate: (
+    view: NavView,
+    options?: { datasetId?: string; jobId?: string },
+  ) => void;
 }
 
 function MetaList({
@@ -76,6 +79,44 @@ function OverviewSection({
 }: OverviewSectionProps) {
   const { t, formatDateTime, formatRelativeTime, formatDatasetCount } =
     useI18n();
+  const clickableCardProps = <T extends string>(
+    targetId: T | null | undefined,
+    onOpen: () => void,
+  ) =>
+    targetId
+      ? {
+          role: "button" as const,
+          tabIndex: 0,
+          onClick: onOpen,
+          onKeyDown: (event: React.KeyboardEvent) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              onOpen();
+            }
+          },
+          sx: {
+            p: 2.5,
+            borderRadius: 3,
+            cursor: "pointer",
+            textAlign: "left",
+            transition: "border-color 120ms ease, box-shadow 120ms ease",
+            "&:hover": {
+              borderColor: "primary.main",
+              boxShadow: "0 12px 28px rgba(15, 23, 42, 0.08)",
+            },
+            "&:focus-visible": {
+              outline: "2px solid",
+              outlineColor: "primary.main",
+              outlineOffset: 2,
+            },
+          },
+        }
+      : {
+          sx: {
+            p: 2.5,
+            borderRadius: 3,
+          },
+        };
 
   const formatMemory = (value?: number | null) =>
     value != null ? `${(value / 1024).toFixed(1)} GB` : t("Unknown");
@@ -284,7 +325,12 @@ function OverviewSection({
                   }
                 />
               </Stack>
-              <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 3 }}>
+              <Paper
+                variant="outlined"
+                {...clickableCardProps(recentDataset?.id, () =>
+                  onNavigate("data", { datasetId: recentDataset.id }),
+                )}
+              >
                 <Typography variant="subtitle1" fontWeight={700}>
                   {recentDataset?.name || t("No recently opened dataset")}
                 </Typography>
@@ -326,7 +372,12 @@ function OverviewSection({
                   label={recentJob?.status || t("No job yet")}
                 />
               </Stack>
-              <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 3 }}>
+              <Paper
+                variant="outlined"
+                {...clickableCardProps(recentJob?.id, () =>
+                  onNavigate("training", { jobId: recentJob.id }),
+                )}
+              >
                 <Typography variant="subtitle1" fontWeight={700}>
                   {recentJob?.id || t("No training jobs yet")}
                 </Typography>

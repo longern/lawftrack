@@ -79,6 +79,11 @@ type LossChartPoint = {
 const DEFAULT_SFT_N_EPOCHS = "3";
 const DEFAULT_LAWF_N_EPOCHS = "32";
 
+interface TrainingSectionProps {
+  initialJobId?: string | null;
+  onInitialJobHandled?: () => void;
+}
+
 interface TrainingFormState {
   model: string;
   methodType: TrainingMethodType;
@@ -169,7 +174,10 @@ function formatDateTime(timestamp?: number | null): string {
   }).format(new Date(timestamp * 1000));
 }
 
-function TrainingSection() {
+function TrainingSection({
+  initialJobId,
+  onInitialJobHandled,
+}: TrainingSectionProps) {
   const { t, formatTaskCount } = useI18n();
   const [preferredBaseModel, setPreferredBaseModel] =
     useState(FALLBACK_BASE_MODEL);
@@ -246,6 +254,17 @@ function TrainingSection() {
     }
     void loadJobArtifacts(selectedJobId);
   }, [selectedJobId]);
+
+  useEffect(() => {
+    if (!initialJobId || selectedJobId === initialJobId) {
+      return;
+    }
+    if (!jobs.some((job) => job.id === initialJobId)) {
+      return;
+    }
+    setSelectedJobId(initialJobId);
+    onInitialJobHandled?.();
+  }, [initialJobId, jobs, onInitialJobHandled, selectedJobId]);
 
   useEffect(() => {
     if (createDialogOpen && !selectedDatasetId && datasets.length > 0) {

@@ -19,10 +19,14 @@ from ..train.algorithms import normalize_training_method
 
 TERMINAL_JOB_STATUSES = {"cancelled", "failed", "succeeded"}
 NUMERIC_METRIC_FIELDS = {
+    "eval_loss",
     "loss",
     "train_loss",
+    "train_mean_token_accuracy",
     "valid_loss",
+    "valid_mean_token_accuracy",
     "full_valid_loss",
+    "full_valid_mean_token_accuracy",
     "anchor_probs",
     "learning_rate",
     "epoch",
@@ -30,6 +34,7 @@ NUMERIC_METRIC_FIELDS = {
     "global_step",
 }
 METRIC_ALIAS_MAP = {
+    "eval_loss": "valid_loss",
     "loss": "train_loss",
     "global_step": "step",
 }
@@ -220,7 +225,9 @@ class FineTuningJobStore:
     def list_job_checkpoints(self, job_id: str) -> list[dict[str, Any]]:
         job = self.get_job(job_id)
         checkpoints: list[dict[str, Any]] = []
-        metrics_points = self._extract_metric_points(self.list_job_events(job_id))
+        metrics_points = self._read_structured_metric_points(job_id)
+        if not metrics_points:
+            metrics_points = self._extract_metric_points(self.list_job_events(job_id))
         for index, metrics in enumerate(metrics_points):
             step_number = int(metrics.get("step") or (index + 1))
             checkpoints.append(
@@ -344,14 +351,11 @@ class FineTuningJobStore:
             if isinstance(parsed, dict):
                 payload = parsed
 
-        metrics: dict[str, float | int] = {}
         if payload is not None:
-            for key, value in payload.items():
-                if key not in NUMERIC_METRIC_FIELDS or not isinstance(value, (int, float)):
-                    continue
-                normalized_key = METRIC_ALIAS_MAP.get(key, key)
-                metrics[normalized_key] = int(value) if normalized_key == "step" else float(value)
-        else:
+            return self._normalize_metrics_payload(payload)
+
+        metrics: dict[str, float | int] = {}
+        if payload is None:
             for raw_key, raw_value in INLINE_METRIC_PATTERN.findall(text):
                 key = raw_key.strip().lower().replace(" ", "_")
                 if key not in NUMERIC_METRIC_FIELDS:
@@ -361,6 +365,56 @@ class FineTuningJobStore:
                 metrics[normalized_key] = int(value) if normalized_key == "step" else value
 
         return metrics or None
+
+    def _normalize_metrics_payload(
+        self,
+        payload: dict[str, Any],
+    ) -> dict[str, float | int] | None:
+        metrics: dict[str, float | int] = {}
+        for key, value in payload.items():
+            if key not in NUMERIC_METRIC_FIELDS or not isinstance(value, (int, float)):
+                continue
+            normalized_key = METRIC_ALIAS_MAP.get(key, key)
+            metrics[normalized_key] = int(value) if normalized_key == "step" else float(value)
+        return metrics or None
+
+    def _read_structured_metric_points(self, job_id: str) -> list[dict[str, Any]]:
+        trainer_state_path = (
+            self.jobs_dir / job_id / "artifacts" / "model" / "trainer_state.json"
+        )
+        if not trainer_state_path.is_file():
+            return []
+
+        try:
+            payload = json.loads(trainer_state_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            return []
+
+        log_history = payload.get("log_history")
+        if not isinstance(log_history, list):
+            return []
+
+        points: list[dict[str, Any]] = []
+        for entry in log_history:
+            if not isinstance(entry, dict):
+                continue
+            raw_step = entry.get("step")
+            if not isinstance(raw_step, (int, float)):
+                continue
+
+            # `trainer_state.json` commonly includes a final aggregate `train_loss`
+            # summary; only per-step `loss` / validation metrics should appear on the curve.
+            metrics = self._normalize_metrics_payload(entry)
+            if metrics is None or (
+                "loss" not in entry
+                and "eval_loss" not in entry
+                and "valid_loss" not in entry
+                and "full_valid_loss" not in entry
+            ):
+                continue
+            metrics["step"] = int(raw_step)
+            points.append(metrics)
+        return points
 
     def _extract_metric_points(self, events: list[dict[str, Any]]) -> list[dict[str, Any]]:
         points: list[dict[str, Any]] = []

@@ -187,5 +187,8 @@ def run_lawf_training(job: dict[str, Any], config_dir: Path) -> None:
             peft_config=lora_config,
         )
         trainer.train()
+        save_state = getattr(trainer, "save_state", None)
+        if callable(save_state):
+            save_state()
         trainer.save_model(str(output_dir))
         tokenizer.save_pretrained(str(output_dir))

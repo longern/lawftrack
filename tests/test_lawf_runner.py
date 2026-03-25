@@ -100,11 +100,15 @@ class LAwFRunnerTests(unittest.TestCase):
             def __init__(self, **kwargs) -> None:
                 self.kwargs = kwargs
                 self.trained = False
+                self.state_saved = False
                 self.saved_model_paths: list[str] = []
                 FakeTrainer.last_instance = self
 
             def train(self) -> None:
                 self.trained = True
+
+            def save_state(self) -> None:
+                self.state_saved = True
 
             def save_model(self, path: str) -> None:
                 self.saved_model_paths.append(path)
@@ -180,6 +184,7 @@ class LAwFRunnerTests(unittest.TestCase):
             self.assertEqual(trainer.kwargs["train_dataset"], train_records)
             self.assertEqual(trainer.kwargs["eval_dataset"], valid_records)
             self.assertTrue(trainer.trained)
+            self.assertTrue(trainer.state_saved)
             self.assertEqual(
                 trainer.kwargs["peft_config"].kwargs["target_modules"],
                 "all-linear",

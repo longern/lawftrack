@@ -105,6 +105,70 @@ class FineTuningJobStoreTests(unittest.TestCase):
             self.assertIn("===== stderr =====", download_text)
             self.assertIn("warn-1\nwarn-2\nwarn-3", download_text)
 
+    def test_list_job_checkpoints_prefers_structured_trainer_state_metrics(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            store = FineTuningJobStore(Path(temp_dir))
+            job_dir = store.jobs_dir / "ftjob-demo"
+            model_dir = job_dir / "artifacts" / "model"
+            model_dir.mkdir(parents=True, exist_ok=True)
+            (job_dir / "job.json").write_text(
+                json.dumps(
+                    {
+                        "id": "ftjob-demo",
+                        "object": "fine_tuning.job",
+                        "created_at": 1000,
+                        "error": None,
+                        "estimated_finish": None,
+                        "fine_tuned_model": "demo-adapter",
+                        "finished_at": None,
+                        "hyperparameters": {},
+                        "integrations": [],
+                        "metadata": {},
+                        "method": {"type": "lawf"},
+                        "model": "demo-model",
+                        "organization_id": "org-lawftrack",
+                        "result_files": [],
+                        "seed": None,
+                        "status": "succeeded",
+                        "trained_tokens": None,
+                        "training_file": "file-training",
+                        "validation_file": None,
+                        "suffix": None,
+                        "lora_adapter": None,
+                        "process": {"pid": None, "started_at": 1000, "exit_code": 0},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (model_dir / "trainer_state.json").write_text(
+                json.dumps(
+                    {
+                        "log_history": [
+                            {"loss": 1.25, "learning_rate": 5e-5, "step": 1},
+                            {"eval_loss": 0.82, "step": 2},
+                            {"train_loss": 0.41, "epoch": 3.0, "step": 2},
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (job_dir / "stdout.log").write_text(
+                "step: 1 loss: 9.99\n",
+                encoding="utf-8",
+            )
+
+            checkpoints = store.list_job_checkpoints("ftjob-demo")
+
+            self.assertEqual(len(checkpoints), 2)
+            self.assertEqual(checkpoints[0]["metrics"]["train_loss"], 1.25)
+            self.assertEqual(checkpoints[0]["metrics"]["step"], 1)
+            self.assertEqual(checkpoints[1]["metrics"]["valid_loss"], 0.82)
+            self.assertEqual(checkpoints[1]["step_number"], 2)
+            self.assertEqual(
+                checkpoints[1]["fine_tuned_model_checkpoint"],
+                "demo-adapter",
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

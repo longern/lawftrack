@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, lazy, useEffect, useMemo, useState } from "react";
 import {
   AppBar,
   BottomNavigation,
@@ -27,7 +27,6 @@ import { DRAWER_WIDTH, getNavItems } from "./constants/app";
 import { useI18n } from "./i18n";
 import OverviewSection from "./sections/OverviewSection";
 import ChatSection from "./sections/ChatSection";
-import TrainingSection from "./sections/TrainingSection";
 import { createAppTheme } from "./theme/appTheme";
 import type {
   ApiListResponse,
@@ -39,6 +38,7 @@ import type {
 } from "./types/app";
 
 const LAST_OPENED_DATASET_STORAGE_KEY = "lawftrack:last-opened-dataset-id";
+const TrainingSection = lazy(() => import("./sections/TrainingSection"));
 
 async function fetchJson<T>(url: string): Promise<T> {
   const response = await fetch(url);
@@ -386,7 +386,11 @@ function App() {
                       onNavigate={setActiveView}
                     />
                   ) : null}
-                  {activeView === "training" ? <TrainingSection /> : null}
+                  {activeView === "training" ? (
+                    <Suspense fallback={<LinearProgress />}>
+                      <TrainingSection />
+                    </Suspense>
+                  ) : null}
                 </Box>
               </Container>
             )}

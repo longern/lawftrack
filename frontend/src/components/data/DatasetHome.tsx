@@ -318,7 +318,7 @@ export function DatasetHome({
                       </ListItemIcon>
                       <ListItemText
                         primary={dataset.name}
-                        secondary={`${dataset.base_model ?? t("No base model")} ? ${formatDatasetCount(dataset.sample_count)}`}
+                        secondary={`${dataset.base_model ?? t("No base model")} · ${formatDatasetCount(dataset.sample_count)}`}
                       />
                       <IconButton
                         edge="end"

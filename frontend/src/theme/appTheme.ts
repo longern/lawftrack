@@ -26,40 +26,11 @@ export function createAppTheme(mode: PaletteMode) {
     },
     typography: {
       fontFamily: '"IBM Plex Sans", "Helvetica Neue", Arial, sans-serif',
-      h3: {
-        fontWeight: 700,
-        letterSpacing: -0.8,
-      },
-      h5: {
-        fontWeight: 700,
-        letterSpacing: -0.4,
-      },
+      h3: { fontWeight: 700, letterSpacing: -0.8 },
+      h5: { fontWeight: 700, letterSpacing: -0.4 },
     },
     components: {
-      MuiButton: {
-        styleOverrides: {
-          root: {
-            textTransform: "none",
-          },
-        },
-      },
-      MuiCard: {
-        styleOverrides: {
-          root: {
-            boxShadow: isDark
-              ? "0 18px 40px rgba(2, 8, 23, 0.38)"
-              : "0 20px 45px rgba(15, 23, 42, 0.08)",
-            backgroundImage: "none",
-          },
-        },
-      },
-      MuiPaper: {
-        styleOverrides: {
-          root: {
-            backgroundImage: "none",
-          },
-        },
-      },
+      MuiButton: { styleOverrides: { root: { textTransform: "none" } } },
       MuiDrawer: {
         styleOverrides: {
           paper: {

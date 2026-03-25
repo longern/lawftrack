@@ -235,6 +235,8 @@ class LAwFTrainer(SFTTrainer):
 
         if is_model_str:
             kwargs["data_collator"].model = self.model
+        self._anchor_prob_sum = 0.0
+        self._anchor_prob_count = 0
 
     def _processing_class(self):
         return getattr(self, "processing_class", None) or getattr(self, "tokenizer")
@@ -254,6 +256,14 @@ class LAwFTrainer(SFTTrainer):
 
     def _prepare_dataset(self, dataset, *args, **kwargs):
         return dataset
+
+    def log(self, logs: dict[str, float], *args, **kwargs) -> None:
+        if self._anchor_prob_count > 0:
+            logs = dict(logs)
+            logs["anchor_probs"] = self._anchor_prob_sum / self._anchor_prob_count
+            self._anchor_prob_sum = 0.0
+            self._anchor_prob_count = 0
+        super().log(logs, *args, **kwargs)
 
     def compute_loss(
         self, model, inputs, num_items_in_batch=None, return_outputs=False
@@ -301,24 +311,7 @@ class LAwFTrainer(SFTTrainer):
         student_probs = F.softmax(student_logits, dim=-1)
         anchor_probs = student_probs[anchors == 1, completion_ids[anchors == 1]]
         if anchor_probs.numel() > 0:
-            anchor_token_ids = completion_ids[anchors == 1]
-            anchor_tokens = self._processing_class().batch_decode(
-                anchor_token_ids.unsqueeze(-1)
-            )
-            anchor_token_probs = dict(
-                zip(anchor_tokens, anchor_probs.detach().cpu().numpy().tolist())
-            )
-        else:
-            anchor_token_probs = {}
-
-        self.log(
-            {
-                "loss": loss.item(),
-                "anchor_probs": anchor_probs.mean().item()
-                if anchor_probs.numel() > 0
-                else 0.0,
-                **anchor_token_probs,
-            }
-        )
+            self._anchor_prob_sum += float(anchor_probs.detach().sum().item())
+            self._anchor_prob_count += int(anchor_probs.numel())
 
         return (loss, outputs) if return_outputs else loss

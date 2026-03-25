@@ -1,5 +1,4 @@
 import {
-  type ChangeEvent,
   type FormEvent,
   type ReactNode,
   useEffect,
@@ -37,10 +36,21 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
+import {
+  CartesianGrid,
+  Legend,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import type { NameType, ValueType } from "recharts/types/component/DefaultTooltipContent";
 import AddRoundedIcon from "@mui/icons-material/AddRounded";
 import AutorenewRoundedIcon from "@mui/icons-material/AutorenewRounded";
+import ArrowBackRoundedIcon from "@mui/icons-material/ArrowBackRounded";
 import CancelRoundedIcon from "@mui/icons-material/CancelRounded";
-import CloudUploadRoundedIcon from "@mui/icons-material/CloudUploadRounded";
 import ExpandMoreRoundedIcon from "@mui/icons-material/ExpandMoreRounded";
 import type {
   ApiListResponse,
@@ -51,7 +61,6 @@ import type {
   FineTuningJob,
   FineTuningJobLogs,
   FineTuningMethodConfig,
-  UploadedFile,
 } from "../types/app";
 import {
   FALLBACK_BASE_MODEL,
@@ -61,14 +70,18 @@ import {
 import { useI18n } from "../i18n";
 
 type TrainingMethodType = "sft" | "lawf";
+type LossChartPoint = {
+  step: number;
+  trainLoss: number | null;
+  validLoss: number | null;
+};
+
 const DEFAULT_SFT_N_EPOCHS = "3";
 const DEFAULT_LAWF_N_EPOCHS = "32";
 
 interface TrainingFormState {
   model: string;
   methodType: TrainingMethodType;
-  trainingFileId: string;
-  validationFileId: string;
   suffix: string;
   seed: string;
   nEpochs: string;
@@ -84,12 +97,10 @@ interface TrainingFormState {
 function buildDefaultForm(model: string): TrainingFormState {
   return {
     model,
-    methodType: "sft",
-    trainingFileId: "",
-    validationFileId: "",
+    methodType: "lawf",
     suffix: "",
     seed: "",
-    nEpochs: DEFAULT_SFT_N_EPOCHS,
+    nEpochs: DEFAULT_LAWF_N_EPOCHS,
     batchSize: "1",
     learningRate: "0.00005",
     loggingSteps: "1",
@@ -158,16 +169,6 @@ function formatDateTime(timestamp?: number | null): string {
   }).format(new Date(timestamp * 1000));
 }
 
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) {
-    return `${bytes} B`;
-  }
-  if (bytes < 1024 * 1024) {
-    return `${(bytes / 1024).toFixed(1)} KB`;
-  }
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
 function TrainingSection() {
   const { t, formatTaskCount } = useI18n();
   const [preferredBaseModel, setPreferredBaseModel] =
@@ -177,7 +178,6 @@ function TrainingSection() {
   );
   const [datasets, setDatasets] = useState<DatasetRecord[]>([]);
   const [selectedDatasetId, setSelectedDatasetId] = useState("");
-  const [files, setFiles] = useState<UploadedFile[]>([]);
   const [jobs, setJobs] = useState<FineTuningJob[]>([]);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [jobEvents, setJobEvents] = useState<FineTuningJobEvent[]>([]);
@@ -187,24 +187,17 @@ function TrainingSection() {
   const [jobLogs, setJobLogs] = useState<FineTuningJobLogs | null>(null);
   const [jobDetailTab, setJobDetailTab] = useState<"events" | "logs">("events");
   const [pageError, setPageError] = useState("");
-  const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [loadingJobArtifacts, setLoadingJobArtifacts] = useState(false);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
-  const uploadInputRef = useRef<HTMLInputElement | null>(null);
   const preferredBaseModelRef = useRef(FALLBACK_BASE_MODEL);
-
-  const fineTuneFiles = useMemo(
-    () => files.filter((file) => file.purpose === "fine-tune"),
-    [files],
-  );
   const selectedDataset = useMemo(
     () => datasets.find((dataset) => dataset.id === selectedDatasetId) ?? null,
     [datasets, selectedDatasetId],
   );
   const selectedJob =
-    jobs.find((job) => job.id === selectedJobId) ?? jobs[0] ?? null;
+    jobs.find((job) => job.id === selectedJobId) ?? null;
 
   useEffect(() => {
     void refreshAll();
@@ -239,12 +232,8 @@ function TrainingSection() {
   }, [preferredBaseModel, selectedDataset]);
 
   useEffect(() => {
-    if (!selectedJobId && jobs.length > 0) {
-      setSelectedJobId(jobs[0].id);
-      return;
-    }
     if (selectedJobId && !jobs.some((job) => job.id === selectedJobId)) {
-      setSelectedJobId(jobs[0]?.id ?? null);
+      setSelectedJobId(null);
     }
   }, [jobs, selectedJobId]);
 
@@ -258,45 +247,22 @@ function TrainingSection() {
     void loadJobArtifacts(selectedJobId);
   }, [selectedJobId]);
 
-  async function loadFiles(showSpinner = true) {
-    if (showSpinner) {
-      setRefreshing(true);
+  useEffect(() => {
+    if (createDialogOpen && !selectedDatasetId && datasets.length > 0) {
+      handleSelectDataset(datasets[0].id);
     }
-    try {
-      const payload =
-        await fetchJson<ApiListResponse<UploadedFile>>("/api/files");
-      setFiles(payload.data);
-      setPageError("");
-    } catch (error) {
-      setPageError(
-        error instanceof Error ? error.message : t("Failed to load files"),
-      );
-    } finally {
-      if (showSpinner) {
-        setRefreshing(false);
-      }
-    }
-  }
+  }, [createDialogOpen, datasets, selectedDatasetId]);
 
-  async function loadDatasets(showSpinner = true) {
-    if (showSpinner) {
-      setRefreshing(true);
+  useEffect(() => {
+    if (!selectedDatasetId || datasets.some((dataset) => dataset.id === selectedDatasetId)) {
+      return;
     }
-    try {
-      const payload =
-        await fetchJson<ApiListResponse<DatasetRecord>>("/api/datasets");
-      setDatasets(payload.data);
-      setPageError("");
-    } catch (error) {
-      setPageError(
-        error instanceof Error ? error.message : t("Failed to load datasets"),
-      );
-    } finally {
-      if (showSpinner) {
-        setRefreshing(false);
-      }
-    }
-  }
+    setSelectedDatasetId("");
+    setForm((current) => ({
+      ...current,
+      model: preferredBaseModel,
+    }));
+  }, [datasets, preferredBaseModel, selectedDatasetId]);
 
   async function loadJobs(showSpinner = true) {
     if (showSpinner) {
@@ -368,13 +334,11 @@ function TrainingSection() {
   async function refreshAll() {
     setRefreshing(true);
     try {
-      const [datasetsPayload, filesPayload, jobsPayload] = await Promise.all([
+      const [datasetsPayload, jobsPayload] = await Promise.all([
         fetchJson<ApiListResponse<DatasetRecord>>("/api/datasets"),
-        fetchJson<ApiListResponse<UploadedFile>>("/api/files"),
         fetchJson<ApiListResponse<FineTuningJob>>("/api/fine_tuning/jobs"),
       ]);
       setDatasets(datasetsPayload.data);
-      setFiles(filesPayload.data);
       setJobs(jobsPayload.data);
       setPageError("");
     } catch (error) {
@@ -427,71 +391,31 @@ function TrainingSection() {
     }));
   }
 
-  async function handleUploadFile(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    if (!file) {
-      return;
-    }
-
-    setUploading(true);
-    try {
-      const formData = new FormData();
-      formData.append("purpose", "fine-tune");
-      formData.append("file", file);
-      const createdFile = await fetchJson<UploadedFile>("/api/files", {
-        method: "POST",
-        body: formData,
-      });
-      await Promise.all([loadFiles(false), loadDatasets(false)]);
-      setForm((current) => ({
-        ...current,
-        trainingFileId: current.trainingFileId || createdFile.id,
-      }));
-      setPageError("");
-    } catch (error) {
-      setPageError(
-        error instanceof Error ? error.message : t("Failed to upload file"),
-      );
-    } finally {
-      setUploading(false);
-      event.target.value = "";
-    }
-  }
-
   async function handleSubmitJob(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const method = buildMethodConfig(form);
-    if (!selectedDatasetId && !form.trainingFileId) {
-      setPageError(t("Select a training file first."));
+    if (!selectedDatasetId) {
+      setPageError(t("Select a dataset first."));
       return;
     }
 
     setSubmitting(true);
     try {
-      let trainingFileId = form.trainingFileId;
-      if (selectedDatasetId) {
-        const exported = await fetchJson<DatasetTrainingFileExport>(
-          `/api/datasets/${selectedDatasetId}/training_file`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ method }),
-          },
-        );
-        trainingFileId = exported.file.id;
-        setForm((current) => ({ ...current, trainingFileId }));
-        await loadFiles(false);
-      }
+      const exported = await fetchJson<DatasetTrainingFileExport>(
+        `/api/datasets/${selectedDatasetId}/training_file`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ method }),
+        },
+      );
 
       const payload = {
         model: form.model,
-        training_file: trainingFileId,
-        validation_file: form.validationFileId || undefined,
+        training_file: exported.file.id,
         suffix: form.suffix || undefined,
         seed: form.seed ? Number(form.seed) : undefined,
-        metadata: selectedDatasetId
-          ? { dataset_id: selectedDatasetId }
-          : undefined,
+        metadata: { dataset_id: selectedDatasetId },
         integrations: form.tensorboard ? [{ type: "tensorboard" }] : [],
         method,
       };
@@ -541,291 +465,50 @@ function TrainingSection() {
         </Grid>
       ) : null}
 
-      <Grid size={{ xs: 12 }}>
-        <Card>
-          <CardContent>
-            <Stack
-              direction={{ xs: "column", md: "row" }}
-              spacing={2}
-              alignItems={{ xs: "flex-start", md: "center" }}
-              justifyContent="space-between"
-            >
-              <Box>
-                <Typography variant="h6">{t("Training console")}</Typography>
-              </Box>
-              <Stack direction="row" spacing={1.5}>
-                <Button
-                  size="small"
-                  startIcon={<AutorenewRoundedIcon />}
-                  onClick={() => void refreshAll()}
-                  disabled={refreshing}
+      {selectedJob ? (
+        <Grid size={{ xs: 12 }}>
+          <Card>
+            <CardContent>
+              <Stack spacing={2}>
+                <Stack
+                  direction={{ xs: "column", md: "row" }}
+                  spacing={2}
+                  alignItems={{ xs: "flex-start", md: "center" }}
+                  justifyContent="space-between"
                 >
-                  {t("Refresh")}
-                </Button>
-                <Button
-                  variant="contained"
-                  startIcon={<AddRoundedIcon />}
-                  onClick={() => setCreateDialogOpen(true)}
-                >
-                  {t("Create training job")}
-                </Button>
-              </Stack>
-            </Stack>
-          </CardContent>
-        </Card>
-      </Grid>
-
-      <Grid size={{ xs: 12, xl: 5 }}>
-        <Card sx={{ height: "100%" }}>
-          <CardContent>
-            <Stack spacing={2.5}>
-              <Stack
-                direction="row"
-                alignItems="center"
-                justifyContent="space-between"
-              >
-                <Box>
-                  <Typography variant="h6">{t("Training files")}</Typography>
-                </Box>
-                <Button
-                  size="small"
-                  startIcon={<CloudUploadRoundedIcon />}
-                  onClick={() => uploadInputRef.current?.click()}
-                  disabled={uploading}
-                >
-                  {uploading ? t("Uploading...") : t("Upload")}
-                </Button>
-                <input
-                  ref={uploadInputRef}
-                  hidden
-                  type="file"
-                  onChange={handleUploadFile}
-                />
-              </Stack>
-
-              {fineTuneFiles.length === 0 ? (
-                <Paper
-                  variant="outlined"
-                  sx={{ p: 3, textAlign: "center", color: "text.secondary" }}
-                >
-                  {t(
-                    "No training files yet. Upload a JSON/JSONL/CSV/Parquet file first.",
-                  )}
-                </Paper>
-              ) : (
-                <Stack spacing={1.5}>
-                  {fineTuneFiles.map((file) => (
-                    <Paper
-                      key={file.id}
-                      variant="outlined"
-                      sx={{ p: 2, borderRadius: 3 }}
+                  <Typography variant="h6">
+                    {t("Training job details")}
+                  </Typography>
+                  <Stack direction="row" spacing={1.5}>
+                    <Button
+                      size="small"
+                      startIcon={<ArrowBackRoundedIcon />}
+                      onClick={() => setSelectedJobId(null)}
                     >
-                      <Stack spacing={1.5}>
-                        <Stack
-                          direction="row"
-                          justifyContent="space-between"
-                          spacing={2}
-                        >
-                          <Box sx={{ minWidth: 0 }}>
-                            <Typography
-                              variant="subtitle2"
-                              fontWeight={700}
-                              noWrap
-                            >
-                              {file.filename}
-                            </Typography>
-                            <Typography
-                              variant="caption"
-                              color="text.secondary"
-                            >
-                              {file.id}
-                            </Typography>
-                          </Box>
-                          <Chip size="small" label={file.status} />
-                        </Stack>
-                        <Stack direction="row" spacing={1.5} flexWrap="wrap">
-                          <Typography variant="caption" color="text.secondary">
-                            {formatBytes(file.bytes)}
-                          </Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            {formatDateTime(file.created_at)}
-                          </Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            {file.purpose}
-                          </Typography>
-                        </Stack>
-                        <Stack direction="row" spacing={1}>
-                          <Button
-                            size="small"
-                            variant={
-                              form.trainingFileId === file.id
-                                ? "contained"
-                                : "outlined"
-                            }
-                            onClick={() =>
-                              updateForm("trainingFileId", file.id)
-                            }
-                          >
-                            {t("Use as training file")}
-                          </Button>
-                          <Button
-                            size="small"
-                            variant={
-                              form.validationFileId === file.id
-                                ? "contained"
-                                : "outlined"
-                            }
-                            onClick={() =>
-                              updateForm("validationFileId", file.id)
-                            }
-                          >
-                            {t("Use as validation file")}
-                          </Button>
-                        </Stack>
-                      </Stack>
-                    </Paper>
-                  ))}
-                </Stack>
-              )}
-            </Stack>
-          </CardContent>
-        </Card>
-      </Grid>
-
-      <Grid size={{ xs: 12, xl: 7 }}>
-        <Card sx={{ height: "100%" }}>
-          <CardContent>
-            <Stack spacing={2.5}>
-              <Stack
-                direction="row"
-                alignItems="center"
-                justifyContent="space-between"
-              >
-                <Box>
-                  <Typography variant="h6">{t("Training queue")}</Typography>
-                </Box>
-                <Chip
-                  size="small"
-                  label={formatTaskCount(jobs.length)}
-                  color="primary"
-                  variant="outlined"
-                />
-              </Stack>
-
-              {jobs.length === 0 ? (
-                <Paper
-                  variant="outlined"
-                  sx={{ p: 3, textAlign: "center", color: "text.secondary" }}
-                >
-                  {t(
-                    'No training jobs yet. Click "Create training job" to get started.',
-                  )}
-                </Paper>
-              ) : (
-                <Stack spacing={1.5}>
-                  {jobs.map((job) => (
-                    <Paper
-                      key={job.id}
-                      variant="outlined"
-                      onClick={() => setSelectedJobId(job.id)}
-                      sx={{
-                        p: 2,
-                        borderRadius: 3,
-                        cursor: "pointer",
-                        borderColor:
-                          selectedJob?.id === job.id
-                            ? "primary.main"
-                            : "rgba(15, 23, 42, 0.12)",
-                      }}
+                      {t("Back to training queue")}
+                    </Button>
+                    <Button
+                      size="small"
+                      startIcon={<AutorenewRoundedIcon />}
+                      onClick={() => void refreshAll()}
+                      disabled={refreshing}
                     >
-                      <Stack spacing={1.25}>
-                        <Stack
-                          direction="row"
-                          justifyContent="space-between"
-                          spacing={2}
-                        >
-                          <Box sx={{ minWidth: 0 }}>
-                            <Typography
-                              variant="subtitle2"
-                              fontWeight={700}
-                              noWrap
-                            >
-                              {job.model}
-                            </Typography>
-                            <Typography
-                              variant="caption"
-                              color="text.secondary"
-                            >
-                              {job.id}
-                            </Typography>
-                          </Box>
-                          <Chip
-                            size="small"
-                            color={
-                              job.status === "running"
-                                ? "info"
-                                : job.status === "succeeded"
-                                  ? "success"
-                                  : job.status === "failed"
-                                    ? "error"
-                                    : "default"
-                            }
-                            label={job.status}
-                          />
-                        </Stack>
-                        <Stack direction="row" spacing={1.5} flexWrap="wrap">
-                          <Typography variant="caption" color="text.secondary">
-                            {job.method?.type ?? "sft"}
-                          </Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            {formatDateTime(job.created_at)}
-                          </Typography>
-                          {job.fine_tuned_model ? (
-                            <Typography variant="caption" color="success.main">
-                              {job.fine_tuned_model}
-                            </Typography>
-                          ) : null}
-                        </Stack>
-                      </Stack>
-                    </Paper>
-                  ))}
+                      {t("Refresh")}
+                    </Button>
+                    {selectedJob.status === "running" ? (
+                      <Button
+                        size="small"
+                        color="error"
+                        variant="outlined"
+                        startIcon={<CancelRoundedIcon />}
+                        onClick={() => void handleCancelJob(selectedJob.id)}
+                      >
+                        {t("Cancel job")}
+                      </Button>
+                    ) : null}
+                  </Stack>
                 </Stack>
-              )}
-            </Stack>
-          </CardContent>
-        </Card>
-      </Grid>
 
-      <Grid size={{ xs: 12 }}>
-        <Card>
-          <CardContent>
-            <Stack spacing={2}>
-              <Stack
-                direction="row"
-                alignItems="center"
-                justifyContent="space-between"
-              >
-                <Typography variant="h6">{t("Job details")}</Typography>
-                {selectedJob?.status === "running" ? (
-                  <Button
-                    color="error"
-                    variant="outlined"
-                    startIcon={<CancelRoundedIcon />}
-                    onClick={() => void handleCancelJob(selectedJob.id)}
-                  >
-                    {t("Cancel job")}
-                  </Button>
-                ) : null}
-              </Stack>
-
-              {!selectedJob ? (
-                <Paper
-                  variant="outlined"
-                  sx={{ p: 3, textAlign: "center", color: "text.secondary" }}
-                >
-                  {t("Select a training job to view details.")}
-                </Paper>
-              ) : (
                 <Grid container spacing={2}>
                   <Grid size={{ xs: 12, md: 6, xl: 3 }}>
                     <DetailCard title={t("Basic info")}>
@@ -851,10 +534,7 @@ function TrainingSection() {
                         label={t("Validation file")}
                         value={selectedJob.validation_file ?? "-"}
                       />
-                      <DetailRow
-                        label="Suffix"
-                        value={selectedJob.suffix ?? "-"}
-                      />
+                      <DetailRow label="Suffix" value={selectedJob.suffix ?? "-"} />
                       <DetailRow
                         label="Seed"
                         value={selectedJob.seed?.toString() ?? "-"}
@@ -958,15 +638,153 @@ function TrainingSection() {
                     </DetailCard>
                   </Grid>
                 </Grid>
-              )}
-            </Stack>
-          </CardContent>
-        </Card>
-      </Grid>
+              </Stack>
+            </CardContent>
+          </Card>
+        </Grid>
+      ) : (
+        <>
+          <Grid size={{ xs: 12 }}>
+            <Card>
+              <CardContent>
+                <Stack
+                  direction={{ xs: "column", md: "row" }}
+                  spacing={2}
+                  alignItems={{ xs: "flex-start", md: "center" }}
+                  justifyContent="space-between"
+                >
+                  <Typography variant="h6">{t("Training console")}</Typography>
+                  <Stack direction="row" spacing={1.5}>
+                    <Button
+                      size="small"
+                      startIcon={<AutorenewRoundedIcon />}
+                      onClick={() => void refreshAll()}
+                      disabled={refreshing}
+                    >
+                      {t("Refresh")}
+                    </Button>
+                    <Button
+                      variant="contained"
+                      startIcon={<AddRoundedIcon />}
+                      onClick={() => setCreateDialogOpen(true)}
+                    >
+                      {t("Create training job")}
+                    </Button>
+                  </Stack>
+                </Stack>
+              </CardContent>
+            </Card>
+          </Grid>
+
+          <Grid size={{ xs: 12 }}>
+            <Card>
+              <CardContent>
+                <Stack spacing={2.5}>
+                  <Stack
+                    direction="row"
+                    alignItems="center"
+                    justifyContent="space-between"
+                  >
+                    <Box>
+                      <Typography variant="h6">{t("Training queue")}</Typography>
+                    </Box>
+                    <Chip
+                      size="small"
+                      label={formatTaskCount(jobs.length)}
+                      color="primary"
+                      variant="outlined"
+                    />
+                  </Stack>
+
+                  {jobs.length === 0 ? (
+                    <Paper
+                      variant="outlined"
+                      sx={{ p: 3, textAlign: "center", color: "text.secondary" }}
+                    >
+                      {t(
+                        'No training jobs yet. Click "Create training job" to get started.',
+                      )}
+                    </Paper>
+                  ) : (
+                    <Stack spacing={1.5}>
+                      {jobs.map((job) => (
+                        <Paper
+                          key={job.id}
+                          variant="outlined"
+                          onClick={() => setSelectedJobId(job.id)}
+                          sx={{
+                            p: 2,
+                            borderRadius: 3,
+                            cursor: "pointer",
+                            transition: "border-color 120ms ease, box-shadow 120ms ease",
+                            "&:hover": {
+                              borderColor: "primary.main",
+                              boxShadow: "0 12px 28px rgba(15, 23, 42, 0.08)",
+                            },
+                          }}
+                        >
+                          <Stack spacing={1.25}>
+                            <Stack
+                              direction="row"
+                              justifyContent="space-between"
+                              spacing={2}
+                            >
+                              <Box sx={{ minWidth: 0 }}>
+                                <Typography
+                                  variant="subtitle2"
+                                  fontWeight={700}
+                                  noWrap
+                                >
+                                  {job.model}
+                                </Typography>
+                                <Typography
+                                  variant="caption"
+                                  color="text.secondary"
+                                >
+                                  {job.id}
+                                </Typography>
+                              </Box>
+                              <Chip
+                                size="small"
+                                color={
+                                  job.status === "running"
+                                    ? "info"
+                                    : job.status === "succeeded"
+                                      ? "success"
+                                      : job.status === "failed"
+                                        ? "error"
+                                        : "default"
+                                }
+                                label={job.status}
+                              />
+                            </Stack>
+                            <Stack direction="row" spacing={1.5} flexWrap="wrap">
+                              <Typography variant="caption" color="text.secondary">
+                                {job.method?.type ?? "sft"}
+                              </Typography>
+                              <Typography variant="caption" color="text.secondary">
+                                {formatDateTime(job.created_at)}
+                              </Typography>
+                              {job.fine_tuned_model ? (
+                                <Typography variant="caption" color="success.main">
+                                  {job.fine_tuned_model}
+                                </Typography>
+                              ) : null}
+                            </Stack>
+                          </Stack>
+                        </Paper>
+                      ))}
+                    </Stack>
+                  )}
+                </Stack>
+              </CardContent>
+            </Card>
+          </Grid>
+        </>
+      )}
 
       <CreateTrainingJobDialog
         datasets={datasets}
-        fineTuneFiles={fineTuneFiles}
         form={form}
         preferredBaseModel={preferredBaseModel}
         onChangeMethodType={updateMethodType}
@@ -1188,36 +1006,55 @@ function LossChart({
   const points = useMemo(() => {
     const checkpointPoints = checkpoints
       .map((checkpoint) => {
-        const loss = checkpoint.metrics.train_loss ?? checkpoint.metrics.loss;
-        if (typeof loss !== "number") {
+        const trainLoss =
+          checkpoint.metrics.train_loss ?? checkpoint.metrics.loss;
+        const validLoss = checkpoint.metrics.valid_loss;
+        if (
+          typeof trainLoss !== "number" &&
+          typeof validLoss !== "number"
+        ) {
           return null;
         }
-        return { step: checkpoint.step_number, loss };
+        return {
+          step: checkpoint.step_number,
+          trainLoss: typeof trainLoss === "number" ? trainLoss : null,
+          validLoss: typeof validLoss === "number" ? validLoss : null,
+        };
       })
-      .filter((point): point is { step: number; loss: number } =>
-        Boolean(point),
-      );
+      .filter((point): point is LossChartPoint => point !== null);
     if (checkpointPoints.length > 0) {
       return checkpointPoints;
     }
     return events
       .map((event, index) => {
         const metrics = event.data?.metrics;
-        const loss = metrics?.train_loss ?? metrics?.loss;
-        if (typeof loss !== "number") {
+        const trainLoss = metrics?.train_loss ?? metrics?.loss;
+        const validLoss = metrics?.valid_loss;
+        if (
+          typeof trainLoss !== "number" &&
+          typeof validLoss !== "number"
+        ) {
           return null;
         }
         return {
           step: Number(event.data?.step ?? index + 1),
-          loss,
+          trainLoss: typeof trainLoss === "number" ? trainLoss : null,
+          validLoss: typeof validLoss === "number" ? validLoss : null,
         };
       })
-      .filter((point): point is { step: number; loss: number } =>
-        Boolean(point),
-      );
+      .filter((point): point is LossChartPoint => point !== null);
   }, [checkpoints, events]);
 
-  if (points.length === 0) {
+  const trainPoints = points.filter(
+    (point): point is LossChartPoint & { trainLoss: number } =>
+      typeof point.trainLoss === "number",
+  );
+  const validPoints = points.filter(
+    (point): point is LossChartPoint & { validLoss: number } =>
+      typeof point.validLoss === "number",
+  );
+
+  if (trainPoints.length === 0 && validPoints.length === 0) {
     return (
       <Paper
         variant="outlined"
@@ -1228,92 +1065,113 @@ function LossChart({
     );
   }
 
-  const width = 720;
-  const height = 220;
-  const padding = 24;
-  const minLoss = Math.min(...points.map((point) => point.loss));
-  const maxLoss = Math.max(...points.map((point) => point.loss));
-  const lossSpan = maxLoss - minLoss || 1;
-  const stepSpan = Math.max(points.length - 1, 1);
-  const polyline = points
-    .map((point, index) => {
-      const x = padding + ((width - padding * 2) * index) / stepSpan;
-      const y =
-        height -
-        padding -
-        ((point.loss - minLoss) / lossSpan) * (height - padding * 2);
-      return `${x},${y}`;
-    })
-    .join(" ");
+  const initialTrainLoss = trainPoints[0]?.trainLoss;
+  const latestTrainLoss = trainPoints[trainPoints.length - 1]?.trainLoss;
+  const lowestTrainLoss =
+    trainPoints.length > 0
+      ? Math.min(...trainPoints.map((point) => point.trainLoss))
+      : null;
+  const latestValidLoss = validPoints[validPoints.length - 1]?.validLoss ?? null;
 
   return (
     <Stack spacing={1.5}>
-      <Box sx={{ width: "100%", overflowX: "auto" }}>
-        <svg
-          width="100%"
-          viewBox={`0 0 ${width} ${height}`}
-          role="img"
-          aria-label={t("Training loss curve")}
-        >
-          <rect x="0" y="0" width={width} height={height} fill="transparent" />
-          <line
-            x1={padding}
-            y1={padding}
-            x2={padding}
-            y2={height - padding}
-            stroke="currentColor"
-            opacity="0.18"
-          />
-          <line
-            x1={padding}
-            y1={height - padding}
-            x2={width - padding}
-            y2={height - padding}
-            stroke="currentColor"
-            opacity="0.18"
-          />
-          <polyline
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="3"
-            points={polyline}
-          />
-          {points.map((point, index) => {
-            const x = padding + ((width - padding * 2) * index) / stepSpan;
-            const y =
-              height -
-              padding -
-              ((point.loss - minLoss) / lossSpan) * (height - padding * 2);
-            return (
-              <circle
-                key={`${point.step}-${point.loss}`}
-                cx={x}
-                cy={y}
-                r="3.5"
-                fill="currentColor"
-              />
-            );
-          })}
-        </svg>
+      <Box sx={{ width: "100%", height: 260 }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart
+            data={points}
+            margin={{ top: 8, right: 12, left: 0, bottom: 4 }}
+          >
+            <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.24} />
+            <XAxis
+              dataKey="step"
+              type="number"
+              domain={["dataMin", "dataMax"]}
+              tickLine={false}
+              axisLine={false}
+              label={{
+                value: t("Step"),
+                position: "insideBottom",
+                offset: -4,
+              }}
+            />
+            <YAxis
+              tickLine={false}
+              axisLine={false}
+              width={64}
+              tickFormatter={(value: number) => formatMetricValue(value)}
+            />
+            <Tooltip
+              formatter={(value: ValueType | undefined, name: NameType | undefined) => {
+                if (typeof value !== "number") {
+                  return [value ?? "-", name];
+                }
+                return [
+                  formatMetricValue(value),
+                  name === "trainLoss" ? t("Train loss") : t("Validation loss"),
+                ];
+              }}
+              labelFormatter={(label) => `${t("Step")} ${label}`}
+            />
+            <Legend
+              formatter={(value) =>
+                value === "trainLoss" ? t("Train loss") : t("Validation loss")
+              }
+            />
+            <Line
+              type="monotone"
+              dataKey="trainLoss"
+              name="trainLoss"
+              connectNulls
+              stroke="#2563EB"
+              strokeWidth={2.5}
+              dot={{ r: 3 }}
+              activeDot={{ r: 5 }}
+            />
+            <Line
+              type="monotone"
+              dataKey="validLoss"
+              name="validLoss"
+              connectNulls
+              stroke="#0F766E"
+              strokeWidth={2.5}
+              dot={{ r: 3 }}
+              activeDot={{ r: 5 }}
+            />
+          </LineChart>
+        </ResponsiveContainer>
       </Box>
       <Stack direction="row" spacing={1.5} flexWrap="wrap" useFlexGap>
-        <Chip
-          size="small"
-          label={`${t("Initial loss")} ${formatMetricValue(points[0].loss)}`}
-          variant="outlined"
-        />
-        <Chip
-          size="small"
-          label={`${t("Latest loss")} ${formatMetricValue(points[points.length - 1].loss)}`}
-          color="primary"
-          variant="outlined"
-        />
-        <Chip
-          size="small"
-          label={`${t("Lowest loss")} ${formatMetricValue(minLoss)}`}
-          color="success"
-          variant="outlined"
-        />
+        {typeof initialTrainLoss === "number" ? (
+          <Chip
+            size="small"
+            label={`${t("Initial loss")} ${formatMetricValue(initialTrainLoss)}`}
+            variant="outlined"
+          />
+        ) : null}
+        {typeof latestTrainLoss === "number" ? (
+          <Chip
+            size="small"
+            label={`${t("Latest loss")} ${formatMetricValue(latestTrainLoss)}`}
+            color="primary"
+            variant="outlined"
+          />
+        ) : null}
+        {typeof lowestTrainLoss === "number" ? (
+          <Chip
+            size="small"
+            label={`${t("Lowest loss")} ${formatMetricValue(lowestTrainLoss)}`}
+            color="success"
+            variant="outlined"
+          />
+        ) : null}
+        {typeof latestValidLoss === "number" ? (
+          <Chip
+            size="small"
+            label={`${t("Latest valid loss")} ${formatMetricValue(latestValidLoss)}`}
+            color="secondary"
+            variant="outlined"
+          />
+        ) : null}
       </Stack>
     </Stack>
   );
@@ -1328,7 +1186,6 @@ function formatMetricValue(value: number) {
 
 interface CreateTrainingJobDialogProps {
   datasets: DatasetRecord[];
-  fineTuneFiles: UploadedFile[];
   form: TrainingFormState;
   preferredBaseModel: string;
   onChangeMethodType: (methodType: TrainingMethodType) => void;
@@ -1349,7 +1206,6 @@ interface CreateTrainingJobDialogProps {
 
 function CreateTrainingJobDialog({
   datasets,
-  fineTuneFiles,
   form,
   preferredBaseModel,
   onChangeMethodType,
@@ -1397,9 +1253,10 @@ function CreateTrainingJobDialog({
                 label={t("Dataset")}
                 value={selectedDatasetId}
                 onChange={(event) => onSelectDataset(event.target.value)}
+                required
               >
-                <MenuItem value="">
-                  {t("Do not attach dataset metadata")}
+                <MenuItem value="" disabled>
+                  {t("Select a dataset")}
                 </MenuItem>
                 {datasets.map((dataset) => (
                   <MenuItem key={dataset.id} value={dataset.id}>
@@ -1409,77 +1266,28 @@ function CreateTrainingJobDialog({
               </Select>
             </FormControl>
 
-            <Grid container spacing={2}>
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <FormControl fullWidth>
-                  <InputLabel id="training-method-label">
-                    {t("Training method")}
-                  </InputLabel>
-                  <Select
-                    labelId="training-method-label"
-                    label={t("Training method")}
-                    value={form.methodType}
-                    onChange={(event) =>
-                      onChangeMethodType(
-                        event.target.value as TrainingMethodType,
-                      )
-                    }
-                  >
-                    <MenuItem value="sft">SFT</MenuItem>
-                    <MenuItem value="lawf">LAwF</MenuItem>
-                  </Select>
-                </FormControl>
-              </Grid>
-              <Grid size={{ xs: 12, sm: 6 }}>
-                {selectedDataset ? (
-                  <TextField
-                    label={t("Training file")}
-                    value={`${selectedDataset.name} ? ${t("Generated on create")}`}
-                    fullWidth
-                    disabled
-                  />
-                ) : (
-                  <FormControl fullWidth required>
-                    <InputLabel id="training-file-label">
-                      {t("Training file")}
-                    </InputLabel>
-                    <Select
-                      labelId="training-file-label"
-                      label={t("Training file")}
-                      value={form.trainingFileId}
-                      onChange={(event) =>
-                        onChangeForm("trainingFileId", event.target.value)
-                      }
-                    >
-                      {fineTuneFiles.map((file) => (
-                        <MenuItem key={file.id} value={file.id}>
-                          {file.filename}
-                        </MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
-                )}
-              </Grid>
-            </Grid>
+            {datasets.length === 0 ? (
+              <Alert severity="warning">
+                {t("Create a dataset first to start a training job.")}
+              </Alert>
+            ) : null}
 
             <FormControl fullWidth>
-              <InputLabel id="validation-file-label">
-                {t("Validation file")}
+              <InputLabel id="training-method-label">
+                {t("Training method")}
               </InputLabel>
               <Select
-                labelId="validation-file-label"
-                label={t("Validation file")}
-                value={form.validationFileId}
+                labelId="training-method-label"
+                label={t("Training method")}
+                value={form.methodType}
                 onChange={(event) =>
-                  onChangeForm("validationFileId", event.target.value)
+                  onChangeMethodType(
+                    event.target.value as TrainingMethodType,
+                  )
                 }
               >
-                <MenuItem value="">{t("Do not use")}</MenuItem>
-                {fineTuneFiles.map((file) => (
-                  <MenuItem key={file.id} value={file.id}>
-                    {file.filename}
-                  </MenuItem>
-                ))}
+                <MenuItem value="sft">SFT</MenuItem>
+                <MenuItem value="lawf">LAwF</MenuItem>
               </Select>
             </FormControl>
 
@@ -1632,7 +1440,7 @@ function CreateTrainingJobDialog({
             type="submit"
             variant="contained"
             startIcon={<AddRoundedIcon />}
-            disabled={submitting}
+            disabled={submitting || datasets.length === 0 || !selectedDatasetId}
           >
             {submitting ? t("Submitting...") : t("Create training job")}
           </Button>

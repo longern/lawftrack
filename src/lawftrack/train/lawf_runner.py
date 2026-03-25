@@ -171,6 +171,7 @@ def run_lawf_training(job: dict[str, Any], config_dir: Path) -> None:
             ),
             per_device_train_batch_size=int(hyperparameters.get("batch_size", 1)),
             learning_rate=float(hyperparameters.get("learning_rate", 5e-5)),
+            logging_strategy="epoch",
             logging_steps=int(hyperparameters.get("logging_steps", 1)),
             save_strategy="no",
             report_to=report_to,

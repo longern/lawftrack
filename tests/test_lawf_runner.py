@@ -194,6 +194,7 @@ class LAwFRunnerTests(unittest.TestCase):
             self.assertEqual(trainer.saved_model_paths, [str(output_dir)])
             self.assertNotIn("logging_dir", trainer.kwargs["args"].kwargs)
             self.assertEqual(trainer.kwargs["args"].kwargs["num_train_epochs"], 2.0)
+            self.assertEqual(trainer.kwargs["args"].kwargs["logging_strategy"], "epoch")
 
             tokenizer = FakeAutoTokenizer.last_tokenizer
             self.assertIsNotNone(tokenizer)
@@ -302,6 +303,7 @@ class LAwFRunnerTests(unittest.TestCase):
 
         self.assertIsNotNone(FakeTrainingArguments.last_kwargs)
         self.assertEqual(FakeTrainingArguments.last_kwargs["num_train_epochs"], 32.0)
+        self.assertEqual(FakeTrainingArguments.last_kwargs["logging_strategy"], "epoch")
 
 
 if __name__ == "__main__":

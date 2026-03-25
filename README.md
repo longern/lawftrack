@@ -1,107 +1,71 @@
 # lawftrack
 
-`lawftrack` is a low-friction fine-tuning platform for vLLM-compatible models. It includes:
+`lawftrack` is a local fine-tuning workspace for vLLM-compatible models.
+It gives you:
 
-- a Python CLI for installation, configuration, updates, and service management
-- a local gateway that proxies OpenAI-compatible APIs and serves the web console
-- a browser console for dataset management, token-level editing, training jobs, and service status
+- a simple installer and CLI
+- a local gateway with an OpenAI-compatible `/v1` interface
+- a browser UI for datasets, sample editing, and fine-tuning jobs
 
-The current product flow is centered around:
-
-1. connect a vLLM-compatible backend
-2. import or create datasets
-3. edit samples in the web console, including token-level assistant rewrites
-4. launch and monitor fine-tuning jobs
-5. expose the resulting model through the local gateway
+If you want to fine-tune a model without stitching together multiple tools by hand, this is the main use case.
 
 ## Quick Start
 
-For end users, use the installer:
+Install:
 
 ```bash
 ./install.sh
 ```
 
-You can also run the installer remotely:
+Or run the installer directly from GitHub:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/longern/lawftrack/main/install.sh | sh
 ```
 
-If you want to skip packaging the browser UI:
+Optional installer flags:
 
-```bash
-./install.sh --headless
-```
+- `--headless`: install the backend without the packaged web UI
+- `--skip-wizard`: finish installation without opening the setup wizard
 
-If you want to finish installation without launching the setup wizard immediately:
-
-```bash
-./install.sh --skip-wizard
-```
-
-That installer will:
-
-- build the Vite frontend bundle
-- create an isolated virtualenv under `~/.lawftrack/runtime`
-- install `lawftrack` and the gateway dependencies
-- create a `lawftrack` launcher script
-- offer to add the launcher directory to your shell `PATH`
-- automatically start the `lawftrack wizard` setup flow unless `--skip-wizard` is used
-
-When `--headless` is used, the gateway API is still installed, but the packaged web UI is omitted.
-
-For developers, install the project in editable mode:
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python3 -m pip install -e .
-python3 -m pip install ".[server]"
-```
-
-Initialize frontend dependencies:
-
-```bash
-cd frontend
-npm install
-```
-
-Run the setup wizard:
+After installation, run:
 
 ```bash
 lawftrack wizard
 ```
 
-The wizard will:
+The wizard will ask for:
 
-- ask for the vLLM endpoint, default `http://localhost:8000/v1`
-- ask for the API key, default empty
-- use arrow-key single-select prompts for yes/no questions when run in a terminal
-- let you go back to the previous step with `Esc` or `Ctrl-B`
-- check endpoint connectivity after the URL and API key are entered, with options to edit the URL, edit the key, or continue anyway
-- save the config to `~/.lawftrack/config.json`
-- ask whether the gateway should also be installed as a system service
+- your vLLM endpoint, usually `http://localhost:8000/v1`
+- your API key, if your backend requires one
+- whether to install the gateway as a background service
 
-Start the gateway in the foreground:
+Then start the local gateway:
 
 ```bash
 lawftrack gateway
 ```
 
-The default bind address is `127.0.0.1:5293`.
+By default, it listens on `http://127.0.0.1:5293`.
 
-## Web Console
+## Typical Flow
 
-The packaged web console is the main end-user interface. It currently supports:
+For most users, the workflow is:
 
-- dataset import from `.yaml`, `.yml`, `.json`, `.jsonl`
-- dataset metadata management, including bound base model information
-- sample creation, deletion, and message-level editing
-- assistant token selection, replacement, and continuation
-- YAML preview for dataset samples
-- file upload and fine-tuning job management
-- local service and gateway status inspection
+1. Connect a vLLM-compatible backend.
+2. Import or create a dataset.
+3. Edit samples in the browser UI.
+4. Start a fine-tuning job.
+5. Use the trained model through the local gateway.
+
+## What You Can Do in the UI
+
+- import datasets from `.yaml`, `.yml`, `.json`, and `.jsonl`
+- create, edit, and delete samples
+- edit assistant responses at token level
+- manage uploaded training files
+- launch and monitor fine-tuning jobs
+- check local gateway and service status
 
 ## Common Commands
 
@@ -109,121 +73,41 @@ The packaged web console is the main end-user interface. It currently supports:
 lawftrack --version
 lawftrack wizard
 lawftrack config
-lawftrack config get vllm_endpoint
-lawftrack config set a.b.c xxx
 lawftrack update
 lawftrack gateway
-lawftrack gateway status
 lawftrack gateway start
 lawftrack gateway stop
+lawftrack gateway status
 ```
 
-You can also launch the package as a module:
+You can also run it as a Python module:
 
 ```bash
 python3 -m lawftrack
 ```
 
-## Gateway
+## Notes
 
-`lawftrack gateway` runs the local FastAPI gateway and loads config from `~/.lawftrack/config.json` by default.
-The browser UI is served from the standalone `frontend/` workspace so it can evolve separately from the Python backend.
+- `lawftrack` stores its config in `~/.lawftrack/config.json`.
+- `lawftrack update` upgrades the current installation.
+- If you install the gateway as a service, you can keep it running in the background and open the UI in a browser when needed.
 
-For frontend development:
+If your training output is a LoRA adapter, `lawftrack` can automatically try to load it into vLLM after a successful SFT job. For that to work, vLLM must be started with LoRA support enabled.
+
+## For Developers
+
+If you are developing `lawftrack` itself:
 
 ```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python3 -m pip install -e .
+python3 -m pip install ".[server]"
 cd frontend
-npm run dev
+npm install
 ```
 
-For a production build served by the Python gateway:
-
-```bash
-cd frontend
-npm run build
-```
-
-That build outputs packaged assets into `src/lawftrack/_frontend`.
-
-The gateway exposes two kinds of HTTP surface:
-
-- `/api/...` local control-plane endpoints for the web console
-- `/v1/...` OpenAI-compatible data-plane endpoints proxied to the configured backend
-
-Common control-plane endpoints:
-
-- `GET /` serves the local gateway UI
-- `GET /api/status` returns local gateway status
-- `GET /api/healthz` returns a health check payload
-- `GET /api/config` returns the configured vLLM endpoint and whether an API key is set
-- `GET /api/datasets` manages dataset metadata and sample workspaces
-- `GET /api/files` lists uploaded fine-tuning files
-- `GET /api/fine_tuning/jobs` lists fine-tuning jobs
-
-The `/v1/...` surface is intended for model inference and OpenAI-compatible client traffic. The web console uses it directly for model generation where appropriate, for example streaming assistant generation and top-logprobs token candidate lookup.
-
-You can override runtime options when starting it in the foreground:
-
-```bash
-lawftrack gateway --host 127.0.0.1 --port 5293
-```
-
-## Dynamic LoRA Loading
-
-When an SFT job finishes successfully, `lawftrack` now checks whether the training artifact directory contains a LoRA adapter and, if it does, automatically sends a runtime load request to the configured vLLM endpoint.
-
-To make that work on the vLLM side, start `vllm serve` with LoRA enabled and turn on runtime LoRA updates:
-
-```bash
-export VLLM_ALLOW_RUNTIME_LORA_UPDATING=True
-vllm serve <base-model> --enable-lora
-```
-
-vLLM's official documentation for dynamic LoRA loading is here:
-
-- [LoRA Adapters - vLLM](https://docs.vllm.ai/en/stable/features/lora/)
-
-## Updates
-
-`lawftrack update` upgrades the current installation using the same Python runtime that is running the CLI.
-
-```bash
-lawftrack update
-lawftrack update /path/to/lawftrack
-lawftrack update https://github.com/your-org/lawftrack.git
-lawftrack update --dry-run
-```
-
-When no source is provided, `lawftrack` tries to reuse the current installation source. If that cannot be detected, it falls back to `lawftrack[server]`.
-
-## System Service
-
-The gateway can also be managed as a user-level system service:
-
-```bash
-lawftrack gateway install
-lawftrack gateway start
-lawftrack gateway stop
-lawftrack gateway restart
-lawftrack gateway status
-lawftrack gateway uninstall
-```
-
-Supported backends:
-
-- macOS: `launchd` user agent
-- Linux: `systemd --user`
-- Windows: Task Scheduler task
-
-You can define the gateway host, port, and config directory during installation:
-
-```bash
-lawftrack gateway install --host 127.0.0.1 --port 5293
-```
-
-After successful service installation, `lawftrack` prints the local gateway URL so users can open it directly.
-
-## Tests
+Run tests with:
 
 ```bash
 python3 -m unittest discover -s tests

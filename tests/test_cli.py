@@ -21,6 +21,17 @@ def make_env(**extra: str) -> dict[str, str]:
 
 
 class CliTests(unittest.TestCase):
+    @staticmethod
+    def _load_wizard_bits():
+        sys.path.insert(0, str(ROOT / "src"))
+        try:
+            from lawftrack.cli.wizard import WizardCanceled
+            from lawftrack.cli.wizard import collect_wizard_inputs
+            from lawftrack.cli.wizard_ui import BACK
+        finally:
+            sys.path.pop(0)
+        return collect_wizard_inputs, WizardCanceled, BACK
+
     def test_module_invocation(self) -> None:
         result = subprocess.run(
             [sys.executable, "-m", "lawftrack"],
@@ -152,15 +163,17 @@ class CliTests(unittest.TestCase):
             self.assertEqual(service_config.host, "127.0.0.1")
             self.assertEqual(service_config.port, 5293)
             self.assertEqual(service_config.config_dir, Path(temp_dir))
-            self.assertEqual(
+            self.assertIn(
+                mock.call(f"Configuration saved to {Path(temp_dir) / 'config.json'}"),
                 mocked_print.call_args_list,
-                [
-                    mock.call(
-                        f"Configuration saved to {Path(temp_dir) / 'config.json'}"
-                    ),
-                    mock.call("gateway installed"),
-                    mock.call("Gateway URL: http://127.0.0.1:5293"),
-                ],
+            )
+            self.assertIn(
+                mock.call("gateway installed"),
+                mocked_print.call_args_list,
+            )
+            self.assertIn(
+                mock.call("Gateway URL: http://127.0.0.1:5293"),
+                mocked_print.call_args_list,
             )
 
     def test_wizard_skips_gateway_service_when_declined(self) -> None:
@@ -204,6 +217,180 @@ class CliTests(unittest.TestCase):
                     "level": 1,
                 },
             )
+
+    def test_wizard_flow_supports_back_navigation(self) -> None:
+        collect_wizard_inputs, _, BACK = self._load_wizard_bits()
+        text_answers = iter(
+            [
+                "http://localhost:8000/v1",
+                "secret-key",
+                BACK,
+                BACK,
+                "http://remote.example/v1",
+                "secret-key",
+                "/models",
+            ]
+        )
+        select_calls: list[str] = []
+
+        def fake_text_step(**_kwargs):
+            return next(text_answers)
+
+        def fake_select_step(*, message, **_kwargs):
+            select_calls.append(message)
+            return 1
+
+        result = collect_wizard_inputs(
+            initial_endpoint="http://localhost:8000/v1",
+            initial_api_key="",
+            initial_models_dir="",
+            is_local_vllm_endpoint=lambda endpoint: "localhost" in endpoint,
+            vllm_sleep_level=1,
+            text_step=fake_text_step,
+            select_step=fake_select_step,
+            should_check_connection=False,
+        )
+
+        self.assertEqual(
+            result,
+            (
+                "http://remote.example/v1",
+                "secret-key",
+                "/models",
+                False,
+                False,
+            ),
+        )
+        self.assertEqual(
+            select_calls,
+            ["Install the gateway as a system service?"],
+        )
+
+    def test_wizard_flow_cancels_when_back_is_pressed_on_first_step(self) -> None:
+        collect_wizard_inputs, WizardCanceled, BACK = self._load_wizard_bits()
+
+        with self.assertRaises(WizardCanceled):
+            collect_wizard_inputs(
+                initial_endpoint="http://localhost:8000/v1",
+                initial_api_key="",
+                initial_models_dir="",
+                is_local_vllm_endpoint=lambda endpoint: "localhost" in endpoint,
+                vllm_sleep_level=1,
+                text_step=lambda **_kwargs: BACK,
+                select_step=lambda **_kwargs: 1,
+                should_check_connection=False,
+            )
+
+    def test_wizard_flow_can_retry_url_after_failed_connection_check(self) -> None:
+        collect_wizard_inputs, _, _ = self._load_wizard_bits()
+        text_answers = iter(
+            [
+                "http://bad.example/v1",
+                "secret-key",
+                "http://good.example/v1",
+                "secret-key",
+                "/models",
+            ]
+        )
+        checked_urls: list[str] = []
+
+        class FakeCheckResult:
+            def __init__(self, ok: bool, message: str) -> None:
+                self.ok = ok
+                self.message = message
+
+        def fake_text_step(**_kwargs):
+            return next(text_answers)
+
+        def fake_select_step(*, choices, **_kwargs):
+            if choices == ["Modify URL", "Modify API key", "Continue anyway"]:
+                return 0
+            return 1
+
+        def fake_verify_connection(*, base_url, api_key):
+            checked_urls.append(f"{base_url}|{api_key}")
+            if "bad.example" in base_url:
+                return FakeCheckResult(False, "Could not reach the configured vLLM endpoint.")
+            return FakeCheckResult(True, "ok")
+
+        result = collect_wizard_inputs(
+            initial_endpoint="http://bad.example/v1",
+            initial_api_key="",
+            initial_models_dir="",
+            is_local_vllm_endpoint=lambda endpoint: "localhost" in endpoint,
+            vllm_sleep_level=1,
+            text_step=fake_text_step,
+            select_step=fake_select_step,
+            verify_connection=fake_verify_connection,
+            should_check_connection=True,
+        )
+
+        self.assertEqual(
+            result,
+            (
+                "http://good.example/v1",
+                "secret-key",
+                "/models",
+                False,
+                False,
+            ),
+        )
+        self.assertEqual(
+            checked_urls,
+            [
+                "http://bad.example/v1|secret-key",
+                "http://good.example/v1|secret-key",
+            ],
+        )
+
+    def test_wizard_flow_can_continue_after_failed_connection_check(self) -> None:
+        collect_wizard_inputs, _, _ = self._load_wizard_bits()
+        text_answers = iter(
+            [
+                "http://bad.example/v1",
+                "secret-key",
+                "/models",
+            ]
+        )
+
+        class FakeCheckResult:
+            def __init__(self, ok: bool, message: str) -> None:
+                self.ok = ok
+                self.message = message
+
+        def fake_text_step(**_kwargs):
+            return next(text_answers)
+
+        def fake_select_step(*, choices, **_kwargs):
+            if choices == ["Modify URL", "Modify API key", "Continue anyway"]:
+                return 2
+            return 1
+
+        result = collect_wizard_inputs(
+            initial_endpoint="http://bad.example/v1",
+            initial_api_key="",
+            initial_models_dir="",
+            is_local_vllm_endpoint=lambda endpoint: "localhost" in endpoint,
+            vllm_sleep_level=1,
+            text_step=fake_text_step,
+            select_step=fake_select_step,
+            verify_connection=lambda **_kwargs: FakeCheckResult(
+                False,
+                "Could not reach the configured vLLM endpoint.",
+            ),
+            should_check_connection=True,
+        )
+
+        self.assertEqual(
+            result,
+            (
+                "http://bad.example/v1",
+                "secret-key",
+                "/models",
+                False,
+                False,
+            ),
+        )
 
     def test_gateway_without_action_starts_uvicorn_with_expected_arguments(
         self,

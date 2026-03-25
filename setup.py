@@ -19,6 +19,7 @@ setup(
     packages=find_packages(where="src"),
     install_requires=[
         "jinja2",
+        "prompt_toolkit>=3.0,<4",
     ],
     include_package_data=True,
     package_data={

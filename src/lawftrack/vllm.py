@@ -49,6 +49,62 @@ class RuntimeServerControlResult:
     response_body: str
 
 
+@dataclass(frozen=True)
+class VLLMConnectionCheckResult:
+    ok: bool
+    status_code: int | None
+    message: str
+    response_body: str
+
+
+def check_vllm_connection(
+    *,
+    base_url: str,
+    api_key: str,
+    timeout: float = 5.0,
+) -> VLLMConnectionCheckResult:
+    headers: dict[str, str] = {}
+    if api_key:
+        headers["authorization"] = f"Bearer {api_key}"
+
+    http_request = request.Request(
+        build_vllm_url(base_url, "models"),
+        headers=headers,
+        method="GET",
+    )
+
+    try:
+        with request.urlopen(http_request, timeout=timeout) as response:
+            body = response.read().decode("utf-8", errors="replace")
+            return VLLMConnectionCheckResult(
+                ok=True,
+                status_code=getattr(response, "status", 200),
+                message="Successfully reached the configured vLLM endpoint.",
+                response_body=body,
+            )
+    except error.HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="replace")
+        if exc.code in {401, 403}:
+            message = (
+                f"Reached the vLLM endpoint, but the API key was rejected with HTTP {exc.code}."
+            )
+        else:
+            message = f"vLLM responded with HTTP {exc.code} while checking `/models`."
+        return VLLMConnectionCheckResult(
+            ok=False,
+            status_code=exc.code,
+            message=message,
+            response_body=body,
+        )
+    except error.URLError as exc:
+        return VLLMConnectionCheckResult(
+            ok=False,
+            status_code=None,
+            message=f"Could not reach the configured vLLM endpoint: {exc.reason}.",
+            response_body="",
+        )
+
+
 def post_vllm_server_action(
     *,
     base_url: str,

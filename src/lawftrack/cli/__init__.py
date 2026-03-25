@@ -18,8 +18,6 @@ from .gateway import run_gateway
 from .gateway import run_gateway_command
 from .parser import DEFAULT_GATEWAY_PORT
 from .parser import build_parser
-from .prompts import prompt_value
-from .prompts import prompt_yes_no
 from .train import run_train_command
 from .update_command import run_update_command
 from .wizard import run_wizard as run_wizard_impl
@@ -39,8 +37,6 @@ def run_wizard(args) -> int:
         get_config_dir=get_config_dir,
         save_config=save_config,
         set_config_value=set_config_value,
-        prompt_value=prompt_value,
-        prompt_yes_no=prompt_yes_no,
         get_service_manager=get_service_manager,
         build_service_config=build_service_config,
         gateway_access_url=gateway_access_url,

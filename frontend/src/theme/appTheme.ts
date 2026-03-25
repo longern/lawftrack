@@ -7,7 +7,12 @@ export function createAppTheme(mode: PaletteMode) {
   return createTheme({
     palette: {
       mode,
-      primary: { main: isDark ? "#7ea9ff" : "#1f4b99" },
+      primary: {
+        main: isDark ? "#60a5fa" : "#2563EB",
+        light: isDark ? "#93c5fd" : "#60a5fa",
+        dark: isDark ? "#2563EB" : "#1D4ED8",
+        contrastText: "#ffffff",
+      },
       secondary: { main: isDark ? "#34d399" : "#0f766e" },
       background: {
         default: isDark ? "#07101d" : "#eef3fb",

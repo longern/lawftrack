@@ -77,6 +77,9 @@ The wizard will:
 
 - ask for the vLLM endpoint, default `http://localhost:8000/v1`
 - ask for the API key, default empty
+- use arrow-key single-select prompts for yes/no questions when run in a terminal
+- let you go back to the previous step with `Esc` or `Ctrl-B`
+- check endpoint connectivity after the URL and API key are entered, with options to edit the URL, edit the key, or continue anyway
 - save the config to `~/.lawftrack/config.json`
 - ask whether the gateway should also be installed as a system service
 

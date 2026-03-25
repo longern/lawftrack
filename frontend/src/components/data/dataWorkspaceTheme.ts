@@ -29,7 +29,7 @@ export function getWorkspaceColors(theme: Theme) {
       ? "rgba(148, 163, 184, 0.12)"
       : alpha(theme.palette.primary.main, 0.08),
     border: theme.palette.divider,
-    userBubbleBg: dark ? "#1f4b99" : "#2453a6",
+    userBubbleBg: dark ? theme.palette.primary.dark : theme.palette.primary.main,
     userMutedText: "rgba(255,255,255,0.72)",
     tokenChangedBg: "#f59e0b",
     tokenChangedText: dark ? "#111827" : "#3f2a00",

@@ -592,9 +592,9 @@ class ServerTests(unittest.TestCase):
             sample = samples_response.json()["data"][0]
             self.assertEqual(sample["messages"][0]["role"], "user")
             self.assertEqual(sample["messages"][1]["role"], "assistant")
-            self.assertEqual(sample["messages"][1]["content"], "hello")
+            self.assertEqual(sample["messages"][1]["content"], "您好")
             self.assertEqual(sample["anchors"][0]["token_index"], 0)
-            self.assertEqual(sample["anchors"][0]["replacement_token"], "hello")
+            self.assertEqual(sample["anchors"][0]["replacement_token"], "您好")
 
     def test_dataset_export_training_file_builds_method_specific_jsonl(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

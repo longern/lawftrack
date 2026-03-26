@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from urllib import error
 from urllib import request
 from urllib.parse import urlsplit
 from urllib.parse import urlunsplit
+
+logger = logging.getLogger(__name__)
 
 
 def build_vllm_url(base_url: str, path: str, query: str = "") -> str:
@@ -199,8 +202,9 @@ def load_lora_adapter(
     if api_key:
         headers["authorization"] = f"Bearer {api_key}"
 
+    request_url = build_vllm_url(base_url, "load_lora_adapter")
     http_request = request.Request(
-        build_vllm_url(base_url, "load_lora_adapter"),
+        request_url,
         data=payload,
         headers=headers,
         method="POST",
@@ -217,6 +221,18 @@ def load_lora_adapter(
             )
     except error.HTTPError as exc:
         body = exc.read().decode("utf-8", errors="replace")
+        logger.exception(
+            "Failed to load LoRA adapter into vLLM via HTTP error: "
+            "request_url=%s base_url=%s lora_name=%s lora_path=%s load_inplace=%s "
+            "status_code=%s response_body=%s",
+            request_url,
+            base_url,
+            lora_name,
+            lora_path,
+            load_inplace,
+            exc.code,
+            body,
+        )
         return RuntimeLoRAUpdateResult(
             ok=False,
             status_code=exc.code,
@@ -224,6 +240,16 @@ def load_lora_adapter(
             response_body=body,
         )
     except error.URLError as exc:
+        logger.exception(
+            "Failed to load LoRA adapter into vLLM because the endpoint was unreachable: "
+            "request_url=%s base_url=%s lora_name=%s lora_path=%s load_inplace=%s reason=%s",
+            request_url,
+            base_url,
+            lora_name,
+            lora_path,
+            load_inplace,
+            exc.reason,
+        )
         return RuntimeLoRAUpdateResult(
             ok=False,
             status_code=None,

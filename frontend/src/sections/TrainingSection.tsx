@@ -46,7 +46,10 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import type { NameType, ValueType } from "recharts/types/component/DefaultTooltipContent";
+import type {
+  NameType,
+  ValueType,
+} from "recharts/types/component/DefaultTooltipContent";
 import AddRoundedIcon from "@mui/icons-material/AddRounded";
 import AutorenewRoundedIcon from "@mui/icons-material/AutorenewRounded";
 import ArrowBackRoundedIcon from "@mui/icons-material/ArrowBackRounded";
@@ -188,6 +191,7 @@ function TrainingSection({
   const [selectedDatasetId, setSelectedDatasetId] = useState("");
   const [jobs, setJobs] = useState<FineTuningJob[]>([]);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+  const [selectedJob, setSelectedJob] = useState<FineTuningJob | null>(null);
   const [jobEvents, setJobEvents] = useState<FineTuningJobEvent[]>([]);
   const [jobCheckpoints, setJobCheckpoints] = useState<
     FineTuningJobCheckpoint[]
@@ -204,17 +208,28 @@ function TrainingSection({
     () => datasets.find((dataset) => dataset.id === selectedDatasetId) ?? null,
     [datasets, selectedDatasetId],
   );
-  const selectedJob =
-    jobs.find((job) => job.id === selectedJobId) ?? null;
 
   useEffect(() => {
-    void refreshAll();
     void loadPreferredBaseModel();
+  }, []);
+
+  useEffect(() => {
+    if (selectedJobId) {
+      void loadJob(selectedJobId);
+      void loadJobArtifacts(selectedJobId);
+      const timer = window.setInterval(() => {
+        void loadJob(selectedJobId, false);
+        void loadJobArtifacts(selectedJobId, false);
+      }, 5000);
+      return () => {
+        window.clearInterval(timer);
+      };
+    }
+
+    setSelectedJob(null);
+    void refreshAll();
     const timer = window.setInterval(() => {
       void loadJobs(false);
-      if (selectedJobId) {
-        void loadJobArtifacts(selectedJobId, false);
-      }
     }, 5000);
     return () => {
       window.clearInterval(timer);
@@ -240,31 +255,23 @@ function TrainingSection({
   }, [preferredBaseModel, selectedDataset]);
 
   useEffect(() => {
-    if (selectedJobId && !jobs.some((job) => job.id === selectedJobId)) {
-      setSelectedJobId(null);
-    }
-  }, [jobs, selectedJobId]);
-
-  useEffect(() => {
     if (!selectedJobId) {
       setJobEvents([]);
       setJobCheckpoints([]);
       setJobLogs(null);
       return;
     }
-    void loadJobArtifacts(selectedJobId);
   }, [selectedJobId]);
 
   useEffect(() => {
-    if (!initialJobId || selectedJobId === initialJobId) {
+    if (!initialJobId) {
       return;
     }
-    if (!jobs.some((job) => job.id === initialJobId)) {
-      return;
+    if (selectedJobId !== initialJobId) {
+      setSelectedJobId(initialJobId);
     }
-    setSelectedJobId(initialJobId);
     onInitialJobHandled?.();
-  }, [initialJobId, jobs, onInitialJobHandled, selectedJobId]);
+  }, [initialJobId, onInitialJobHandled, selectedJobId]);
 
   useEffect(() => {
     if (createDialogOpen && !selectedDatasetId && datasets.length > 0) {
@@ -273,7 +280,10 @@ function TrainingSection({
   }, [createDialogOpen, datasets, selectedDatasetId]);
 
   useEffect(() => {
-    if (!selectedDatasetId || datasets.some((dataset) => dataset.id === selectedDatasetId)) {
+    if (
+      !selectedDatasetId ||
+      datasets.some((dataset) => dataset.id === selectedDatasetId)
+    ) {
       return;
     }
     setSelectedDatasetId("");
@@ -299,6 +309,39 @@ function TrainingSection({
           ? error.message
           : t("Failed to load training jobs"),
       );
+    } finally {
+      if (showSpinner) {
+        setRefreshing(false);
+      }
+    }
+  }
+
+  async function loadJob(jobId: string, showSpinner = true) {
+    if (showSpinner) {
+      setRefreshing(true);
+    }
+    try {
+      const job = await fetchJson<FineTuningJob>(
+        `/api/fine_tuning/jobs/${jobId}`,
+      );
+      setSelectedJob(job);
+      setJobs((current) => {
+        const hasMatch = current.some((item) => item.id === job.id);
+        if (!hasMatch) {
+          return current;
+        }
+        return current.map((item) => (item.id === job.id ? job : item));
+      });
+      setPageError("");
+      return job;
+    } catch (error) {
+      setSelectedJob((current) => (current?.id === jobId ? null : current));
+      setPageError(
+        error instanceof Error
+          ? error.message
+          : t("Failed to load training jobs"),
+      );
+      return null;
     } finally {
       if (showSpinner) {
         setRefreshing(false);
@@ -446,7 +489,8 @@ function TrainingSection({
           body: JSON.stringify(payload),
         },
       );
-      await loadJobs(false);
+      setJobs((current) => [createdJob, ...current]);
+      setSelectedJob(createdJob);
       setSelectedJobId(createdJob.id);
       setCreateDialogOpen(false);
       setPageError("");
@@ -463,10 +507,14 @@ function TrainingSection({
 
   async function handleCancelJob(jobId: string) {
     try {
-      await fetchJson<FineTuningJob>(`/api/fine_tuning/jobs/${jobId}/cancel`, {
-        method: "POST",
-      });
-      await loadJobs(false);
+      const cancelledJob = await fetchJson<FineTuningJob>(
+        `/api/fine_tuning/jobs/${jobId}/cancel`,
+        { method: "POST" },
+      );
+      setSelectedJob(cancelledJob);
+      setJobs((current) =>
+        current.map((job) => (job.id === cancelledJob.id ? cancelledJob : job)),
+      );
     } catch (error) {
       setPageError(
         error instanceof Error ? error.message : t("Failed to cancel job"),
@@ -509,7 +557,13 @@ function TrainingSection({
                     <Button
                       size="small"
                       startIcon={<AutorenewRoundedIcon />}
-                      onClick={() => void refreshAll()}
+                      onClick={() => {
+                        if (!selectedJobId) {
+                          return;
+                        }
+                        void loadJob(selectedJobId);
+                        void loadJobArtifacts(selectedJobId);
+                      }}
                       disabled={refreshing}
                     >
                       {t("Refresh")}
@@ -553,7 +607,10 @@ function TrainingSection({
                         label={t("Validation file")}
                         value={selectedJob.validation_file ?? "-"}
                       />
-                      <DetailRow label="Suffix" value={selectedJob.suffix ?? "-"} />
+                      <DetailRow
+                        label="Suffix"
+                        value={selectedJob.suffix ?? "-"}
+                      />
                       <DetailRow
                         label="Seed"
                         value={selectedJob.seed?.toString() ?? "-"}
@@ -705,7 +762,9 @@ function TrainingSection({
                     justifyContent="space-between"
                   >
                     <Box>
-                      <Typography variant="h6">{t("Training queue")}</Typography>
+                      <Typography variant="h6">
+                        {t("Training queue")}
+                      </Typography>
                     </Box>
                     <Chip
                       size="small"
@@ -718,7 +777,11 @@ function TrainingSection({
                   {jobs.length === 0 ? (
                     <Paper
                       variant="outlined"
-                      sx={{ p: 3, textAlign: "center", color: "text.secondary" }}
+                      sx={{
+                        p: 3,
+                        textAlign: "center",
+                        color: "text.secondary",
+                      }}
                     >
                       {t(
                         'No training jobs yet. Click "Create training job" to get started.',
@@ -730,12 +793,16 @@ function TrainingSection({
                         <Paper
                           key={job.id}
                           variant="outlined"
-                          onClick={() => setSelectedJobId(job.id)}
+                          onClick={() => {
+                            setSelectedJob(job);
+                            setSelectedJobId(job.id);
+                          }}
                           sx={{
                             p: 2,
                             borderRadius: 3,
                             cursor: "pointer",
-                            transition: "border-color 120ms ease, box-shadow 120ms ease",
+                            transition:
+                              "border-color 120ms ease, box-shadow 120ms ease",
                             "&:hover": {
                               borderColor: "primary.main",
                               boxShadow: "0 12px 28px rgba(15, 23, 42, 0.08)",
@@ -777,15 +844,28 @@ function TrainingSection({
                                 label={job.status}
                               />
                             </Stack>
-                            <Stack direction="row" spacing={1.5} flexWrap="wrap">
-                              <Typography variant="caption" color="text.secondary">
+                            <Stack
+                              direction="row"
+                              spacing={1.5}
+                              flexWrap="wrap"
+                            >
+                              <Typography
+                                variant="caption"
+                                color="text.secondary"
+                              >
                                 {job.method?.type ?? "sft"}
                               </Typography>
-                              <Typography variant="caption" color="text.secondary">
+                              <Typography
+                                variant="caption"
+                                color="text.secondary"
+                              >
                                 {formatDateTime(job.created_at)}
                               </Typography>
                               {job.fine_tuned_model ? (
-                                <Typography variant="caption" color="success.main">
+                                <Typography
+                                  variant="caption"
+                                  color="success.main"
+                                >
                                   {job.fine_tuned_model}
                                 </Typography>
                               ) : null}
@@ -1028,10 +1108,7 @@ function LossChart({
         const trainLoss =
           checkpoint.metrics.train_loss ?? checkpoint.metrics.loss;
         const validLoss = checkpoint.metrics.valid_loss;
-        if (
-          typeof trainLoss !== "number" &&
-          typeof validLoss !== "number"
-        ) {
+        if (typeof trainLoss !== "number" && typeof validLoss !== "number") {
           return null;
         }
         return {
@@ -1049,10 +1126,7 @@ function LossChart({
         const metrics = event.data?.metrics;
         const trainLoss = metrics?.train_loss ?? metrics?.loss;
         const validLoss = metrics?.valid_loss;
-        if (
-          typeof trainLoss !== "number" &&
-          typeof validLoss !== "number"
-        ) {
+        if (typeof trainLoss !== "number" && typeof validLoss !== "number") {
           return null;
         }
         return {
@@ -1090,7 +1164,8 @@ function LossChart({
     trainPoints.length > 0
       ? Math.min(...trainPoints.map((point) => point.trainLoss))
       : null;
-  const latestValidLoss = validPoints[validPoints.length - 1]?.validLoss ?? null;
+  const latestValidLoss =
+    validPoints[validPoints.length - 1]?.validLoss ?? null;
 
   return (
     <Stack spacing={1.5}>
@@ -1120,7 +1195,10 @@ function LossChart({
               tickFormatter={(value: number) => formatMetricValue(value)}
             />
             <Tooltip
-              formatter={(value: ValueType | undefined, name: NameType | undefined) => {
+              formatter={(
+                value: ValueType | undefined,
+                name: NameType | undefined,
+              ) => {
                 if (typeof value !== "number") {
                   return [value ?? "-", name];
                 }
@@ -1300,9 +1378,7 @@ function CreateTrainingJobDialog({
                 label={t("Training method")}
                 value={form.methodType}
                 onChange={(event) =>
-                  onChangeMethodType(
-                    event.target.value as TrainingMethodType,
-                  )
+                  onChangeMethodType(event.target.value as TrainingMethodType)
                 }
               >
                 <MenuItem value="sft">SFT</MenuItem>

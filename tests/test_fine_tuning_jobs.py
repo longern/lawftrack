@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from lawftrack.api.fine_tuning_jobs import FineTuningJobStore  # noqa: E402
+from lawftrack.vllm import RuntimeLoRAUpdateResult  # noqa: E402
 
 sys.path.pop(0)
 
@@ -168,6 +169,80 @@ class FineTuningJobStoreTests(unittest.TestCase):
                 checkpoints[1]["fine_tuned_model_checkpoint"],
                 "demo-adapter",
             )
+
+    def test_get_job_loads_pending_lora_adapter_in_backend(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_dir = Path(temp_dir)
+            store = FineTuningJobStore(config_dir)
+            job_dir = store.jobs_dir / "ftjob-demo"
+            output_dir = job_dir / "artifacts" / "model"
+            output_dir.mkdir(parents=True, exist_ok=True)
+            (output_dir / "adapter_config.json").write_text("{}", encoding="utf-8")
+            (job_dir / "job.json").write_text(
+                json.dumps(
+                    {
+                        "id": "ftjob-demo",
+                        "object": "fine_tuning.job",
+                        "created_at": 1000,
+                        "error": None,
+                        "estimated_finish": None,
+                        "fine_tuned_model": "demo-adapter",
+                        "finished_at": 1001,
+                        "hyperparameters": {},
+                        "integrations": [],
+                        "metadata": {},
+                        "method": {"type": "lawf"},
+                        "model": "demo-model",
+                        "organization_id": "org-lawftrack",
+                        "result_files": [],
+                        "seed": None,
+                        "status": "succeeded",
+                        "trained_tokens": None,
+                        "training_file": "file-training",
+                        "validation_file": None,
+                        "suffix": None,
+                        "lora_adapter": {
+                            "name": "demo-adapter",
+                            "path": str(output_dir),
+                            "base_model": "demo-model",
+                            "status": "pending_load",
+                            "updated_at": 1001,
+                        },
+                        "process": {"pid": 1234, "started_at": 1000, "exit_code": 0},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (config_dir / "config.json").write_text(
+                json.dumps(
+                    {
+                        "vllm_endpoint": "http://localhost:8000/v1",
+                        "api_key": "secret-key",
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with mock.patch(
+                "lawftrack.api.fine_tuning_jobs.load_lora_adapter",
+                return_value=RuntimeLoRAUpdateResult(
+                    ok=True,
+                    status_code=200,
+                    message="ok",
+                    response_body="loaded",
+                ),
+            ) as mocked_load:
+                job = store.get_job("ftjob-demo")
+
+            mocked_load.assert_called_once_with(
+                base_url="http://localhost:8000/v1",
+                api_key="secret-key",
+                lora_name="demo-adapter",
+                lora_path=output_dir,
+                load_inplace=True,
+            )
+            self.assertEqual(job["lora_adapter"]["status"], "loaded")
+            self.assertEqual(job["lora_adapter"]["message"], "loaded")
 
 
 if __name__ == "__main__":

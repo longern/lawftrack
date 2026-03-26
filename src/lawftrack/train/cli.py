@@ -16,7 +16,6 @@ from .algorithms import get_job_output_dir
 from .algorithms import is_lora_adapter_artifact
 from .algorithms import run_algorithm_job
 from ..vllm import is_local_vllm_endpoint
-from ..vllm import load_lora_adapter
 from ..vllm import sleep_vllm
 from ..vllm import wake_up_vllm
 
@@ -171,23 +170,12 @@ def finalize_job(config_dir: Path, job: dict[str, Any], exit_code: int) -> None:
     }
 
     if is_lora_adapter_artifact(output_dir):
-        config = load_config(config_dir)
-        load_result = load_lora_adapter(
-            base_url=config["vllm_endpoint"],
-            api_key=config["api_key"],
-            lora_name=adapter_name,
-            lora_path=output_dir,
-            load_inplace=True,
-        )
-        adapter_state["status"] = "loaded" if load_result.ok else "load_failed"
+        adapter_state["status"] = "pending_load"
         adapter_state["updated_at"] = now
-        if load_result.response_body:
-            adapter_state["message"] = load_result.response_body
-        if not load_result.ok:
-            adapter_state["error"] = {
-                "message": load_result.message,
-                "status_code": load_result.status_code,
-            }
+        adapter_state["message"] = (
+            "Training finished successfully. Waiting for the backend to load the "
+            "LoRA adapter into vLLM."
+        )
         job["fine_tuned_model"] = adapter_name
     else:
         adapter_state["status"] = "not_a_lora_adapter"
@@ -228,10 +216,6 @@ def run_train_worker(args: argparse.Namespace) -> int:
         return 1
     finally:
         maybe_wake_local_vllm(config_dir, was_slept)
-
-    if args.action == "run-job":
-        finalize_job(config_dir, job, exit_code)
-        return exit_code
 
     finalize_job(config_dir, job, exit_code)
     return exit_code

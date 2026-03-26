@@ -3,6 +3,7 @@ from __future__ import annotations
 import ast
 from collections import deque
 import json
+import logging
 import os
 import re
 import signal
@@ -13,8 +14,13 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+from ..config import load_config
+from ..train.algorithms import build_fine_tuned_model_name
+from ..train.algorithms import get_job_output_dir
+from ..train.algorithms import is_lora_adapter_artifact
 from ..config import get_config_dir
 from ..train.algorithms import normalize_training_method
+from ..vllm import load_lora_adapter
 
 
 TERMINAL_JOB_STATUSES = {"cancelled", "failed", "succeeded"}
@@ -42,6 +48,7 @@ INLINE_METRIC_PATTERN = re.compile(
     r"([A-Za-z_][A-Za-z0-9_ ]*?)\s*[:=]\s*(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)"
 )
 DEFAULT_LOG_TAIL_LINES = 2000
+logger = logging.getLogger(__name__)
 
 
 def process_is_running(pid: int) -> bool:
@@ -317,6 +324,9 @@ class FineTuningJobStore:
         return "".join(buffer), total_lines, total_lines > tail_lines
 
     def _reconcile_job(self, job: dict[str, Any]) -> dict[str, Any]:
+        if job["status"] == "succeeded":
+            return self._maybe_load_pending_lora_adapter(job)
+
         if job["status"] in TERMINAL_JOB_STATUSES:
             return job
 
@@ -336,6 +346,91 @@ class FineTuningJobStore:
         job.setdefault("process", {})["exit_code"] = 1
         self._write_job(job)
         return job
+
+    def _maybe_load_pending_lora_adapter(self, job: dict[str, Any]) -> dict[str, Any]:
+        adapter_state = job.get("lora_adapter")
+        if not isinstance(adapter_state, dict):
+            adapter_state = self._initialize_lora_adapter_state(job)
+            if adapter_state is None:
+                return job
+            job["lora_adapter"] = adapter_state
+
+        if adapter_state.get("status") != "pending_load":
+            return job
+
+        lora_name = adapter_state.get("name")
+        lora_path_value = adapter_state.get("path")
+        now = int(time.time())
+
+        if not isinstance(lora_name, str) or not lora_name:
+            adapter_state["status"] = "load_failed"
+            adapter_state["updated_at"] = now
+            adapter_state["error"] = {
+                "message": "Missing LoRA adapter name; backend could not load it into vLLM.",
+                "status_code": None,
+            }
+            self._write_job(job)
+            return job
+
+        if not isinstance(lora_path_value, str) or not lora_path_value:
+            adapter_state["status"] = "load_failed"
+            adapter_state["updated_at"] = now
+            adapter_state["error"] = {
+                "message": "Missing LoRA adapter path; backend could not load it into vLLM.",
+                "status_code": None,
+            }
+            self._write_job(job)
+            return job
+
+        config = load_config(self.config_dir)
+        load_result = load_lora_adapter(
+            base_url=config["vllm_endpoint"],
+            api_key=config["api_key"],
+            lora_name=lora_name,
+            lora_path=Path(lora_path_value),
+            load_inplace=True,
+        )
+        adapter_state["status"] = "loaded" if load_result.ok else "load_failed"
+        adapter_state["updated_at"] = now
+        if load_result.response_body:
+            adapter_state["message"] = load_result.response_body
+        elif not load_result.ok:
+            adapter_state["message"] = load_result.message
+        if load_result.ok:
+            adapter_state.pop("error", None)
+        else:
+            adapter_state["error"] = {
+                "message": load_result.message,
+                "status_code": load_result.status_code,
+            }
+            logger.error(
+                "Backend failed to load pending LoRA adapter for job %s: name=%s path=%s status_code=%s",
+                job.get("id"),
+                lora_name,
+                lora_path_value,
+                load_result.status_code,
+            )
+        self._write_job(job)
+        return job
+
+    def _initialize_lora_adapter_state(self, job: dict[str, Any]) -> dict[str, Any] | None:
+        output_dir = get_job_output_dir(self.config_dir, job)
+        if not is_lora_adapter_artifact(output_dir):
+            return None
+
+        adapter_name = build_fine_tuned_model_name(job)
+        job["fine_tuned_model"] = adapter_name
+        return {
+            "name": adapter_name,
+            "path": str(output_dir),
+            "base_model": str(job["model"]),
+            "status": "pending_load",
+            "updated_at": int(time.time()),
+            "message": (
+                "Training finished successfully. Waiting for the backend to load the "
+                "LoRA adapter into vLLM."
+            ),
+        }
 
     def _parse_metrics_line(self, line: str) -> dict[str, float | int] | None:
         text = line.strip()

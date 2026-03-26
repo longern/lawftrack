@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import io
 import json
 import os
 import subprocess
 import sys
 import tempfile
+from urllib import error
 from unittest import mock
 from pathlib import Path
 import unittest
@@ -718,11 +720,10 @@ class CliTests(unittest.TestCase):
 
             self.assertEqual(command[3], str(local_model_dir))
 
-    def test_train_worker_marks_success_and_loads_lora_adapter(self) -> None:
+    def test_train_worker_marks_success_and_defers_lora_loading_to_backend(self) -> None:
         sys.path.insert(0, str(ROOT / "src"))
         try:
             from lawftrack.train.cli import main
-            from lawftrack.vllm import RuntimeLoRAUpdateResult
         finally:
             sys.path.pop(0)
 
@@ -732,15 +733,6 @@ class CliTests(unittest.TestCase):
             output_dir = job_dir / "artifacts" / "model"
             output_dir.mkdir(parents=True)
             (output_dir / "adapter_config.json").write_text("{}", encoding="utf-8")
-            (config_dir / "config.json").write_text(
-                json.dumps(
-                    {
-                        "vllm_endpoint": "http://localhost:8000/v1",
-                        "api_key": "secret-key",
-                    }
-                ),
-                encoding="utf-8",
-            )
             (job_dir / "job.json").write_text(
                 json.dumps(
                     {
@@ -759,35 +751,50 @@ class CliTests(unittest.TestCase):
             with mock.patch(
                 "lawftrack.train.cli.run_algorithm_job", return_value=0
             ) as mocked_run:
-                with mock.patch(
-                    "lawftrack.train.cli.load_lora_adapter",
-                    return_value=RuntimeLoRAUpdateResult(
-                        ok=True,
-                        status_code=200,
-                        message="ok",
-                        response_body="Success",
-                    ),
-                ) as mocked_load:
-                    exit_code = main(
-                        ["run-job", "--config-dir", temp_dir, "--job-id", "ftjob-789"]
-                    )
+                exit_code = main(
+                    ["run-job", "--config-dir", temp_dir, "--job-id", "ftjob-789"]
+                )
 
             self.assertEqual(exit_code, 0)
             mocked_run.assert_called_once()
-            mocked_load.assert_called_once_with(
-                base_url="http://localhost:8000/v1",
-                api_key="secret-key",
-                lora_name="legal-draft",
-                lora_path=output_dir,
-                load_inplace=True,
-            )
 
             job_payload = json.loads((job_dir / "job.json").read_text(encoding="utf-8"))
             self.assertEqual(job_payload["status"], "succeeded")
             self.assertEqual(job_payload["fine_tuned_model"], "legal-draft")
             self.assertEqual(job_payload["process"]["exit_code"], 0)
-            self.assertEqual(job_payload["lora_adapter"]["status"], "loaded")
+            self.assertEqual(job_payload["lora_adapter"]["status"], "pending_load")
             self.assertEqual(job_payload["lora_adapter"]["path"], str(output_dir))
+
+    def test_load_lora_adapter_logs_request_context_on_http_error(self) -> None:
+        sys.path.insert(0, str(ROOT / "src"))
+        try:
+            from lawftrack.vllm import load_lora_adapter
+        finally:
+            sys.path.pop(0)
+
+        lora_path = Path("/tmp/legal-draft-lora")
+        http_error = error.HTTPError(
+            url="http://localhost:8000/v1/load_lora_adapter",
+            code=500,
+            msg="Internal Server Error",
+            hdrs=None,
+            fp=io.BytesIO(b'{"error":"adapter missing"}'),
+        )
+
+        with mock.patch("lawftrack.vllm.request.urlopen", side_effect=http_error):
+            with self.assertLogs("lawftrack.vllm", level="ERROR") as captured:
+                result = load_lora_adapter(
+                    base_url="http://localhost:8000/v1",
+                    api_key="secret-key",
+                    lora_name="legal-draft",
+                    lora_path=lora_path,
+                )
+
+        self.assertFalse(result.ok)
+        self.assertEqual(result.status_code, 500)
+        self.assertIn("lora_name=legal-draft", captured.output[0])
+        self.assertIn(f"lora_path={lora_path}", captured.output[0])
+        self.assertIn("request_url=http://localhost:8000/v1/load_lora_adapter", captured.output[0])
 
     def test_train_worker_marks_failed_when_training_command_fails(self) -> None:
         sys.path.insert(0, str(ROOT / "src"))

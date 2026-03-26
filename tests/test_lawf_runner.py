@@ -16,12 +16,47 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from lawftrack.api.files_store import FileStore  # noqa: E402
 from lawftrack.train.algorithms import run_lawf_job  # noqa: E402
+from lawftrack.train.lawf_runner import _load_training_records  # noqa: E402
 from lawftrack.train.lawf_runner import run_lawf_training  # noqa: E402
 
 sys.path.pop(0)
 
 
 class LAwFRunnerTests(unittest.TestCase):
+    def test_load_training_records_supports_jsonl_files(self) -> None:
+        records = [
+            {"prompt": "Q1", "completion": "A1", "anchors": []},
+            {"prompt": "Q2", "completion": "A2", "anchors": []},
+        ]
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            dataset_path = Path(temp_dir) / "train.jsonl"
+            dataset_path.write_text(
+                "\n".join(json.dumps(record) for record in records) + "\n",
+                encoding="utf-8",
+            )
+
+            loaded = _load_training_records(dataset_path)
+
+        self.assertEqual(loaded, records)
+
+    def test_load_training_records_supports_json_object_with_samples(self) -> None:
+        records = [
+            {"prompt": "Q1", "completion": "A1", "anchors": []},
+            {"prompt": "Q2", "completion": "A2", "anchors": []},
+        ]
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            dataset_path = Path(temp_dir) / "train.json"
+            dataset_path.write_text(
+                json.dumps({"samples": records}),
+                encoding="utf-8",
+            )
+
+            loaded = _load_training_records(dataset_path)
+
+        self.assertEqual(loaded, records)
+
     def test_run_lawf_job_delegates_to_lawf_runner(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             job = {"id": "ftjob-lawf-123", "model": "demo-model", "training_file": "file-123"}

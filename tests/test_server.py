@@ -524,6 +524,46 @@ class ServerTests(unittest.TestCase):
             self.assertEqual(len(list_payload["data"]), 1)
             self.assertEqual(list_payload["data"][0]["id"], created_dataset["id"])
 
+    def test_dataset_names_must_be_unique_when_creating_or_renaming(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            client = self._create_client(temp_dir)
+
+            first_dataset = client.post(
+                "/api/datasets",
+                json={"name": "dataset-1", "base_model": "Qwen/Qwen2.5-7B-Instruct"},
+            ).json()
+            second_dataset = client.post(
+                "/api/datasets",
+                json={"name": "dataset-2", "base_model": "Qwen/Qwen2.5-7B-Instruct"},
+            ).json()
+
+            duplicate_create = client.post(
+                "/api/datasets",
+                json={"name": "Dataset-1", "base_model": "Qwen/Qwen2.5-7B-Instruct"},
+            )
+            self.assertEqual(duplicate_create.status_code, 409)
+            self.assertEqual(
+                duplicate_create.json()["detail"],
+                "Dataset name already exists: Dataset-1",
+            )
+
+            duplicate_rename = client.patch(
+                f"/api/datasets/{second_dataset['id']}",
+                json={"name": " dataset-1 "},
+            )
+            self.assertEqual(duplicate_rename.status_code, 409)
+            self.assertEqual(
+                duplicate_rename.json()["detail"],
+                "Dataset name already exists: dataset-1",
+            )
+
+            unchanged_name = client.patch(
+                f"/api/datasets/{first_dataset['id']}",
+                json={"name": "dataset-1"},
+            )
+            self.assertEqual(unchanged_name.status_code, 200)
+            self.assertEqual(unchanged_name.json()["name"], "dataset-1")
+
     def test_datasets_api_imports_yaml_and_jsonl_files(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             client = self._create_client(temp_dir)

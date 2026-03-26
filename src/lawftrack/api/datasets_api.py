@@ -11,6 +11,7 @@ import httpx
 from pydantic import BaseModel
 
 from .dataset_store import DatasetStore
+from .dataset_store import DuplicateDatasetNameError
 from .tokenizer_service import TokenizerDependencyError
 from .tokenizer_service import build_prefix_before_token
 from .tokenizer_service import build_continuation_prefix
@@ -502,7 +503,12 @@ def build_router(config_dir: Path | None = None) -> APIRouter:
 
     @router.post("")
     def create_dataset(payload: CreateDatasetRequest) -> dict[str, Any]:
-        return store.create_dataset(serialize_model(payload))
+        try:
+            return store.create_dataset(serialize_model(payload))
+        except DuplicateDatasetNameError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @router.post("/import")
     async def import_dataset(file: UploadFile = File(...)) -> dict[str, Any]:
@@ -513,16 +519,23 @@ def build_router(config_dir: Path | None = None) -> APIRouter:
         if suffix in {".yaml", ".yml"}:
             try:
                 dataset = store.import_metadata_file(filename=filename, content=content)
+            except DuplicateDatasetNameError as exc:
+                raise HTTPException(status_code=409, detail=str(exc)) from exc
             except ValueError as exc:
                 raise HTTPException(status_code=400, detail=str(exc)) from exc
             return dataset
 
         if suffix in {".json", ".jsonl"}:
-            return store.import_training_data_file(
-                filename=filename,
-                content=content,
-                content_type=file.content_type,
-            )
+            try:
+                return store.import_training_data_file(
+                    filename=filename,
+                    content=content,
+                    content_type=file.content_type,
+                )
+            except DuplicateDatasetNameError as exc:
+                raise HTTPException(status_code=409, detail=str(exc)) from exc
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
 
         raise HTTPException(
             status_code=400,
@@ -930,6 +943,10 @@ def build_router(config_dir: Path | None = None) -> APIRouter:
     ) -> dict[str, Any]:
         try:
             return store.update_dataset(dataset_id, serialize_model(payload))
+        except DuplicateDatasetNameError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         except FileNotFoundError as exc:
             raise HTTPException(
                 status_code=404, detail=f"Dataset not found: {dataset_id}"

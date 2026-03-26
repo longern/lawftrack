@@ -56,6 +56,17 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
+function buildNextDatasetName(datasets: DatasetRecord[]): string {
+  const existingNames = new Set(
+    datasets.map((dataset) => dataset.name.trim().toLowerCase()),
+  );
+  let nextIndex = 1;
+  while (existingNames.has(`dataset-${nextIndex}`)) {
+    nextIndex += 1;
+  }
+  return `dataset-${nextIndex}`;
+}
+
 function decodeCandidateToken(token?: string, bytes?: number[]): string {
   if (Array.isArray(bytes) && bytes.length > 0) {
     try {
@@ -173,7 +184,6 @@ function DataWorkspace({
   const [modelOptionsError, setModelOptionsError] = useState("");
   const [modelsLoaded, setModelsLoaded] = useState(false);
   const [candidatesLoading, setCandidatesLoading] = useState(false);
-  const untitledCountRef = useRef(1);
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const tokenCandidatesRequestRef = useRef(0);
   const samplesRef = useRef<DatasetSample[]>([]);
@@ -460,8 +470,7 @@ function DataWorkspace({
   async function handleCreateDataset() {
     setCreating(true);
     try {
-      const nextName = `dataset-${untitledCountRef.current}`;
-      untitledCountRef.current += 1;
+      const nextName = buildNextDatasetName(datasets);
       const created = await fetchJson<DatasetRecord>("/api/datasets", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

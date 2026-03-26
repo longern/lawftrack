@@ -13,6 +13,10 @@ from .files_store import FileStore
 from ..config import get_config_dir
 
 
+class DuplicateDatasetNameError(ValueError):
+    pass
+
+
 class DatasetStore:
     def __init__(self, config_dir: Path | None = None) -> None:
         self.config_dir = (
@@ -24,22 +28,21 @@ class DatasetStore:
 
     def list_datasets(self) -> list[dict[str, Any]]:
         datasets: list[dict[str, Any]] = []
-        for dataset_dir in self.datasets_dir.iterdir():
-            dataset_path = dataset_dir / "dataset.yaml"
-            if not dataset_path.is_file():
-                continue
-            datasets.append(self._enrich_dataset(self._load_dataset_path(dataset_path)))
+        for dataset in self._iter_dataset_records():
+            datasets.append(self._enrich_dataset(dataset))
         datasets.sort(key=lambda item: int(item.get("updated_at", 0)), reverse=True)
         return datasets
 
     def create_dataset(self, payload: dict[str, Any]) -> dict[str, Any]:
         now = int(time.time())
         dataset_id = f"ds-{uuid.uuid4().hex[:24]}"
+        dataset_name = self._normalize_dataset_name(payload.get("name"))
+        self._ensure_unique_dataset_name(dataset_name)
         dataset = self._build_dataset_record(
             dataset_id,
             now,
             {
-                "name": payload["name"],
+                "name": dataset_name,
                 "base_model": payload.get("base_model"),
             },
         )
@@ -54,11 +57,15 @@ class DatasetStore:
 
         now = int(time.time())
         dataset_id = f"ds-{uuid.uuid4().hex[:24]}"
+        dataset_name = self._normalize_dataset_name(
+            payload.get("name") or Path(filename).stem
+        )
+        self._ensure_unique_dataset_name(dataset_name)
         dataset = self._build_dataset_record(
             dataset_id,
             now,
             {
-                "name": str(payload.get("name") or Path(filename).stem),
+                "name": dataset_name,
                 "base_model": payload.get("base_model"),
             },
         )
@@ -75,11 +82,13 @@ class DatasetStore:
     ) -> dict[str, Any]:
         now = int(time.time())
         dataset_id = f"ds-{uuid.uuid4().hex[:24]}"
+        dataset_name = self._normalize_dataset_name(Path(filename).stem)
+        self._ensure_unique_dataset_name(dataset_name)
         dataset = self._build_dataset_record(
             dataset_id,
             now,
             {
-                "name": Path(filename).stem,
+                "name": dataset_name,
                 "base_model": None,
             },
         )
@@ -194,7 +203,12 @@ class DatasetStore:
     def update_dataset(self, dataset_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         dataset = self._load_dataset(dataset_id)
         if "name" in payload:
-            dataset["name"] = payload["name"]
+            dataset_name = self._normalize_dataset_name(payload.get("name"))
+            self._ensure_unique_dataset_name(
+                dataset_name,
+                exclude_dataset_id=dataset_id,
+            )
+            dataset["name"] = dataset_name
         if "base_model" in payload:
             dataset["base_model"] = payload["base_model"]
         dataset.pop("training_file_id", None)
@@ -240,6 +254,38 @@ class DatasetStore:
         if not isinstance(payload, dict):
             raise ValueError(f"Dataset metadata must be a mapping: {dataset_path}")
         return payload
+
+    def _iter_dataset_records(self) -> list[dict[str, Any]]:
+        datasets: list[dict[str, Any]] = []
+        for dataset_dir in self.datasets_dir.iterdir():
+            dataset_path = dataset_dir / "dataset.yaml"
+            if not dataset_path.is_file():
+                continue
+            datasets.append(self._load_dataset_path(dataset_path))
+        return datasets
+
+    def _normalize_dataset_name(self, value: Any) -> str:
+        name = str(value or "").strip()
+        if not name:
+            raise ValueError("Dataset name is required.")
+        return name
+
+    def _ensure_unique_dataset_name(
+        self,
+        name: str,
+        *,
+        exclude_dataset_id: str | None = None,
+    ) -> None:
+        target_name = name.casefold()
+        for dataset in self._iter_dataset_records():
+            existing_id = str(dataset.get("id") or "")
+            if exclude_dataset_id and existing_id == exclude_dataset_id:
+                continue
+            existing_name = str(dataset.get("name") or "").strip()
+            if existing_name.casefold() == target_name:
+                raise DuplicateDatasetNameError(
+                    f"Dataset name already exists: {name}"
+                )
 
     def _write_dataset(self, dataset: dict[str, Any]) -> None:
         dataset_dir = self.datasets_dir / str(dataset["id"])

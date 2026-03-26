@@ -203,6 +203,13 @@ function OverviewSection({
     },
   ];
 
+  const openRecentDataset = recentDataset
+    ? () => onNavigate("data", { datasetId: recentDataset.id })
+    : undefined;
+  const openRecentJob = recentJob
+    ? () => onNavigate("training", { jobId: recentJob.id })
+    : undefined;
+
   const serviceMeta = [
     { label: t("Gateway status"), value: status?.status || "unknown" },
     { label: t("Health check"), value: health?.status || "unknown" },
@@ -327,8 +334,9 @@ function OverviewSection({
               </Stack>
               <Paper
                 variant="outlined"
-                {...clickableCardProps(recentDataset?.id, () =>
-                  onNavigate("data", { datasetId: recentDataset.id }),
+                {...clickableCardProps(
+                  recentDataset?.id,
+                  openRecentDataset ?? (() => {}),
                 )}
               >
                 <Typography variant="subtitle1" fontWeight={700}>
@@ -374,8 +382,9 @@ function OverviewSection({
               </Stack>
               <Paper
                 variant="outlined"
-                {...clickableCardProps(recentJob?.id, () =>
-                  onNavigate("training", { jobId: recentJob.id }),
+                {...clickableCardProps(
+                  recentJob?.id,
+                  openRecentJob ?? (() => {}),
                 )}
               >
                 <Typography variant="subtitle1" fontWeight={700}>

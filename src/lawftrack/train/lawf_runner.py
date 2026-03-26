@@ -47,7 +47,25 @@ def _load_training_records(dataset_path: Path) -> list[dict[str, Any]]:
     if not content:
         raise ValueError(f"Training dataset is empty: {dataset_path}")
 
-    if content.startswith("{") or content.startswith("["):
+    suffix = dataset_path.suffix.lower()
+
+    if suffix == ".jsonl":
+        parsed_lines = [
+            json.loads(line)
+            for line in content.splitlines()
+            if line.strip()
+        ]
+        if len(parsed_lines) == 1 and isinstance(parsed_lines[0], list):
+            records = parsed_lines[0]
+        elif (
+            len(parsed_lines) == 1
+            and isinstance(parsed_lines[0], dict)
+            and isinstance(parsed_lines[0].get("samples"), list)
+        ):
+            records = parsed_lines[0]["samples"]
+        else:
+            records = parsed_lines
+    elif suffix == ".json":
         payload = json.loads(content)
         if isinstance(payload, list):
             records = payload
@@ -56,11 +74,24 @@ def _load_training_records(dataset_path: Path) -> list[dict[str, Any]]:
         else:
             records = [payload]
     else:
-        records = [
-            json.loads(line)
-            for line in content.splitlines()
-            if line.strip()
-        ]
+        try:
+            payload = json.loads(content)
+        except json.JSONDecodeError as exc:
+            if content.startswith("{") and exc.msg == "Extra data":
+                records = [
+                    json.loads(line)
+                    for line in content.splitlines()
+                    if line.strip()
+                ]
+            else:
+                raise
+        else:
+            if isinstance(payload, list):
+                records = payload
+            elif isinstance(payload, dict) and isinstance(payload.get("samples"), list):
+                records = payload["samples"]
+            else:
+                records = [payload]
 
     if not records:
         raise ValueError(f"Training dataset is empty: {dataset_path}")

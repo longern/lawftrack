@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import AutorenewRoundedIcon from "@mui/icons-material/AutorenewRounded";
 import KeyboardArrowDownRoundedIcon from "@mui/icons-material/KeyboardArrowDownRounded";
+import NavigateNextRoundedIcon from "@mui/icons-material/NavigateNextRounded";
 import CompareArrowsRoundedIcon from "@mui/icons-material/CompareArrowsRounded";
 import ExpandMoreRoundedIcon from "@mui/icons-material/ExpandMoreRounded";
 import ForumRoundedIcon from "@mui/icons-material/ForumRounded";
@@ -17,6 +18,7 @@ import {
   Box,
   Button,
   Chip,
+  Collapse,
   CircularProgress,
   Fab,
   Paper,
@@ -122,6 +124,156 @@ function extractDeltaParts(delta: {
   }
 
   return { reasoning, content };
+}
+
+function trimBoundaryBlankLines(value: string): string {
+  return value
+    .replace(/^(?:[ \t]*\r?\n)+/, "")
+    .replace(/(?:\r?\n[ \t]*)+$/, "");
+}
+
+interface AssistantBubbleProps {
+  response: TurnResponse | undefined;
+  label: string;
+  accentColor: string;
+}
+
+function AssistantBubble({
+  response,
+  label,
+  accentColor,
+}: AssistantBubbleProps) {
+  const theme = useTheme();
+  const { t } = useI18n();
+  const reasoningContent = response?.reasoning?.trim() ?? "";
+  const responseContent = trimBoundaryBlankLines(response?.content ?? "");
+  const [reasoningExpanded, setReasoningExpanded] = useState(
+    Boolean(reasoningContent),
+  );
+  const hadReasoningRef = useRef(Boolean(reasoningContent));
+
+  useEffect(() => {
+    if (!hadReasoningRef.current && reasoningContent) {
+      setReasoningExpanded(true);
+    }
+    hadReasoningRef.current = Boolean(reasoningContent);
+  }, [reasoningContent]);
+
+  return (
+    <Paper
+      variant="outlined"
+      sx={{
+        p: 2,
+        borderRadius: 3.5,
+        borderColor: alpha(accentColor, 0.36),
+        background:
+          theme.palette.mode === "dark"
+            ? `linear-gradient(180deg, ${alpha(accentColor, 0.16)} 0%, ${alpha("#09111e", 0.88)} 100%)`
+            : `linear-gradient(180deg, ${alpha(accentColor, 0.08)} 0%, rgba(255,255,255,0.96) 100%)`,
+        boxShadow: `0 16px 48px ${alpha(accentColor, 0.12)}`,
+      }}
+    >
+      <Stack spacing={1.5}>
+        <Stack
+          direction="row"
+          spacing={1}
+          alignItems="center"
+          justifyContent="space-between"
+        >
+          <Stack direction="row" spacing={1} alignItems="center">
+            <SmartToyRoundedIcon sx={{ color: accentColor }} />
+            <Typography variant="subtitle2">{label}</Typography>
+          </Stack>
+          {response?.modelId ? <Chip size="small" label={response.modelId} /> : null}
+        </Stack>
+
+        {response?.error ? <Alert severity="error">{response.error}</Alert> : null}
+
+        {response?.status === "streaming" ? (
+          <Stack direction="row" spacing={1} alignItems="center">
+            <CircularProgress size={14} />
+            <Typography variant="body2" color="text.secondary">
+              {t("Generating...")}
+            </Typography>
+          </Stack>
+        ) : null}
+
+        {reasoningContent ? (
+          <Stack spacing={0.5} sx={{ alignItems: "flex-start" }}>
+            <Button
+              variant="text"
+              size="small"
+              onClick={() => setReasoningExpanded((current) => !current)}
+              endIcon={
+                <NavigateNextRoundedIcon
+                  sx={{
+                    fontSize: 16,
+                    transform: reasoningExpanded
+                      ? "rotate(90deg)"
+                      : "rotate(0deg)",
+                    transition: "transform 160ms ease",
+                  }}
+                />
+              }
+              sx={{
+                minWidth: 0,
+                px: 0,
+                py: 0,
+                color: "text.secondary",
+                fontSize: "0.84rem",
+                fontWeight: 400,
+                lineHeight: 1.65,
+                textTransform: "none",
+                justifyContent: "flex-start",
+                "& .MuiButton-endIcon": {
+                  ml: 0.25,
+                  mr: 0,
+                },
+                "&:hover": {
+                  backgroundColor: "transparent",
+                  textDecoration: "underline",
+                },
+              }}
+            >
+              {t("Thought process")}
+            </Button>
+            <Collapse in={reasoningExpanded} timeout="auto" sx={{ width: "100%" }}>
+              <Typography
+                variant="body2"
+                sx={{
+                  whiteSpace: "pre-wrap",
+                  wordBreak: "break-word",
+                  color: "text.secondary",
+                  fontSize: "0.84rem",
+                  lineHeight: 1.65,
+                }}
+              >
+                {reasoningContent}
+              </Typography>
+            </Collapse>
+          </Stack>
+        ) : null}
+
+        <Typography
+          variant="body1"
+          sx={{
+            whiteSpace: "pre-wrap",
+            wordBreak: "break-word",
+            color:
+              responseContent.trim() !== ""
+                ? "text.primary"
+                : "text.secondary",
+            minHeight: 48,
+            lineHeight: 1.72,
+          }}
+        >
+          {responseContent.trim() !== ""
+            ? responseContent
+            : t("Waiting for model output.")}
+        </Typography>
+      </Stack>
+    </Paper>
+  );
 }
 
 function ChatSection({ isMobile }: ChatSectionProps) {
@@ -596,94 +748,6 @@ function ChatSection({ isMobile }: ChatSectionProps) {
     );
   }
 
-  function renderAssistantBubble(
-    response: TurnResponse | undefined,
-    label: string,
-    accentColor: string,
-  ) {
-    const reasoningContent = response?.reasoning?.trim() ?? "";
-    const responseContent = response?.content ?? "";
-
-    return (
-      <Paper
-        variant="outlined"
-        sx={{
-          p: 2,
-          borderRadius: 3.5,
-          borderColor: alpha(accentColor, 0.36),
-          background:
-            theme.palette.mode === "dark"
-              ? `linear-gradient(180deg, ${alpha(accentColor, 0.16)} 0%, ${alpha("#09111e", 0.88)} 100%)`
-              : `linear-gradient(180deg, ${alpha(accentColor, 0.08)} 0%, rgba(255,255,255,0.96) 100%)`,
-          boxShadow: `0 16px 48px ${alpha(accentColor, 0.12)}`,
-        }}
-      >
-        <Stack spacing={1.5}>
-          <Stack
-            direction="row"
-            spacing={1}
-            alignItems="center"
-            justifyContent="space-between"
-          >
-            <Stack direction="row" spacing={1} alignItems="center">
-              <SmartToyRoundedIcon sx={{ color: accentColor }} />
-              <Typography variant="subtitle2">{label}</Typography>
-            </Stack>
-            {response?.modelId ? (
-              <Chip size="small" label={response.modelId} />
-            ) : null}
-          </Stack>
-
-          {response?.error ? (
-            <Alert severity="error">{response.error}</Alert>
-          ) : null}
-
-          {response?.status === "streaming" ? (
-            <Stack direction="row" spacing={1} alignItems="center">
-              <CircularProgress size={14} />
-              <Typography variant="body2" color="text.secondary">
-                {t("Generating...")}
-              </Typography>
-            </Stack>
-          ) : null}
-
-          {reasoningContent ? (
-            <Typography
-              variant="body2"
-              sx={{
-                whiteSpace: "pre-wrap",
-                wordBreak: "break-word",
-                color: "text.secondary",
-                fontSize: "0.84rem",
-                lineHeight: 1.65,
-              }}
-            >
-              {reasoningContent}
-            </Typography>
-          ) : null}
-
-          <Typography
-            variant="body1"
-            sx={{
-              whiteSpace: "pre-wrap",
-              wordBreak: "break-word",
-              color:
-                responseContent.trim() !== ""
-                  ? "text.primary"
-                  : "text.secondary",
-              minHeight: 48,
-              lineHeight: 1.72,
-            }}
-          >
-            {responseContent.trim() !== ""
-              ? responseContent
-              : t("Waiting for model output.")}
-          </Typography>
-        </Stack>
-      </Paper>
-    );
-  }
-
   function renderTurn(turn: ChatTurn) {
     return (
       <Stack key={turn.id} spacing={1.5}>
@@ -739,25 +803,25 @@ function ChatSection({ isMobile }: ChatSectionProps) {
               gap: 2,
             }}
           >
-            {renderAssistantBubble(
-              turn.responses.primary,
-              t("Model A"),
-              "#2563eb",
-            )}
-            {renderAssistantBubble(
-              turn.responses.secondary,
-              t("Model B"),
-              "#d97706",
-            )}
+            <AssistantBubble
+              response={turn.responses.primary}
+              label={t("Model A")}
+              accentColor="#2563eb"
+            />
+            <AssistantBubble
+              response={turn.responses.secondary}
+              label={t("Model B")}
+              accentColor="#d97706"
+            />
           </Box>
         ) : (
           <Box sx={{ display: "flex", justifyContent: "flex-start" }}>
             <Box sx={{ width: { xs: "100%", md: "78%" } }}>
-              {renderAssistantBubble(
-                turn.responses.primary,
-                t("Response"),
-                "#2563eb",
-              )}
+              <AssistantBubble
+                response={turn.responses.primary}
+                label={t("Response")}
+                accentColor="#2563eb"
+              />
             </Box>
           </Box>
         )}

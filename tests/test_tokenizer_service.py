@@ -42,6 +42,7 @@ class FakeTokenizer:
 class TokenizerServiceTests(unittest.TestCase):
     def tearDown(self) -> None:
         tokenizer_service.load_tokenizer.cache_clear()
+        tokenizer_service.load_model_config.cache_clear()
 
     def test_build_continuation_prefix_preserves_leading_space(self) -> None:
         with mock.patch.object(tokenizer_service, "load_tokenizer", return_value=FakeTokenizer()):
@@ -138,6 +139,31 @@ class TokenizerServiceTests(unittest.TestCase):
             FakeAutoTokenizer.called_with,
             [(str(model_dir), True)],
         )
+
+    def test_get_model_max_position_embeddings_reads_model_config(self) -> None:
+        fake_config = mock.Mock(max_position_embeddings=40960)
+
+        with mock.patch.object(
+            tokenizer_service,
+            "load_model_config",
+            return_value=fake_config,
+        ):
+            self.assertEqual(
+                tokenizer_service.get_model_max_position_embeddings(model="demo-model"),
+                40960,
+            )
+
+    def test_get_model_max_position_embeddings_ignores_invalid_values(self) -> None:
+        fake_config = mock.Mock(max_position_embeddings="40960")
+
+        with mock.patch.object(
+            tokenizer_service,
+            "load_model_config",
+            return_value=fake_config,
+        ):
+            self.assertIsNone(
+                tokenizer_service.get_model_max_position_embeddings(model="demo-model")
+            )
 
 
 if __name__ == "__main__":

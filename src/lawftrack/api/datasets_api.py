@@ -15,6 +15,7 @@ from .tokenizer_service import TokenizerDependencyError
 from .tokenizer_service import build_prefix_before_token
 from .tokenizer_service import build_continuation_prefix
 from .tokenizer_service import count_text_tokens
+from .tokenizer_service import get_model_max_position_embeddings
 from .tokenizer_service import get_tokenizer_max_length
 from .tokenizer_service import load_tokenizer
 from .tokenizer_service import tokenize_text
@@ -413,10 +414,18 @@ def suggest_completion_max_tokens(
         text=prompt,
         config_dir=config_dir,
     )
-    model_max_length = get_tokenizer_max_length(
+    tokenizer_max_length = get_tokenizer_max_length(
         model=model,
         config_dir=config_dir,
     )
+    config_max_length = get_model_max_position_embeddings(
+        model=model,
+        config_dir=config_dir,
+    )
+    available_limits = [
+        value for value in (tokenizer_max_length, config_max_length) if value is not None
+    ]
+    model_max_length = min(available_limits) if available_limits else None
     if model_max_length is None:
         return 8192
 

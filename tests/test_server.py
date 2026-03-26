@@ -1827,6 +1827,66 @@ class ServerTests(unittest.TestCase):
                 ],
             )
 
+    def test_suggest_completion_max_tokens_caps_to_model_config_limit(self) -> None:
+        sys.path.insert(0, str(ROOT / "src"))
+        try:
+            import lawftrack.api.datasets_api as datasets_api_module
+        finally:
+            sys.path.pop(0)
+
+        with mock.patch.object(
+            datasets_api_module,
+            "count_text_tokens",
+            return_value=11,
+        ):
+            with mock.patch.object(
+                datasets_api_module,
+                "get_tokenizer_max_length",
+                return_value=131072,
+            ):
+                with mock.patch.object(
+                    datasets_api_module,
+                    "get_model_max_position_embeddings",
+                    return_value=40960,
+                ):
+                    self.assertEqual(
+                        datasets_api_module.suggest_completion_max_tokens(
+                            model="Qwen/Qwen3-32B",
+                            prompt="PROMPT",
+                        ),
+                        40948,
+                    )
+
+    def test_suggest_completion_max_tokens_falls_back_to_tokenizer_limit(self) -> None:
+        sys.path.insert(0, str(ROOT / "src"))
+        try:
+            import lawftrack.api.datasets_api as datasets_api_module
+        finally:
+            sys.path.pop(0)
+
+        with mock.patch.object(
+            datasets_api_module,
+            "count_text_tokens",
+            return_value=11,
+        ):
+            with mock.patch.object(
+                datasets_api_module,
+                "get_tokenizer_max_length",
+                return_value=32768,
+            ):
+                with mock.patch.object(
+                    datasets_api_module,
+                    "get_model_max_position_embeddings",
+                    return_value=None,
+                ):
+                    self.assertEqual(
+                        datasets_api_module.suggest_completion_max_tokens(
+                            model="demo-model",
+                            prompt="PROMPT",
+                        ),
+                        32756,
+                    )
+
     def test_v1_proxy_forwards_to_configured_vllm_endpoint(self) -> None:
         sys.path.insert(0, str(ROOT / "src"))
         try:

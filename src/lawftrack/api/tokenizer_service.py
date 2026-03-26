@@ -21,6 +21,16 @@ def _import_auto_tokenizer():
     return AutoTokenizer
 
 
+def _import_auto_config():
+    try:
+        from transformers import AutoConfig
+    except ImportError as exc:  # pragma: no cover - exercised via callers
+        raise TokenizerDependencyError(
+            "Tokenizer support requires `transformers`. Install the runtime with tokenizer dependencies."
+        ) from exc
+    return AutoConfig
+
+
 @lru_cache(maxsize=8)
 def load_tokenizer(model: str, config_dir: Path | None = None):
     AutoTokenizer = _import_auto_tokenizer()
@@ -34,6 +44,13 @@ def load_tokenizer(model: str, config_dir: Path | None = None):
             f"Model tokenizer for `{model}` does not expose fast offset mappings."
         )
     return tokenizer
+
+
+@lru_cache(maxsize=8)
+def load_model_config(model: str, config_dir: Path | None = None):
+    AutoConfig = _import_auto_config()
+    resolved_model = resolve_model_reference(model, config_dir=config_dir)
+    return AutoConfig.from_pretrained(resolved_model)
 
 
 def tokenize_text(
@@ -142,5 +159,17 @@ def get_tokenizer_max_length(
         return None
     # Hugging Face uses extremely large sentinels when max length is unknown.
     if max_length >= 1_000_000:
+        return None
+    return max_length
+
+
+def get_model_max_position_embeddings(
+    *,
+    model: str,
+    config_dir: Path | None = None,
+) -> int | None:
+    model_config = load_model_config(model, config_dir=config_dir)
+    max_length = getattr(model_config, "max_position_embeddings", None)
+    if not isinstance(max_length, int) or max_length <= 0:
         return None
     return max_length

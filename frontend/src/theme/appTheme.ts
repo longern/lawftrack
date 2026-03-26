@@ -31,6 +31,7 @@ export function createAppTheme(mode: PaletteMode) {
     },
     components: {
       MuiButton: { styleOverrides: { root: { textTransform: "none" } } },
+      MuiCard: { styleOverrides: { root: { borderRadius: "8px" } } },
       MuiDrawer: {
         styleOverrides: {
           paper: {

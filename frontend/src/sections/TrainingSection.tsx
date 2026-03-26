@@ -1,11 +1,8 @@
-import {
-  type FormEvent,
-  type ReactNode,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import AddRoundedIcon from "@mui/icons-material/AddRounded";
+import ArrowBackRoundedIcon from "@mui/icons-material/ArrowBackRounded";
+import AutorenewRoundedIcon from "@mui/icons-material/AutorenewRounded";
+import CancelRoundedIcon from "@mui/icons-material/CancelRounded";
+import ExpandMoreRoundedIcon from "@mui/icons-material/ExpandMoreRounded";
 import {
   Accordion,
   AccordionDetails,
@@ -13,8 +10,6 @@ import {
   Alert,
   Box,
   Button,
-  Card,
-  CardContent,
   Checkbox,
   Chip,
   Dialog,
@@ -24,18 +19,30 @@ import {
   FormControl,
   FormControlLabel,
   Grid,
+  IconButton,
   InputLabel,
   Link,
   MenuItem,
   Paper,
-  Skeleton,
   Select,
+  Skeleton,
   Stack,
   Tab,
   Tabs,
   TextField,
   Typography,
+  useMediaQuery,
 } from "@mui/material";
+import { useTheme } from "@mui/material/styles";
+import {
+  type MouseEvent as ReactMouseEvent,
+  type ReactNode,
+  type SubmitEvent,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   CartesianGrid,
   Legend,
@@ -50,18 +57,14 @@ import type {
   NameType,
   ValueType,
 } from "recharts/types/component/DefaultTooltipContent";
-import AddRoundedIcon from "@mui/icons-material/AddRounded";
-import AutorenewRoundedIcon from "@mui/icons-material/AutorenewRounded";
-import ArrowBackRoundedIcon from "@mui/icons-material/ArrowBackRounded";
-import CancelRoundedIcon from "@mui/icons-material/CancelRounded";
-import ExpandMoreRoundedIcon from "@mui/icons-material/ExpandMoreRounded";
+import { useI18n } from "../i18n";
 import type {
   ApiListResponse,
   DatasetRecord,
   DatasetTrainingFileExport,
+  FineTuningJob,
   FineTuningJobCheckpoint,
   FineTuningJobEvent,
-  FineTuningJob,
   FineTuningJobLogs,
   FineTuningMethodConfig,
 } from "../types/app";
@@ -70,7 +73,6 @@ import {
   type RemoteModelRecord,
   resolvePreferredBaseModel,
 } from "../utils/modelSelection";
-import { useI18n } from "../i18n";
 
 type TrainingMethodType = "sft" | "lawf";
 type LossChartPoint = {
@@ -181,6 +183,8 @@ function TrainingSection({
   initialJobId,
   onInitialJobHandled,
 }: TrainingSectionProps) {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("md"));
   const { t, formatTaskCount } = useI18n();
   const [preferredBaseModel, setPreferredBaseModel] =
     useState(FALLBACK_BASE_MODEL);
@@ -203,11 +207,17 @@ function TrainingSection({
   const [refreshing, setRefreshing] = useState(false);
   const [loadingJobArtifacts, setLoadingJobArtifacts] = useState(false);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [desktopQueueWidth, setDesktopQueueWidth] = useState(360);
   const preferredBaseModelRef = useRef(FALLBACK_BASE_MODEL);
+  const desktopPaneRef = useRef<HTMLDivElement | null>(null);
+  const resizingDesktopPaneRef = useRef(false);
   const selectedDataset = useMemo(
     () => datasets.find((dataset) => dataset.id === selectedDatasetId) ?? null,
     [datasets, selectedDatasetId],
   );
+  const panelBackgroundSx = {
+    bgcolor: "background.paper",
+  } as const;
 
   useEffect(() => {
     void loadPreferredBaseModel();
@@ -278,6 +288,43 @@ function TrainingSection({
       handleSelectDataset(datasets[0].id);
     }
   }, [createDialogOpen, datasets, selectedDatasetId]);
+
+  useEffect(() => {
+    function handlePointerMove(event: MouseEvent) {
+      if (!resizingDesktopPaneRef.current || !desktopPaneRef.current) {
+        return;
+      }
+
+      const rect = desktopPaneRef.current.getBoundingClientRect();
+      const minLeftWidth = 280;
+      const minRightWidth = 420;
+      const maxLeftWidth = Math.max(minLeftWidth, rect.width - minRightWidth);
+      const nextWidth = Math.min(
+        Math.max(event.clientX - rect.left, minLeftWidth),
+        maxLeftWidth,
+      );
+      setDesktopQueueWidth(nextWidth);
+    }
+
+    function handlePointerUp() {
+      if (!resizingDesktopPaneRef.current) {
+        return;
+      }
+      resizingDesktopPaneRef.current = false;
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    }
+
+    window.addEventListener("mousemove", handlePointerMove);
+    window.addEventListener("mouseup", handlePointerUp);
+
+    return () => {
+      window.removeEventListener("mousemove", handlePointerMove);
+      window.removeEventListener("mouseup", handlePointerUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+  }, []);
 
   useEffect(() => {
     if (
@@ -453,7 +500,7 @@ function TrainingSection({
     }));
   }
 
-  async function handleSubmitJob(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmitJob(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
     const method = buildMethodConfig(form);
     if (!selectedDatasetId) {
@@ -522,66 +569,330 @@ function TrainingSection({
     }
   }
 
-  return (
-    <Grid container spacing={3}>
-      {pageError ? (
-        <Grid size={{ xs: 12 }}>
-          <Alert severity="error" onClose={() => setPageError("")}>
-            {pageError}
-          </Alert>
-        </Grid>
-      ) : null}
+  function handleOpenJob(job: FineTuningJob) {
+    setSelectedJob(job);
+    setSelectedJobId(job.id);
+  }
 
-      {selectedJob ? (
-        <Grid size={{ xs: 12 }}>
-          <Card>
-            <CardContent>
-              <Stack spacing={2}>
-                <Stack
-                  direction={{ xs: "column", md: "row" }}
-                  spacing={2}
-                  alignItems={{ xs: "flex-start", md: "center" }}
-                  justifyContent="space-between"
-                >
-                  <Typography variant="h6">
-                    {t("Training job details")}
-                  </Typography>
-                  <Stack direction="row" spacing={1.5}>
-                    <Button
-                      size="small"
-                      startIcon={<ArrowBackRoundedIcon />}
-                      onClick={() => setSelectedJobId(null)}
-                    >
-                      {t("Back to training queue")}
-                    </Button>
-                    <Button
-                      size="small"
-                      startIcon={<AutorenewRoundedIcon />}
-                      onClick={() => {
-                        if (!selectedJobId) {
-                          return;
-                        }
-                        void loadJob(selectedJobId);
-                        void loadJobArtifacts(selectedJobId);
-                      }}
-                      disabled={refreshing}
-                    >
-                      {t("Refresh")}
-                    </Button>
-                    {selectedJob.status === "running" ? (
-                      <Button
-                        size="small"
-                        color="error"
-                        variant="outlined"
-                        startIcon={<CancelRoundedIcon />}
-                        onClick={() => void handleCancelJob(selectedJob.id)}
-                      >
-                        {t("Cancel job")}
-                      </Button>
-                    ) : null}
-                  </Stack>
+  function handleRefreshSelectedJob() {
+    if (!selectedJobId) {
+      return;
+    }
+    void loadJob(selectedJobId);
+    void loadJobArtifacts(selectedJobId);
+  }
+
+  function handleStartDesktopResize(event: ReactMouseEvent<HTMLDivElement>) {
+    event.preventDefault();
+    resizingDesktopPaneRef.current = true;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  }
+
+  function renderQueueCard() {
+    return (
+      <Box
+        sx={{
+          width: "100%",
+          height: "100%",
+          flex: 1,
+          minHeight: 0,
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
+          ...panelBackgroundSx,
+        }}
+      >
+        <Box
+          sx={{
+            height: "100%",
+            display: "flex",
+            flexDirection: "column",
+            minHeight: 0,
+            p: 0,
+          }}
+        >
+          <Stack sx={{ height: "100%", minHeight: 0, flex: 1 }}>
+            <Stack spacing={1.5} sx={{ p: 3, pb: 2 }}>
+              <Stack
+                direction="row"
+                alignItems="center"
+                justifyContent="space-between"
+              >
+                <Box>
+                  <Typography variant="h6">{t("Training queue")}</Typography>
+                </Box>
+                <Stack direction="row" spacing={0.5} alignItems="center">
+                  <Chip
+                    size="small"
+                    label={formatTaskCount(jobs.length)}
+                    color="primary"
+                    variant="outlined"
+                  />
+                  <IconButton
+                    size="small"
+                    onClick={() => void refreshAll()}
+                    disabled={refreshing}
+                    aria-label={t("Refresh")}
+                    sx={{ color: "text.secondary" }}
+                  >
+                    <AutorenewRoundedIcon fontSize="small" />
+                  </IconButton>
                 </Stack>
+              </Stack>
+              <Stack direction="row" spacing={1.25} alignItems="center">
+                <Button
+                  size="small"
+                  variant="contained"
+                  startIcon={<AddRoundedIcon />}
+                  onClick={() => setCreateDialogOpen(true)}
+                  sx={{ flex: { xs: 1, sm: "initial" } }}
+                >
+                  {t("Create training job")}
+                </Button>
+              </Stack>
+            </Stack>
 
+            <Box
+              sx={{
+                flex: 1,
+                minHeight: 0,
+                overflow: "auto",
+                borderTop: (theme) => `1px solid ${theme.palette.divider}`,
+              }}
+            >
+              {jobs.length === 0 ? (
+                <Box sx={{ px: 3, pt: 2, pb: 3 }}>
+                  <Paper
+                    variant="outlined"
+                    sx={{
+                      p: 3,
+                      textAlign: "center",
+                      color: "text.secondary",
+                    }}
+                  >
+                    {t(
+                      'No training jobs yet. Click "Create training job" to get started.',
+                    )}
+                  </Paper>
+                </Box>
+              ) : (
+                <Box sx={{ px: 3, pt: 2, pb: 3 }}>
+                  <Stack spacing={1.5}>
+                    {jobs.map((job) => (
+                      <Paper
+                        key={job.id}
+                        variant="outlined"
+                        onClick={() => handleOpenJob(job)}
+                        sx={{
+                          p: 2,
+                          borderRadius: 3,
+                          cursor: "pointer",
+                          borderColor:
+                            selectedJobId === job.id
+                              ? "primary.main"
+                              : "divider",
+                          boxShadow:
+                            selectedJobId === job.id
+                              ? "0 12px 28px rgba(37, 99, 235, 0.12)"
+                              : undefined,
+                          transition:
+                            "border-color 120ms ease, box-shadow 120ms ease",
+                          "&:hover": {
+                            borderColor: "primary.main",
+                            boxShadow: "0 12px 28px rgba(15, 23, 42, 0.08)",
+                          },
+                        }}
+                      >
+                        <Stack spacing={1.25}>
+                          <Stack
+                            direction="row"
+                            justifyContent="space-between"
+                            spacing={2}
+                          >
+                            <Box sx={{ minWidth: 0 }}>
+                              <Typography
+                                variant="subtitle2"
+                                fontWeight={700}
+                                noWrap
+                              >
+                                {job.model}
+                              </Typography>
+                              <Typography
+                                variant="caption"
+                                color="text.secondary"
+                              >
+                                {job.id}
+                              </Typography>
+                            </Box>
+                            <Chip
+                              size="small"
+                              color={
+                                job.status === "running"
+                                  ? "info"
+                                  : job.status === "succeeded"
+                                    ? "success"
+                                    : job.status === "failed"
+                                      ? "error"
+                                      : "default"
+                              }
+                              label={job.status}
+                            />
+                          </Stack>
+                          <Stack direction="row" spacing={1.5} flexWrap="wrap">
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                            >
+                              {job.method?.type ?? "sft"}
+                            </Typography>
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                            >
+                              {formatDateTime(job.created_at)}
+                            </Typography>
+                            {job.fine_tuned_model ? (
+                              <Typography
+                                variant="caption"
+                                color="success.main"
+                              >
+                                {job.fine_tuned_model}
+                              </Typography>
+                            ) : null}
+                          </Stack>
+                        </Stack>
+                      </Paper>
+                    ))}
+                  </Stack>
+                </Box>
+              )}
+            </Box>
+          </Stack>
+        </Box>
+      </Box>
+    );
+  }
+
+  function renderEmptyDetailPane() {
+    return (
+      <Box
+        sx={{
+          width: "100%",
+          height: "100%",
+          flex: 1,
+          minHeight: 0,
+          overflow: "hidden",
+          ...panelBackgroundSx,
+        }}
+      >
+        <Box sx={{ height: "100%", minHeight: 0, p: 0 }}>
+          <Paper
+            variant="outlined"
+            sx={{
+              m: 3,
+              p: { xs: 3, md: 4 },
+              minHeight: { xs: 240, md: 520 },
+              height: "calc(100% - 48px)",
+              borderRadius: 3,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              textAlign: "center",
+              color: "text.secondary",
+            }}
+          >
+            <Stack spacing={1}>
+              <Typography variant="h6" color="text.primary">
+                {t("Training job details")}
+              </Typography>
+              <Typography variant="body2">
+                {t("Select a training job to view details.")}
+              </Typography>
+            </Stack>
+          </Paper>
+        </Box>
+      </Box>
+    );
+  }
+
+  function renderJobDetailsCard(showBackButton: boolean) {
+    if (!selectedJob) {
+      return null;
+    }
+
+    return (
+      <Box
+        sx={{
+          width: "100%",
+          height: "100%",
+          flex: 1,
+          minHeight: 0,
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
+          ...panelBackgroundSx,
+        }}
+      >
+        <Box
+          sx={{
+            height: "100%",
+            display: "flex",
+            flexDirection: "column",
+            minHeight: 0,
+            p: 0,
+          }}
+        >
+          <Stack sx={{ minHeight: 0, height: "100%" }}>
+            <Stack
+              direction={{ xs: "column", md: "row" }}
+              spacing={2}
+              alignItems={{ xs: "flex-start", md: "center" }}
+              justifyContent="space-between"
+              sx={{ p: 3, pb: 2 }}
+            >
+              <Typography variant="h6">{t("Training job details")}</Typography>
+              <Stack
+                direction="row"
+                spacing={1}
+                useFlexGap
+                flexWrap="wrap"
+                alignItems="center"
+              >
+                {showBackButton ? (
+                  <Button
+                    size="small"
+                    startIcon={<ArrowBackRoundedIcon />}
+                    onClick={() => setSelectedJobId(null)}
+                  >
+                    {t("Back to training queue")}
+                  </Button>
+                ) : null}
+                <IconButton
+                  size="small"
+                  onClick={handleRefreshSelectedJob}
+                  disabled={refreshing}
+                  aria-label={t("Refresh")}
+                  sx={{ color: "text.secondary" }}
+                >
+                  <AutorenewRoundedIcon fontSize="small" />
+                </IconButton>
+                {selectedJob.status === "running" ? (
+                  <Button
+                    size="small"
+                    color="error"
+                    variant="outlined"
+                    startIcon={<CancelRoundedIcon />}
+                    onClick={() => void handleCancelJob(selectedJob.id)}
+                  >
+                    {t("Cancel job")}
+                  </Button>
+                ) : null}
+              </Stack>
+            </Stack>
+
+            <Box sx={{ flex: 1, minHeight: 0, overflow: "auto" }}>
+              <Box sx={{ px: 3, pb: 3 }}>
                 <Grid container spacing={2}>
                   <Grid size={{ xs: 12, md: 6, xl: 3 }}>
                     <DetailCard title={t("Basic info")}>
@@ -714,173 +1025,105 @@ function TrainingSection({
                     </DetailCard>
                   </Grid>
                 </Grid>
-              </Stack>
-            </CardContent>
-          </Card>
-        </Grid>
-      ) : (
-        <>
-          <Grid size={{ xs: 12 }}>
-            <Card>
-              <CardContent>
-                <Stack
-                  direction={{ xs: "column", md: "row" }}
-                  spacing={2}
-                  alignItems={{ xs: "flex-start", md: "center" }}
-                  justifyContent="space-between"
-                >
-                  <Typography variant="h6">{t("Training console")}</Typography>
-                  <Stack direction="row" spacing={1.5}>
-                    <Button
-                      size="small"
-                      startIcon={<AutorenewRoundedIcon />}
-                      onClick={() => void refreshAll()}
-                      disabled={refreshing}
-                    >
-                      {t("Refresh")}
-                    </Button>
-                    <Button
-                      variant="contained"
-                      startIcon={<AddRoundedIcon />}
-                      onClick={() => setCreateDialogOpen(true)}
-                    >
-                      {t("Create training job")}
-                    </Button>
-                  </Stack>
-                </Stack>
-              </CardContent>
-            </Card>
-          </Grid>
+              </Box>
+            </Box>
+          </Stack>
+        </Box>
+      </Box>
+    );
+  }
 
-          <Grid size={{ xs: 12 }}>
-            <Card>
-              <CardContent>
-                <Stack spacing={2.5}>
-                  <Stack
-                    direction="row"
-                    alignItems="center"
-                    justifyContent="space-between"
-                  >
-                    <Box>
-                      <Typography variant="h6">
-                        {t("Training queue")}
-                      </Typography>
-                    </Box>
-                    <Chip
-                      size="small"
-                      label={formatTaskCount(jobs.length)}
-                      color="primary"
-                      variant="outlined"
-                    />
-                  </Stack>
+  return (
+    <Stack
+      sx={{
+        height: "100%",
+        minHeight: 0,
+        overflow: "hidden",
+        bgcolor: "background.paper",
+      }}
+      spacing={3}
+    >
+      {pageError ? (
+        <Alert severity="error" onClose={() => setPageError("")}>
+          {pageError}
+        </Alert>
+      ) : null}
 
-                  {jobs.length === 0 ? (
-                    <Paper
-                      variant="outlined"
-                      sx={{
-                        p: 3,
-                        textAlign: "center",
-                        color: "text.secondary",
-                      }}
-                    >
-                      {t(
-                        'No training jobs yet. Click "Create training job" to get started.',
-                      )}
-                    </Paper>
-                  ) : (
-                    <Stack spacing={1.5}>
-                      {jobs.map((job) => (
-                        <Paper
-                          key={job.id}
-                          variant="outlined"
-                          onClick={() => {
-                            setSelectedJob(job);
-                            setSelectedJobId(job.id);
-                          }}
-                          sx={{
-                            p: 2,
-                            borderRadius: 3,
-                            cursor: "pointer",
-                            transition:
-                              "border-color 120ms ease, box-shadow 120ms ease",
-                            "&:hover": {
-                              borderColor: "primary.main",
-                              boxShadow: "0 12px 28px rgba(15, 23, 42, 0.08)",
-                            },
-                          }}
-                        >
-                          <Stack spacing={1.25}>
-                            <Stack
-                              direction="row"
-                              justifyContent="space-between"
-                              spacing={2}
-                            >
-                              <Box sx={{ minWidth: 0 }}>
-                                <Typography
-                                  variant="subtitle2"
-                                  fontWeight={700}
-                                  noWrap
-                                >
-                                  {job.model}
-                                </Typography>
-                                <Typography
-                                  variant="caption"
-                                  color="text.secondary"
-                                >
-                                  {job.id}
-                                </Typography>
-                              </Box>
-                              <Chip
-                                size="small"
-                                color={
-                                  job.status === "running"
-                                    ? "info"
-                                    : job.status === "succeeded"
-                                      ? "success"
-                                      : job.status === "failed"
-                                        ? "error"
-                                        : "default"
-                                }
-                                label={job.status}
-                              />
-                            </Stack>
-                            <Stack
-                              direction="row"
-                              spacing={1.5}
-                              flexWrap="wrap"
-                            >
-                              <Typography
-                                variant="caption"
-                                color="text.secondary"
-                              >
-                                {job.method?.type ?? "sft"}
-                              </Typography>
-                              <Typography
-                                variant="caption"
-                                color="text.secondary"
-                              >
-                                {formatDateTime(job.created_at)}
-                              </Typography>
-                              {job.fine_tuned_model ? (
-                                <Typography
-                                  variant="caption"
-                                  color="success.main"
-                                >
-                                  {job.fine_tuned_model}
-                                </Typography>
-                              ) : null}
-                            </Stack>
-                          </Stack>
-                        </Paper>
-                      ))}
-                    </Stack>
-                  )}
-                </Stack>
-              </CardContent>
-            </Card>
-          </Grid>
-        </>
-      )}
+      <Box sx={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
+        {isMobile ? (
+          <Box sx={{ height: "100%", minHeight: 0, display: "flex" }}>
+            {selectedJob ? renderJobDetailsCard(true) : renderQueueCard()}
+          </Box>
+        ) : (
+          <Box
+            ref={desktopPaneRef}
+            sx={{
+              height: "100%",
+              minHeight: 0,
+              display: "grid",
+              gridTemplateColumns: `${desktopQueueWidth}px 1px minmax(0, 1fr)`,
+            }}
+          >
+            <Box
+              sx={{
+                minHeight: 0,
+                display: "flex",
+                overflow: "hidden",
+              }}
+            >
+              {renderQueueCard()}
+            </Box>
+            <Box
+              role="separator"
+              aria-orientation="vertical"
+              onMouseDown={handleStartDesktopResize}
+              sx={{
+                position: "relative",
+                minHeight: 0,
+                cursor: "col-resize",
+                overflow: "visible",
+                zIndex: 2,
+                "&::before": {
+                  content: '""',
+                  position: "absolute",
+                  top: 0,
+                  bottom: 0,
+                  left: "50%",
+                  transform: "translateX(-50%)",
+                  width: "12px",
+                  backgroundColor: "transparent",
+                },
+                "&::after": {
+                  content: '""',
+                  position: "absolute",
+                  top: 0,
+                  bottom: 0,
+                  left: "50%",
+                  transform: "translateX(-50%)",
+                  width: "1px",
+                  bgcolor: "divider",
+                  transition: "background-color 120ms ease, width 120ms ease",
+                },
+                "&:hover::after": {
+                  width: 3,
+                  bgcolor: "primary.main",
+                },
+              }}
+            />
+            <Box
+              sx={{
+                minHeight: 0,
+                display: "flex",
+                overflow: "hidden",
+              }}
+            >
+              {selectedJob
+                ? renderJobDetailsCard(false)
+                : renderEmptyDetailPane()}
+            </Box>
+          </Box>
+        )}
+      </Box>
 
       <CreateTrainingJobDialog
         datasets={datasets}
@@ -898,7 +1141,7 @@ function TrainingSection({
         onClearError={() => setPageError("")}
         onClose={() => setCreateDialogOpen(false)}
       />
-    </Grid>
+    </Stack>
   );
 }
 
@@ -1291,7 +1534,7 @@ interface CreateTrainingJobDialogProps {
     value: TrainingFormState[K],
   ) => void;
   onSelectDataset: (datasetId: string) => void;
-  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onSubmit: (event: SubmitEvent<HTMLFormElement>) => void;
   open: boolean;
   pageError: string;
   selectedDataset: DatasetRecord | null;

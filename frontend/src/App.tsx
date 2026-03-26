@@ -382,6 +382,30 @@ function App() {
                   <ChatSection isMobile={isMobile} />
                 </Box>
               </Box>
+            ) : activeView === "training" ? (
+              <Box
+                sx={{
+                  height: dataViewportHeight,
+                  display: "flex",
+                  flexDirection: "column",
+                  minHeight: 0,
+                  overflow: "hidden",
+                }}
+              >
+                {error ? (
+                  <Box sx={{ p: 2, flexShrink: 0 }}>
+                    <ErrorCard message={error} onClose={() => setError("")} />
+                  </Box>
+                ) : null}
+                <Box sx={{ flex: 1, minHeight: 0 }}>
+                  <Suspense fallback={<LinearProgress />}>
+                    <TrainingSection
+                      initialJobId={pendingJobId}
+                      onInitialJobHandled={() => setPendingJobId(null)}
+                    />
+                  </Suspense>
+                </Box>
+              </Box>
             ) : (
               <Container maxWidth="xl" sx={{ py: { xs: 2, md: 4 } }}>
                 <Box sx={{ display: "grid", gap: 2 }}>
@@ -398,14 +422,6 @@ function App() {
                       config={snapshot.config}
                       onNavigate={handleOverviewNavigate}
                     />
-                  ) : null}
-                  {activeView === "training" ? (
-                    <Suspense fallback={<LinearProgress />}>
-                      <TrainingSection
-                        initialJobId={pendingJobId}
-                        onInitialJobHandled={() => setPendingJobId(null)}
-                      />
-                    </Suspense>
                   ) : null}
                 </Box>
               </Container>

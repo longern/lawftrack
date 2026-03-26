@@ -1,17 +1,14 @@
 import { useMemo } from "react";
 import {
   Box,
-  Button,
   Card,
   CardContent,
   Chip,
   Grid,
-  LinearProgress,
   Paper,
   Stack,
   Typography,
 } from "@mui/material";
-import LaunchRoundedIcon from "@mui/icons-material/LaunchRounded";
 import { useI18n } from "../i18n";
 import type {
   DatasetRecord,
@@ -269,49 +266,6 @@ function OverviewSection({
 
   return (
     <Grid container spacing={3}>
-      <Grid size={{ xs: 12 }}>
-        <Card>
-          <CardContent>
-            <Stack spacing={2}>
-              <Stack
-                direction={{ xs: "column", md: "row" }}
-                spacing={2}
-                alignItems={{ xs: "flex-start", md: "center" }}
-                justifyContent="space-between"
-              >
-                <Box>
-                  <Typography variant="h5" fontWeight={700}>
-                    {t("lawftrack Workspace")}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    {t(
-                      "See datasets, training jobs, and gateway health in one place, then jump straight into the next task.",
-                    )}
-                  </Typography>
-                </Box>
-                <Stack direction="row" spacing={1.5}>
-                  <Button
-                    variant="outlined"
-                    endIcon={<LaunchRoundedIcon />}
-                    onClick={() => onNavigate("data")}
-                  >
-                    {t("Open data workspace")}
-                  </Button>
-                  <Button
-                    variant="contained"
-                    endIcon={<LaunchRoundedIcon />}
-                    onClick={() => onNavigate("training")}
-                  >
-                    {t("Open training queue")}
-                  </Button>
-                </Stack>
-              </Stack>
-              {loading ? <LinearProgress /> : null}
-            </Stack>
-          </CardContent>
-        </Card>
-      </Grid>
-
       <Grid size={{ xs: 12, lg: 6 }}>
         <Card sx={{ height: "100%" }}>
           <CardContent>

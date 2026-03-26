@@ -42,7 +42,6 @@ function MessageBubble({
   messageIndex,
   messageTokenization,
   onChangeContent,
-  onChangeReasoning,
   onChangeRole,
   onDelete,
   onSetEditing,
@@ -56,7 +55,6 @@ function MessageBubble({
   messageIndex: number;
   messageTokenization: DatasetMessageTokenization | null;
   onChangeContent: (content: string) => void;
-  onChangeReasoning: (reasoning: string) => void;
   onChangeRole: (role: string) => void;
   onDelete?: () => void;
   onSetEditing: (editing: boolean) => void;
@@ -64,17 +62,12 @@ function MessageBubble({
   onSelectToken: (
     messageIndex: number,
     tokenIndex: number,
-    target: "content" | "reasoning",
+    target: "content",
   ) => void;
 }) {
   const { t } = useI18n();
   const isAssistant = message.role === "assistant";
   const isUser = message.role === "user";
-  const reasoning = message.reasoning?.trim() ?? "";
-  const reasoningSegments = buildTokenRenderSegments(
-    message.reasoning ?? "",
-    messageTokenization?.reasoning_tokens ?? [],
-  );
   const contentSegments = buildTokenRenderSegments(
     message.content,
     messageTokenization?.tokens ?? [],
@@ -118,7 +111,7 @@ function MessageBubble({
 
   function renderTokenizedSegments(
     segments: ReturnType<typeof buildTokenRenderSegments>,
-    target: "content" | "reasoning",
+    target: "content",
   ) {
     return segments.map((segment, index) => {
       if (segment.kind === "text") {
@@ -418,65 +411,6 @@ function MessageBubble({
               wordBreak: "break-word",
             }}
           >
-            {isAssistant && (isEditing || reasoning) ? (
-              isEditing ? (
-                <TextField
-                  value={message.reasoning ?? ""}
-                  onChange={(event) => onChangeReasoning(event.target.value)}
-                  multiline
-                  minRows={3}
-                  fullWidth
-                  placeholder={t("Reasoning")}
-                  variant="outlined"
-                  sx={{
-                    ...inlineFieldSx,
-                    mb: 1.25,
-                    "& .MuiOutlinedInput-root": {
-                      ...inlineFieldSx["& .MuiOutlinedInput-root"],
-                      bgcolor: (theme) =>
-                        alpha(getWorkspaceColors(theme).hoverBg, 0.36),
-                    },
-                  }}
-                />
-              ) : (
-                <Box
-                  sx={{
-                    mb: 1.25,
-                    px: 1.25,
-                    py: 1,
-                    borderRadius: 2,
-                    border: (theme) =>
-                      `1px dashed ${alpha(getWorkspaceColors(theme).accent, 0.42)}`,
-                    bgcolor: (theme) =>
-                      alpha(getWorkspaceColors(theme).hoverBg, 0.5),
-                  }}
-                >
-                  <Typography
-                    variant="caption"
-                    sx={{
-                      display: "block",
-                      mb: 0.5,
-                      color: (theme) => getWorkspaceColors(theme).textSecondary,
-                      textTransform: "uppercase",
-                      letterSpacing: 0.5,
-                    }}
-                  >
-                    {t("Reasoning")}
-                  </Typography>
-                  <Typography
-                    variant="body2"
-                    sx={{
-                      color: (theme) => getWorkspaceColors(theme).textPrimary,
-                      whiteSpace: "pre-wrap",
-                      wordBreak: "break-word",
-                      lineHeight: 1.55,
-                    }}
-                  >
-                    {renderTokenizedSegments(reasoningSegments, "reasoning")}
-                  </Typography>
-                </Box>
-              )
-            ) : null}
             {isEditing ? (
               <TextField
                 value={message.content}
@@ -547,7 +481,7 @@ export function MessageFlowPanel({
   onSelectToken: (
     messageIndex: number,
     tokenIndex: number,
-    target: "content" | "reasoning",
+    target: "content",
   ) => void;
   onUpdateSampleMessages: (
     updater: (messages: DatasetMessage[]) => DatasetMessage[],
@@ -824,13 +758,6 @@ export function MessageFlowPanel({
                   onUpdateSampleMessages((messages) =>
                     messages.map((item, index) =>
                       index === messageIndex ? { ...item, content } : item,
-                    ),
-                  )
-                }
-                onChangeReasoning={(reasoning) =>
-                  onUpdateSampleMessages((messages) =>
-                    messages.map((item, index) =>
-                      index === messageIndex ? { ...item, reasoning } : item,
                     ),
                   )
                 }

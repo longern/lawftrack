@@ -81,10 +81,7 @@ export function TokenActionPanel({
               <>
                 <Typography variant="body2" sx={{ color: "#fca5a5" }}>
                   {t("Original {target} token: {token}", {
-                    target:
-                      selectedToken.target === "reasoning"
-                        ? "reasoning"
-                        : "content",
+                    target: "content",
                     token: selectedToken.originalToken,
                   })}
                 </Typography>

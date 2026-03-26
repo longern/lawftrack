@@ -1552,7 +1552,6 @@ class ServerTests(unittest.TestCase):
         initial_reasoning = "Step one"
         initial_content = "Original answer"
         continued_reasoning = "Revised plan"
-        continued_content = "Updated answer"
 
         class DummyResponse:
             def __init__(self, payload):
@@ -1593,11 +1592,6 @@ class ServerTests(unittest.TestCase):
                 return [
                     {"token_index": 0, "token_id": 5, "token": "Revised", "text": "Revised", "start": 0, "end": 7},
                     {"token_index": 1, "token_id": 6, "token": " plan", "text": " plan", "start": 7, "end": 12},
-                ]
-            if text == continued_content:
-                return [
-                    {"token_index": 0, "token_id": 7, "token": "Updated", "text": "Updated", "start": 0, "end": 7},
-                    {"token_index": 1, "token_id": 8, "token": " answer", "text": " answer", "start": 7, "end": 14},
                 ]
             raise AssertionError(text)
 
@@ -1665,11 +1659,15 @@ class ServerTests(unittest.TestCase):
             self.assertEqual(continue_response.status_code, 200)
             continued_payload = continue_response.json()
             self.assertEqual(continued_payload["sample"]["messages"][1]["reasoning"], continued_reasoning)
-            self.assertEqual(continued_payload["sample"]["messages"][1]["content"], continued_content)
+            self.assertEqual(continued_payload["sample"]["messages"][1]["content"], initial_content)
             self.assertEqual(continued_payload["sample"]["edits"][0]["target"], "reasoning")
             self.assertEqual(
                 continued_payload["tokenization"]["messages"][1]["reasoning_tokens"][0]["text"],
                 "Revised",
+            )
+            self.assertEqual(
+                continued_payload["tokenization"]["messages"][1]["tokens"][0]["text"],
+                "Original",
             )
             self.assertEqual(captured_request["json"]["prompt"], "PROMPT:<think>Revised")
             self.assertTrue(str(captured_request["url"]).endswith("/v1/completions"))

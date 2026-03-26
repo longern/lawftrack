@@ -349,8 +349,9 @@ def build_continued_sample(
 ) -> dict[str, Any]:
     messages = list(sample.get("messages", []))
     existing_reasoning = extract_reasoning_from_message(target_message)
+    existing_content = str(target_message.get("content") or "")
     if target == "reasoning":
-        merged_reasoning, content = parse_prefilled_assistant_text(
+        merged_reasoning, _ignored_content = parse_prefilled_assistant_text(
             build_completion_prefill(
                 target_message=target_message,
                 target=target,
@@ -358,6 +359,7 @@ def build_continued_sample(
             )
             + completion_text
         )
+        content = existing_content
     else:
         content = f"{prefix}{completion_text}"
         merged_reasoning = existing_reasoning

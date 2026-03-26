@@ -56,24 +56,6 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
-function splitAssistantPrefill(text: string): {
-  reasoning?: string;
-  content: string;
-} {
-  if (!text.startsWith("<think>")) {
-    return { content: text };
-  }
-  const closingTag = "</think>";
-  const closingIndex = text.indexOf(closingTag);
-  if (closingIndex < 0) {
-    const reasoning = text.slice("<think>".length);
-    return { reasoning: reasoning || undefined, content: "" };
-  }
-  const reasoning = text.slice("<think>".length, closingIndex) || undefined;
-  const content = text.slice(closingIndex + closingTag.length);
-  return { reasoning, content };
-}
-
 function decodeCandidateToken(token?: string, bytes?: number[]): string {
   if (Array.isArray(bytes) && bytes.length > 0) {
     try {
@@ -127,14 +109,6 @@ function buildContinuationPreviewTokenization(
     messages: tokenization.messages.map((message) => {
       if (message.message_index !== selection.messageIndex) {
         return message;
-      }
-      if (selection.target === "reasoning") {
-        return {
-          ...message,
-          reasoning_tokens: message.reasoning_tokens.filter(
-            (token) => token.token_index < selection.tokenIndex,
-          ),
-        };
       }
       return {
         ...message,
@@ -239,18 +213,11 @@ function DataWorkspace({
     () =>
       (visibleSampleTokenization?.messages ?? []).flatMap((message) =>
         message.role === "assistant"
-          ? [
-              ...(message.reasoning_tokens ?? []).map((token) => ({
-                messageIndex: message.message_index,
-                tokenIndex: token.token_index,
-                target: "reasoning" as const,
-              })),
-              ...message.tokens.map((token) => ({
-                messageIndex: message.message_index,
-                tokenIndex: token.token_index,
-                target: "content" as const,
-              })),
-            ]
+          ? message.tokens.map((token) => ({
+              messageIndex: message.message_index,
+              tokenIndex: token.token_index,
+              target: "content" as const,
+            }))
           : [],
       ),
     [visibleSampleTokenization],
@@ -390,7 +357,6 @@ function DataWorkspace({
       sample.messages.map((message) => ({
         role: message.role,
         content: message.content,
-        reasoning: message.reasoning ?? "",
       })),
     );
   }
@@ -739,14 +705,10 @@ function DataWorkspace({
     }
   }
 
-  async function handleSelectToken(messageIndex: number, tokenIndex: number) {
-    return handleSelectTokenTarget(messageIndex, tokenIndex, "content");
-  }
-
-  async function handleSelectTokenTarget(
+  async function handleSelectToken(
     messageIndex: number,
     tokenIndex: number,
-    target: "content" | "reasoning",
+    _target: "content" = "content",
   ) {
     if (!visibleSample || continuationDraft) {
       return;
@@ -760,7 +722,7 @@ function DataWorkspace({
       tokenization,
       messageIndex,
       tokenIndex,
-      target,
+      "content",
     );
   }
 
@@ -769,13 +731,12 @@ function DataWorkspace({
     tokenization: DatasetSampleTokenization,
     messageIndex: number,
     tokenIndex: number,
-    target: "content" | "reasoning",
+    target: "content",
   ) {
     const message = tokenization.messages.find(
       (item) => item.message_index === messageIndex,
     );
-    const tokenList =
-      target === "reasoning" ? message?.reasoning_tokens : message?.tokens;
+    const tokenList = message?.tokens;
     const token = tokenList?.find((item) => item.token_index === tokenIndex);
     if (!token) {
       return;
@@ -841,7 +802,7 @@ function DataWorkspace({
     tokenization: DatasetSampleTokenization | null,
     messageIndex: number,
     tokenIndex: number,
-    target: "content" | "reasoning",
+    target: "content",
   ) {
     if (!draft || !activeDataset || !tokenization) {
       return;
@@ -855,10 +816,7 @@ function DataWorkspace({
     const messageTokenization = tokenization.messages.find(
       (item) => item.message_index === messageIndex,
     );
-    const tokenList =
-      target === "reasoning"
-        ? messageTokenization?.reasoning_tokens
-        : messageTokenization?.tokens;
+    const tokenList = messageTokenization?.tokens;
     const targetToken = tokenList?.find(
       (item) => item.token_index === tokenIndex,
     );
@@ -1000,15 +958,10 @@ function DataWorkspace({
         messages: selectedSample.messages.map((message, index) =>
           index !== selectedToken.messageIndex
             ? message
-            : selectedToken.target === "reasoning"
-              ? {
-                  ...message,
-                  reasoning: preparation.prefix,
-                }
-              : {
-                  ...message,
-                  content: preparation.prefix,
-                },
+            : {
+                ...message,
+                content: preparation.prefix,
+              },
         ),
         edits: previewEdits,
         anchors: previewEdits,
@@ -1086,15 +1039,10 @@ function DataWorkspace({
             messages: latestSample.messages.map((message, index) =>
               index !== selectedToken.messageIndex
                 ? message
-                : selectedToken.target === "reasoning"
-                  ? {
-                      ...message,
-                      reasoning: `${message.reasoning ?? ""}${delta}`,
-                    }
-                  : {
-                      ...message,
-                      content: `${message.content}${delta}`,
-                    },
+                : {
+                    ...message,
+                    content: `${message.content}${delta}`,
+                  },
             ),
           };
           const nextSample = latestSample;
@@ -1340,7 +1288,7 @@ function DataWorkspace({
     const optimisticMessages = shouldFillExistingAssistant
       ? selectedSample.messages.map((message, index) =>
           index === selectedSample.messages.length - 1
-            ? { ...message, content: "" }
+            ? { ...message, content: "", reasoning: undefined }
             : message,
         )
       : [...selectedSample.messages, { role: "assistant", content: "" }];
@@ -1440,15 +1388,14 @@ function DataWorkspace({
           shouldRestoreOriginal = false;
           receivedDelta = true;
           rawAssistantText += delta;
-          const parsed = splitAssistantPrefill(rawAssistantText);
           latestSample = {
             ...originalSample,
             messages: optimisticMessages.map((message, index) =>
               index === assistantIndex
                 ? {
                     ...message,
-                    content: parsed.content,
-                    reasoning: parsed.reasoning,
+                    content: rawAssistantText,
+                    reasoning: undefined,
                   }
                 : message,
             ),
@@ -1711,7 +1658,7 @@ function DataWorkspace({
           setContinuationDraft(null);
           clearSelectedToken();
         }}
-        onSelectToken={handleSelectTokenTarget}
+        onSelectToken={handleSelectToken}
         onSetReplacementToken={setReplacementToken}
       />
 

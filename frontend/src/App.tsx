@@ -20,7 +20,6 @@ import {
 } from "@mui/material";
 import { alpha, ThemeProvider } from "@mui/material/styles";
 import useMediaQuery from "@mui/material/useMediaQuery";
-import MenuRoundedIcon from "@mui/icons-material/MenuRounded";
 import AppSidebar from "./components/layout/AppSidebar";
 import DataWorkspace from "./components/data/DataWorkspace";
 import ErrorCard from "./components/shared/ErrorCard";
@@ -63,7 +62,6 @@ function App() {
   );
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
   const [activeView, setActiveView] = useState<NavView>("overview");
-  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [recentDatasetId, setRecentDatasetId] = useState<string | null>(null);
@@ -236,15 +234,6 @@ function App() {
               gap: 1.5,
             }}
           >
-            {isMobile ? (
-              <IconButton
-                edge="start"
-                onClick={() => setMobileDrawerOpen(true)}
-                sx={{ mr: 0.5 }}
-              >
-                <MenuRoundedIcon />
-              </IconButton>
-            ) : null}
             <Box sx={{ flex: 1, minWidth: 0 }}>
               <Typography variant="h6" fontWeight={700} noWrap>
                 {activeNav.label}
@@ -331,22 +320,6 @@ function App() {
             component="nav"
             sx={{ width: { md: DRAWER_WIDTH }, flexShrink: { md: 0 } }}
           >
-            <Drawer
-              variant="temporary"
-              open={mobileDrawerOpen}
-              onClose={() => setMobileDrawerOpen(false)}
-              ModalProps={{ keepMounted: true }}
-              sx={{
-                display: { xs: "block", md: "none" },
-                "& .MuiDrawer-paper": { width: DRAWER_WIDTH },
-              }}
-            >
-              <AppSidebar
-                activeView={activeView}
-                items={navItems}
-                onSelect={setActiveView}
-              />
-            </Drawer>
             <Drawer
               variant="permanent"
               open

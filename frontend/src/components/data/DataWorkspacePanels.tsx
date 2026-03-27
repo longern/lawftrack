@@ -34,14 +34,10 @@ import {
   Typography,
 } from "@mui/material";
 import { useI18n } from "../../i18n";
-import type {
-  DatasetRecord,
-  DatasetSample,
-  DataSummaryItem,
-} from "../../types/app";
+import type { DatasetRecord, DatasetSample } from "../../types/app";
 import { darkFieldSx } from "./dataWorkspaceStyles";
 import type { DatasetDraft } from "./dataWorkspaceTypes";
-import { describeSample, renderSummaryIcon } from "./dataWorkspaceUtils";
+import { describeSample } from "./dataWorkspaceUtils";
 import { getWorkspaceColors } from "./dataWorkspaceTheme";
 
 export function ActivityRail({
@@ -103,7 +99,6 @@ export function ExplorerPane({
   activeDatasetId,
   collapsed,
   creating,
-  dataSummary,
   datasets,
   importInputRef,
   loading,
@@ -117,7 +112,6 @@ export function ExplorerPane({
   activeDatasetId: string | null;
   collapsed: boolean;
   creating: boolean;
-  dataSummary: DataSummaryItem[];
   datasets: DatasetRecord[];
   importInputRef: RefObject<HTMLInputElement | null>;
   loading: boolean;
@@ -298,48 +292,6 @@ export function ExplorerPane({
             </Typography>
           ) : null}
         </List>
-      </Box>
-
-      <Box
-        sx={{
-          p: 1.5,
-          borderTop: (theme) => `1px solid ${getWorkspaceColors(theme).border}`,
-          flexShrink: 0,
-        }}
-      >
-        <Stack spacing={1}>
-          {dataSummary.map((item) => (
-            <Stack
-              key={item.title}
-              direction="row"
-              alignItems="center"
-              justifyContent="space-between"
-              sx={{ color: "text.primary" }}
-            >
-              <Stack direction="row" spacing={1} alignItems="center">
-                <Box
-                  sx={{
-                    display: "flex",
-                    color: (theme) => getWorkspaceColors(theme).subtleAccent,
-                  }}
-                >
-                  {renderSummaryIcon(item.icon)}
-                </Box>
-                <Typography variant="caption">{item.title}</Typography>
-              </Stack>
-              <Typography
-                variant="caption"
-                sx={{
-                  maxWidth: 140,
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                }}
-              >
-                {item.value}
-              </Typography>
-            </Stack>
-          ))}
-        </Stack>
       </Box>
     </Box>
   );
@@ -663,7 +615,6 @@ export function DatasetMetadataSection(props: {
 export function MobileDatasetSheet({
   activeDatasetId,
   creating,
-  dataSummary,
   datasets,
   importInputRef,
   loading,
@@ -675,7 +626,6 @@ export function MobileDatasetSheet({
 }: {
   activeDatasetId: string | null;
   creating: boolean;
-  dataSummary: DataSummaryItem[];
   datasets: DatasetRecord[];
   importInputRef: RefObject<HTMLInputElement | null>;
   loading: boolean;
@@ -810,47 +760,6 @@ export function MobileDatasetSheet({
             </Typography>
           ) : null}
         </List>
-      </Box>
-      <Box
-        sx={{
-          p: 1.5,
-          borderTop: (theme) => `1px solid ${getWorkspaceColors(theme).border}`,
-          flexShrink: 0,
-        }}
-      >
-        <Box sx={{ display: "flex", gap: 1, overflowX: "auto" }}>
-          {dataSummary.map((item) => (
-            <Paper
-              key={item.title}
-              variant="outlined"
-              sx={{
-                minWidth: 120,
-                p: 1.25,
-                bgcolor: (theme) => getWorkspaceColors(theme).panelAltBg,
-                borderColor: (theme) => getWorkspaceColors(theme).border,
-                color: "text.primary",
-                flexShrink: 0,
-              }}
-            >
-              <Stack spacing={0.75}>
-                <Stack direction="row" spacing={1} alignItems="center">
-                  <Box
-                    sx={{
-                      display: "flex",
-                      color: (theme) => getWorkspaceColors(theme).subtleAccent,
-                    }}
-                  >
-                    {renderSummaryIcon(item.icon)}
-                  </Box>
-                  <Typography variant="caption">{item.title}</Typography>
-                </Stack>
-                <Typography variant="caption" sx={{ color: "text.secondary" }}>
-                  {item.value}
-                </Typography>
-              </Stack>
-            </Paper>
-          ))}
-        </Box>
       </Box>
     </Box>
   );

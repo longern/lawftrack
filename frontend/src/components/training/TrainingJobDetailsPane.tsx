@@ -39,8 +39,10 @@ import type {
 } from "../../types/app";
 import {
   buildLossChartPoints,
+  formatAdapterStatus,
   formatDateTime,
   formatMetricValue,
+  formatTrainingJobStatus,
 } from "./trainingUtils";
 
 interface TrainingJobDetailsPaneProps {
@@ -562,7 +564,10 @@ export function TrainingJobDetailsPane({
               <Grid size={{ xs: 12, md: 6, xl: 3 }}>
                 <DetailCard title={t("Basic info")}>
                   <DetailRow label="Job ID" value={selectedJob.id} />
-                  <DetailRow label={t("Status")} value={selectedJob.status} />
+                  <DetailRow
+                    label={t("Status")}
+                    value={formatTrainingJobStatus(selectedJob.status, t)}
+                  />
                   <DetailRow
                     label={t("Method")}
                     value={selectedJob.method?.type ?? "-"}
@@ -624,7 +629,10 @@ export function TrainingJobDetailsPane({
                   />
                   <DetailRow
                     label="Adapter"
-                    value={selectedJob.lora_adapter?.status ?? "-"}
+                    value={formatAdapterStatus(
+                      selectedJob.lora_adapter?.status,
+                      t,
+                    )}
                   />
                   <DetailRow
                     label="Adapter Path"

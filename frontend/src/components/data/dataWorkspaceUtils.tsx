@@ -1,12 +1,7 @@
-import CloudDoneRoundedIcon from "@mui/icons-material/CloudDoneRounded";
-import DnsRoundedIcon from "@mui/icons-material/DnsRounded";
-import KeyRoundedIcon from "@mui/icons-material/KeyRounded";
-import TuneRoundedIcon from "@mui/icons-material/TuneRounded";
 import type {
   DatasetMessageTokenization,
   DatasetMessageToken,
   DatasetSample,
-  DataSummaryItem,
 } from "../../types/app";
 
 type YamlSegmentKind =
@@ -64,21 +59,6 @@ export function buildTokenRenderSegments(
   }
 
   return segments;
-}
-
-export function renderSummaryIcon(icon: DataSummaryItem["icon"]) {
-  switch (icon) {
-    case "gateway":
-      return <CloudDoneRoundedIcon fontSize="small" />;
-    case "health":
-      return <DnsRoundedIcon fontSize="small" />;
-    case "upstream":
-      return <TuneRoundedIcon fontSize="small" />;
-    case "auth":
-      return <KeyRoundedIcon fontSize="small" />;
-    default:
-      return null;
-  }
 }
 
 function indent(level: number): string {

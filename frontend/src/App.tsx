@@ -15,6 +15,7 @@ import {
   Paper,
   Stack,
   Toolbar,
+  Tooltip,
   Typography,
 } from "@mui/material";
 import { alpha, ThemeProvider } from "@mui/material/styles";
@@ -31,7 +32,6 @@ import { createAppTheme } from "./theme/appTheme";
 import type {
   ApiListResponse,
   AppSnapshot,
-  DataSummaryItem,
   DatasetRecord,
   FineTuningJob,
   NavView,
@@ -175,16 +175,15 @@ function App() {
     [jobs],
   );
 
-  const dataSummary = useMemo<DataSummaryItem[]>(
+  const gatewayDetails = useMemo(
     () => [
       {
-        title: t("Gateway"),
+        label: t("Gateway"),
         value: gatewayStatus === "running" ? t("Connected") : t("Not ready"),
-        icon: "gateway",
       },
-      { title: t("Health"), value: healthLabel, icon: "health" },
-      { title: t("Upstream"), value: endpoint, icon: "upstream" },
-      { title: t("Auth"), value: apiKey, icon: "auth" },
+      { label: t("Health"), value: healthLabel },
+      { label: t("Upstream"), value: endpoint },
+      { label: t("Auth"), value: apiKey },
     ],
     [apiKey, endpoint, gatewayStatus, healthLabel, t],
   );
@@ -270,11 +269,58 @@ function App() {
                   {t("English")}
                 </Button>
               </ButtonGroup>
-              <Chip
-                color={healthOk ? "success" : "default"}
-                label={healthLabel}
-                variant="filled"
-              />
+              <Tooltip
+                arrow
+                placement="bottom-end"
+                enterDelay={120}
+                leaveDelay={160}
+                title={
+                  <Stack spacing={1.25} sx={{ py: 0.25 }}>
+                    <Typography variant="subtitle2" fontWeight={700}>
+                      {t("Gateway")}
+                    </Typography>
+                    {gatewayDetails.map((item) => (
+                      <Stack
+                        key={item.label}
+                        direction="row"
+                        spacing={2}
+                        alignItems="flex-start"
+                        justifyContent="space-between"
+                      >
+                        <Typography variant="body2" color="inherit">
+                          {item.label}
+                        </Typography>
+                        <Typography
+                          variant="body2"
+                          sx={{
+                            maxWidth: 180,
+                            textAlign: "right",
+                            wordBreak: "break-word",
+                          }}
+                        >
+                          {item.value}
+                        </Typography>
+                      </Stack>
+                    ))}
+                  </Stack>
+                }
+                slotProps={{
+                  tooltip: {
+                    sx: {
+                      maxWidth: 320,
+                      px: 1.5,
+                      py: 1.25,
+                    },
+                  },
+                }}
+              >
+                <Chip
+                  color={healthOk ? "success" : "default"}
+                  label={healthLabel}
+                  variant="filled"
+                  sx={{ cursor: "pointer" }}
+                />
+              </Tooltip>
             </Stack>
           </Toolbar>
           {loading ? <LinearProgress /> : null}
@@ -353,7 +399,6 @@ function App() {
                 ) : null}
                 <Box sx={{ flex: 1, minHeight: 0 }}>
                   <DataWorkspace
-                    dataSummary={dataSummary}
                     isMobile={isMobile}
                     initialDatasetId={pendingDatasetId}
                     onDatasetOpen={handleOpenDataset}

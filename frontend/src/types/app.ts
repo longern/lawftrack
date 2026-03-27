@@ -113,14 +113,6 @@ export interface NavItem {
   icon: ReactNode;
 }
 
-export type SummaryIcon = "gateway" | "health" | "upstream" | "auth";
-
-export interface DataSummaryItem {
-  title: string;
-  value: string;
-  icon: SummaryIcon;
-}
-
 export interface ApiListResponse<T> {
   object: "list";
   data: T[];

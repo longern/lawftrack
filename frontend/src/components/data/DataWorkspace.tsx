@@ -14,7 +14,6 @@ import type {
   DatasetRecord,
   DatasetSample,
   DatasetSampleTokenization,
-  DataSummaryItem,
 } from "../../types/app";
 import { WorkspaceShell } from "./DataWorkspaceShell";
 import { useI18n } from "../../i18n";
@@ -32,7 +31,6 @@ import {
 } from "../../utils/modelSelection";
 
 interface DataWorkspaceProps {
-  dataSummary: DataSummaryItem[];
   isMobile: boolean;
   initialDatasetId?: string | null;
   onDatasetOpen?: (dataset: DatasetRecord) => void;
@@ -132,7 +130,6 @@ function buildContinuationPreviewTokenization(
 }
 
 function DataWorkspace({
-  dataSummary,
   isMobile,
   initialDatasetId,
   onDatasetOpen,
@@ -210,14 +207,14 @@ function DataWorkspace({
     continuationDraft?.tokenization ?? selectedSampleTokenization;
   const selectedTokenHasRewriteMark = Boolean(
     !continuationDraft &&
-      selectedSample &&
-      selectedToken &&
-      selectedSample.edits.find(
-        (edit) =>
-          edit.message_index === selectedToken.messageIndex &&
-          edit.token_index === selectedToken.tokenIndex &&
-          (edit.target ?? "content") === selectedToken.target,
-      ),
+    selectedSample &&
+    selectedToken &&
+    selectedSample.edits.find(
+      (edit) =>
+        edit.message_index === selectedToken.messageIndex &&
+        edit.token_index === selectedToken.tokenIndex &&
+        (edit.target ?? "content") === selectedToken.target,
+    ),
   );
   const tokenSequence = useMemo(
     () =>
@@ -278,12 +275,7 @@ function DataWorkspace({
     }
     openDataset(initialDataset);
     onInitialDatasetHandled?.();
-  }, [
-    activeDatasetId,
-    datasets,
-    initialDatasetId,
-    onInitialDatasetHandled,
-  ]);
+  }, [activeDatasetId, datasets, initialDatasetId, onInitialDatasetHandled]);
 
   useEffect(() => {
     if (!activeDataset) {
@@ -1596,7 +1588,6 @@ function DataWorkspace({
       <WorkspaceShell
         activeDataset={activeDataset}
         creating={creating}
-        dataSummary={dataSummary}
         datasets={datasets}
         datasetTabs={datasetTabs}
         draft={draft}

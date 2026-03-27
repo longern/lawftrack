@@ -11,7 +11,11 @@ import {
 } from "@mui/material";
 import type { FineTuningJob } from "../../types/app";
 import { useI18n } from "../../i18n";
-import { formatDateTime } from "./trainingUtils";
+import {
+  formatDateTime,
+  formatTrainingJobStatus,
+  resolveTrainingJobStatusColor,
+} from "./trainingUtils";
 
 interface TrainingQueuePaneProps {
   jobs: FineTuningJob[];
@@ -21,19 +25,6 @@ interface TrainingQueuePaneProps {
   onCreateJob: () => void;
   onOpenJob: (job: FineTuningJob) => void;
   onRefresh: () => void;
-}
-
-function resolveStatusColor(status: FineTuningJob["status"]) {
-  if (status === "running") {
-    return "info";
-  }
-  if (status === "succeeded") {
-    return "success";
-  }
-  if (status === "failed") {
-    return "error";
-  }
-  return "default";
 }
 
 export function TrainingQueuePane({
@@ -164,8 +155,8 @@ export function TrainingQueuePane({
                         </Box>
                         <Chip
                           size="small"
-                          color={resolveStatusColor(job.status)}
-                          label={job.status}
+                          color={resolveTrainingJobStatusColor(job.status)}
+                          label={formatTrainingJobStatus(job.status, t)}
                         />
                       </Stack>
                       <Stack direction="row" spacing={1.5} flexWrap="wrap">

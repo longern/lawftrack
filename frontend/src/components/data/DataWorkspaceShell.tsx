@@ -18,7 +18,6 @@ import type {
   DatasetRecord,
   DatasetSample,
   DatasetSampleTokenization,
-  DataSummaryItem,
 } from "../../types/app";
 import { DatasetHome } from "./DatasetHome";
 import { useI18n } from "../../i18n";
@@ -47,7 +46,6 @@ import { getWorkspaceColors } from "./dataWorkspaceTheme";
 export interface WorkspaceShellProps {
   activeDataset: DatasetRecord | null;
   creating: boolean;
-  dataSummary: DataSummaryItem[];
   datasets: DatasetRecord[];
   datasetTabs: DatasetRecord[];
   draft: DatasetDraft | null;
@@ -122,7 +120,6 @@ export interface WorkspaceShellProps {
 export function WorkspaceShell({
   activeDataset,
   creating,
-  dataSummary,
   datasets,
   datasetTabs,
   draft,
@@ -303,7 +300,6 @@ export function WorkspaceShell({
           <Box sx={{ flex: 1, minHeight: 0 }}>
             <DatasetHome
               creating={creating}
-              dataSummary={dataSummary}
               datasets={datasets}
               importInputRef={importInputRef}
               isMobile={isMobile}
@@ -352,7 +348,6 @@ export function WorkspaceShell({
           <MobileDatasetSheet
             activeDatasetId={activeDataset?.id ?? null}
             creating={creating}
-            dataSummary={dataSummary}
             datasets={datasets}
             importInputRef={importInputRef}
             loading={loading}
@@ -558,7 +553,6 @@ export function WorkspaceShell({
           activeDatasetId={activeDataset?.id ?? null}
           collapsed={desktopExplorerCollapsed}
           creating={creating}
-          dataSummary={dataSummary}
           datasets={datasets}
           importInputRef={importInputRef}
           loading={loading}
@@ -608,7 +602,6 @@ export function WorkspaceShell({
           <Box sx={{ flex: 1, minHeight: 0 }}>
             <DatasetHome
               creating={creating}
-              dataSummary={dataSummary}
               datasets={datasets}
               importInputRef={importInputRef}
               isMobile={isMobile}

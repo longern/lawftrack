@@ -4,6 +4,7 @@ import type {
   FineTuningMethodConfig,
 } from "../../types/app";
 import type { TrainingFormState } from "./trainingTypes";
+import type { ChipProps } from "@mui/material";
 
 export type LossChartPoint = {
   step: number;
@@ -79,6 +80,65 @@ export function formatMetricValue(value: number) {
     return String(value);
   }
   return value.toFixed(4);
+}
+
+export function formatTrainingJobStatus(
+  status: string | null | undefined,
+  t: (key: string) => string,
+): string {
+  switch (status) {
+    case "validating_files":
+      return t("Validating files");
+    case "queued":
+      return t("Queued");
+    case "running":
+      return t("Running");
+    case "succeeded":
+      return t("Succeeded");
+    case "failed":
+      return t("Failed");
+    case "cancelled":
+      return t("Cancelled");
+    case "paused":
+      return t("Paused");
+    default:
+      return status ? status.replace(/_/g, " ") : "-";
+  }
+}
+
+export function formatAdapterStatus(
+  status: string | null | undefined,
+  t: (key: string) => string,
+): string {
+  switch (status) {
+    case "pending_load":
+      return t("Pending load");
+    case "loaded":
+      return t("Loaded");
+    case "load_failed":
+      return t("Load failed");
+    default:
+      return status ? status.replace(/_/g, " ") : "-";
+  }
+}
+
+export function resolveTrainingJobStatusColor(
+  status: string | null | undefined,
+): ChipProps["color"] {
+  switch (status) {
+    case "running":
+      return "info";
+    case "succeeded":
+      return "success";
+    case "failed":
+      return "error";
+    case "queued":
+    case "validating_files":
+    case "paused":
+      return "warning";
+    default:
+      return "default";
+  }
 }
 
 export function buildLossChartPoints(

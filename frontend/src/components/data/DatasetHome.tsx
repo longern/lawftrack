@@ -19,12 +19,10 @@ import {
   Typography,
 } from "@mui/material";
 import { useI18n } from "../../i18n";
-import type { DatasetRecord, DataSummaryItem } from "../../types/app";
-import { renderSummaryIcon } from "./dataWorkspaceUtils";
+import type { DatasetRecord } from "../../types/app";
 
 interface DatasetHomeProps {
   creating: boolean;
-  dataSummary: DataSummaryItem[];
   datasets: DatasetRecord[];
   importInputRef: RefObject<HTMLInputElement | null>;
   isMobile: boolean;
@@ -36,108 +34,8 @@ interface DatasetHomeProps {
   recentDatasets: DatasetRecord[];
 }
 
-function SummaryPanel({
-  dataSummary,
-  mobile,
-}: {
-  dataSummary: DataSummaryItem[];
-  mobile: boolean;
-}) {
-  const { t } = useI18n();
-
-  if (mobile) {
-    return (
-      <Box sx={{ display: "flex", gap: 1.5, overflowX: "auto", pb: 0.5 }}>
-        {dataSummary.map((item) => (
-          <Paper
-            key={item.title}
-            variant="outlined"
-            sx={{
-              minWidth: 140,
-              p: 1.5,
-              bgcolor: (theme) =>
-                theme.palette.mode === "dark"
-                  ? "#111827"
-                  : theme.palette.background.paper,
-              borderColor: (theme) => theme.palette.divider,
-              color: "text.primary",
-              flexShrink: 0,
-            }}
-          >
-            <Stack spacing={1}>
-              <Stack direction="row" spacing={1} alignItems="center">
-                <Box sx={{ display: "flex", color: "primary.main" }}>
-                  {renderSummaryIcon(item.icon)}
-                </Box>
-                <Typography variant="caption">{item.title}</Typography>
-              </Stack>
-              <Typography variant="caption" color="text.secondary">
-                {item.value}
-              </Typography>
-            </Stack>
-          </Paper>
-        ))}
-      </Box>
-    );
-  }
-
-  return (
-    <Paper
-      variant="outlined"
-      sx={{
-        bgcolor: (theme) =>
-          theme.palette.mode === "dark"
-            ? "#111827"
-            : theme.palette.background.paper,
-        borderColor: (theme) => theme.palette.divider,
-        p: 2,
-        overflow: "auto",
-      }}
-    >
-      <Typography
-        variant="subtitle1"
-        fontWeight={700}
-        sx={{ color: "text.primary", mb: 1.5 }}
-      >
-        {t("Status")}
-      </Typography>
-      <Stack spacing={1.25}>
-        {dataSummary.map((item) => (
-          <Stack
-            key={item.title}
-            direction="row"
-            alignItems="center"
-            justifyContent="space-between"
-            spacing={1.5}
-            sx={{ color: "text.primary" }}
-          >
-            <Stack direction="row" spacing={1} alignItems="center">
-              <Box sx={{ display: "flex", color: "primary.main" }}>
-                {renderSummaryIcon(item.icon)}
-              </Box>
-              <Typography variant="body2">{item.title}</Typography>
-            </Stack>
-            <Typography
-              variant="caption"
-              sx={{
-                maxWidth: 120,
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                color: "text.secondary",
-              }}
-            >
-              {item.value}
-            </Typography>
-          </Stack>
-        ))}
-      </Stack>
-    </Paper>
-  );
-}
-
 export function DatasetHome({
   creating,
-  dataSummary,
   datasets,
   importInputRef,
   isMobile,
@@ -336,8 +234,6 @@ export function DatasetHome({
             </Box>
           </Paper>
         </Stack>
-
-        <SummaryPanel dataSummary={dataSummary} mobile={isMobile} />
       </Box>
     </Box>
   );

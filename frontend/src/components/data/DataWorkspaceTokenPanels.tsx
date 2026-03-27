@@ -4,6 +4,7 @@ import {
   Paper,
   Stack,
   TextField,
+  Tooltip,
   Typography,
 } from "@mui/material";
 import type { DatasetSample } from "../../types/app";
@@ -11,6 +12,59 @@ import { darkFieldSx, panelCardSx } from "./dataWorkspaceStyles";
 import type { TokenCandidate, TokenSelection } from "./dataWorkspaceTypes";
 import { formatCandidateLabel, getWorkspaceColors } from "./dataWorkspaceTheme";
 import { useI18n } from "../../i18n";
+
+function formatCandidateProbability(logprob: number | null): string | null {
+  if (logprob === null) {
+    return null;
+  }
+  const probability = Math.min(Math.max(Math.exp(logprob), 0), 1);
+  return `${(probability * 100).toFixed(probability >= 0.1 ? 1 : 2)}%`;
+}
+
+function CandidateTokenButton({
+  candidate,
+  replacementToken,
+  onSetReplacementToken,
+  tooltipLabel,
+  unavailableTooltipLabel,
+}: {
+  candidate: TokenCandidate;
+  replacementToken: string;
+  onSetReplacementToken: (value: string) => void;
+  tooltipLabel: (probability: string) => string;
+  unavailableTooltipLabel: string;
+}) {
+  const probability = formatCandidateProbability(candidate.logprob);
+
+  return (
+    <Tooltip
+      title={
+        probability ? tooltipLabel(probability) : unavailableTooltipLabel
+      }
+      arrow
+    >
+      <Button
+        size="small"
+        variant={
+          candidate.text === replacementToken ? "contained" : "outlined"
+        }
+        onClick={() => onSetReplacementToken(candidate.text)}
+        sx={{
+          minWidth: 0,
+          px: 1,
+          color: (theme) =>
+            candidate.text === replacementToken
+              ? theme.palette.background.paper
+              : theme.palette.text.primary,
+          borderColor: "divider",
+          whiteSpace: "pre-wrap",
+        }}
+      >
+        {formatCandidateLabel(candidate.text)}
+      </Button>
+    </Tooltip>
+  );
+}
 
 export function TokenActionPanel({
   candidatesLoading,
@@ -44,6 +98,9 @@ export function TokenActionPanel({
   tokenCandidates: TokenCandidate[];
 }) {
   const { t } = useI18n();
+  const probabilityTooltipLabel = (probability: string) =>
+    t("Token probability: {probability}", { probability });
+  const unavailableProbabilityTooltipLabel = t("Token probability unavailable");
 
   return (
     <Box
@@ -112,28 +169,16 @@ export function TokenActionPanel({
                   ) : tokenCandidates.length > 0 ? (
                     <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.75 }}>
                       {tokenCandidates.map((candidate) => (
-                        <Button
+                        <CandidateTokenButton
                           key={`${candidate.text}-${candidate.logprob ?? "na"}`}
-                          size="small"
-                          variant={
-                            candidate.text === replacementToken
-                              ? "contained"
-                              : "outlined"
+                          candidate={candidate}
+                          replacementToken={replacementToken}
+                          onSetReplacementToken={onSetReplacementToken}
+                          tooltipLabel={probabilityTooltipLabel}
+                          unavailableTooltipLabel={
+                            unavailableProbabilityTooltipLabel
                           }
-                          onClick={() => onSetReplacementToken(candidate.text)}
-                          sx={{
-                            minWidth: 0,
-                            px: 1,
-                            color: (theme) =>
-                              candidate.text === replacementToken
-                                ? theme.palette.background.paper
-                                : theme.palette.text.primary,
-                            borderColor: "divider",
-                            whiteSpace: "pre-wrap",
-                          }}
-                        >
-                          {formatCandidateLabel(candidate.text)}
-                        </Button>
+                        />
                       ))}
                     </Box>
                   ) : (
@@ -250,6 +295,9 @@ export function TokenActionMiniPanel({
   tokenCandidates: TokenCandidate[];
 }) {
   const { t } = useI18n();
+  const probabilityTooltipLabel = (probability: string) =>
+    t("Token probability: {probability}", { probability });
+  const unavailableProbabilityTooltipLabel = t("Token probability unavailable");
 
   if (!selectedToken) {
     return (
@@ -291,26 +339,14 @@ export function TokenActionMiniPanel({
         ) : tokenCandidates.length > 0 ? (
           <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.75 }}>
             {tokenCandidates.map((candidate) => (
-              <Button
+              <CandidateTokenButton
                 key={`${candidate.text}-${candidate.logprob ?? "na"}`}
-                size="small"
-                variant={
-                  candidate.text === replacementToken ? "contained" : "outlined"
-                }
-                onClick={() => onSetReplacementToken(candidate.text)}
-                sx={{
-                  minWidth: 0,
-                  px: 1,
-                  color: (theme) =>
-                    candidate.text === replacementToken
-                      ? theme.palette.background.paper
-                      : theme.palette.text.primary,
-                  borderColor: "divider",
-                  whiteSpace: "pre-wrap",
-                }}
-              >
-                {formatCandidateLabel(candidate.text)}
-              </Button>
+                candidate={candidate}
+                replacementToken={replacementToken}
+                onSetReplacementToken={onSetReplacementToken}
+                tooltipLabel={probabilityTooltipLabel}
+                unavailableTooltipLabel={unavailableProbabilityTooltipLabel}
+              />
             ))}
           </Box>
         ) : (

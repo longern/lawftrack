@@ -144,6 +144,8 @@ const ZH_MESSAGES: Record<string, string> = {
   "Failed to delete sample": "删除样本失败",
   "Failed to refresh token data": "刷新 token 信息失败",
   "Open a dataset before saving samples.": "保存样本前需要先打开一个数据集。",
+  "Token probability: {probability}": "Token 概率：{probability}",
+  "Token probability unavailable": "Token 概率不可用",
   "Failed to load models": "加载模型列表失败",
   "Failed to generate assistant message": "生成 assistant 消息失败",
   "Delete dataset": "删除数据集",

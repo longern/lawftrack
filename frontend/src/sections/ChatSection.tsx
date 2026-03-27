@@ -1,4 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  type MouseEvent as ReactMouseEvent,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import AutorenewRoundedIcon from "@mui/icons-material/AutorenewRounded";
 import KeyboardArrowDownRoundedIcon from "@mui/icons-material/KeyboardArrowDownRounded";
 import NavigateNextRoundedIcon from "@mui/icons-material/NavigateNextRounded";
@@ -21,7 +27,9 @@ import {
   Collapse,
   CircularProgress,
   Fab,
+  IconButton,
   Paper,
+  Slider,
   Stack,
   Tab,
   Tabs,
@@ -43,6 +51,8 @@ import {
 type ChatMode = "single" | "compare";
 type ModelSlot = "primary" | "secondary";
 type ResponseStatus = "streaming" | "complete" | "error";
+
+const DEFAULT_TEMPERATURE = 0.7;
 
 interface TurnResponse {
   modelId: string;
@@ -283,7 +293,11 @@ function ChatSection({ isMobile }: ChatSectionProps) {
   const [controlsOpen, setControlsOpen] = useState(!isMobile);
   const [systemPrompt, setSystemPrompt] = useState("");
   const [draftPrompt, setDraftPrompt] = useState("");
+  const [temperature, setTemperature] = useState(DEFAULT_TEMPERATURE);
   const [modelsLoading, setModelsLoading] = useState(false);
+  const [availableModels, setAvailableModels] = useState<RemoteModelRecord[]>(
+    [],
+  );
   const [modelOptions, setModelOptions] = useState<string[]>([
     FALLBACK_BASE_MODEL,
   ]);
@@ -292,7 +306,10 @@ function ChatSection({ isMobile }: ChatSectionProps) {
   const [modelOptionsError, setModelOptionsError] = useState("");
   const [turns, setTurns] = useState<ChatTurn[]>([]);
   const [pageError, setPageError] = useState("");
+  const [desktopControlsWidth, setDesktopControlsWidth] = useState(320);
   const controllersRef = useRef<AbortController[]>([]);
+  const desktopPaneRef = useRef<HTMLDivElement | null>(null);
+  const resizingDesktopPaneRef = useRef(false);
   const { scrollRef, contentRef, isAtBottom, scrollToBottom } =
     useStickToBottom({
       initial: "instant",
@@ -322,6 +339,24 @@ function ChatSection({ isMobile }: ChatSectionProps) {
     [mode, primaryModel, secondaryModel],
   );
 
+  const modelParentLookup = useMemo(() => {
+    const normalizedEntries = availableModels
+      .map((model) => {
+        const modelId =
+          typeof model.id === "string" ? model.id.trim() : "";
+        if (!modelId) {
+          return null;
+        }
+        const parent =
+          typeof model.parent === "string" ? model.parent.trim() : "";
+        return [modelId, parent || null] as const;
+      })
+      .filter(
+        (entry): entry is readonly [string, string | null] => entry !== null,
+      );
+    return new Map<string, string | null>(normalizedEntries);
+  }, [availableModels]);
+
   useEffect(() => {
     void loadModels();
 
@@ -336,6 +371,43 @@ function ChatSection({ isMobile }: ChatSectionProps) {
       setControlsOpen(true);
     }
   }, [isMobile]);
+
+  useEffect(() => {
+    function handlePointerMove(event: MouseEvent) {
+      if (!resizingDesktopPaneRef.current || !desktopPaneRef.current) {
+        return;
+      }
+
+      const rect = desktopPaneRef.current.getBoundingClientRect();
+      const minLeftWidth = 280;
+      const minRightWidth = 520;
+      const maxLeftWidth = Math.max(minLeftWidth, rect.width - minRightWidth);
+      const nextWidth = Math.min(
+        Math.max(event.clientX - rect.left, minLeftWidth),
+        maxLeftWidth,
+      );
+      setDesktopControlsWidth(nextWidth);
+    }
+
+    function handlePointerUp() {
+      if (!resizingDesktopPaneRef.current) {
+        return;
+      }
+      resizingDesktopPaneRef.current = false;
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    }
+
+    window.addEventListener("mousemove", handlePointerMove);
+    window.addEventListener("mouseup", handlePointerUp);
+
+    return () => {
+      window.removeEventListener("mousemove", handlePointerMove);
+      window.removeEventListener("mouseup", handlePointerUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+  }, []);
 
   function scrollConversationToBottom() {
     void Promise.resolve(
@@ -356,6 +428,7 @@ function ChatSection({ isMobile }: ChatSectionProps) {
     try {
       const payload =
         await fetchJson<ApiListResponse<RemoteModelRecord>>("/v1/models");
+      setAvailableModels(payload.data);
       const nextOptions = listModelOptionIds(payload.data);
       const preferredModel =
         resolvePreferredBaseModel(payload.data) ??
@@ -383,6 +456,7 @@ function ChatSection({ isMobile }: ChatSectionProps) {
       const message =
         error instanceof Error ? error.message : t("Failed to load models");
       setModelOptionsError(message);
+      setAvailableModels([]);
       setModelOptions([FALLBACK_BASE_MODEL]);
       setPrimaryModel((current) =>
         current.trim() !== "" ? current : FALLBACK_BASE_MODEL,
@@ -497,7 +571,7 @@ function ChatSection({ isMobile }: ChatSectionProps) {
           model: args.modelId,
           messages: args.messages,
           stream: true,
-          temperature: 0.7,
+          temperature,
         }),
         signal: controller.signal,
       });
@@ -706,6 +780,8 @@ function ChatSection({ isMobile }: ChatSectionProps) {
     value: string;
     onChange: (value: string) => void;
   }) {
+    const modelParent = modelParentLookup.get(args.value.trim());
+
     return (
       <Autocomplete
         freeSolo
@@ -724,8 +800,11 @@ function ChatSection({ isMobile }: ChatSectionProps) {
             {...params}
             label={args.label}
             helperText={
-              modelOptionsError ||
-              t("Choose from the model list or enter a model ID directly.")
+              modelOptionsError
+                ? modelOptionsError
+                : modelParent
+                  ? t("Fine-tuned from {parent}", { parent: modelParent })
+                  : undefined
             }
             size="small"
             fullWidth
@@ -890,17 +969,29 @@ function ChatSection({ isMobile }: ChatSectionProps) {
           disabled={hasStreamingResponses}
         />
 
-        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-          <Chip
-            label={
-              mode === "compare" ? t("Compare two models") : t("Single model")
+        <Stack spacing={1} sx={{ pb: 1 }}>
+          <Stack direction="row" justifyContent="space-between" spacing={1}>
+            <Typography variant="body2">{t("Temperature")}</Typography>
+            <Typography variant="body2" color="text.secondary">
+              {temperature.toFixed(1)}
+            </Typography>
+          </Stack>
+          <Slider
+            value={temperature}
+            min={0}
+            max={2}
+            step={0.1}
+            marks={[
+              { value: 0, label: "0" },
+              { value: 1, label: "1" },
+              { value: 2, label: "2" },
+            ]}
+            valueLabelDisplay="auto"
+            disabled={hasStreamingResponses}
+            onChange={(_, value) =>
+              setTemperature(Array.isArray(value) ? value[0] ?? 0 : value)
             }
-            color="primary"
-            variant="outlined"
           />
-          {selectedModels.map((modelId) => (
-            <Chip key={modelId} label={modelId} size="small" />
-          ))}
         </Stack>
 
         <Stack direction="row" spacing={1.25}>
@@ -928,79 +1019,35 @@ function ChatSection({ isMobile }: ChatSectionProps) {
     );
   }
 
-  return (
-    <Box
-      sx={{
-        height: "100%",
-        minHeight: 0,
-        display: "grid",
-        gridTemplateColumns: { xs: "1fr", lg: "320px minmax(0, 1fr)" },
-        gridTemplateRows: { xs: "auto minmax(0, 1fr)", lg: "minmax(0, 1fr)" },
-        gap: 2,
-      }}
-    >
-      {isMobile ? (
-        <Accordion
-          disableGutters
-          expanded={controlsOpen}
-          onChange={(_, expanded) => setControlsOpen(expanded)}
-          sx={{
-            borderRadius: 4,
-            border: `1px solid ${alpha(theme.palette.primary.main, 0.16)}`,
-            background:
-              theme.palette.mode === "dark"
-                ? alpha("#0b1323", 0.9)
-                : alpha("#ffffff", 0.82),
-            boxShadow: `0 20px 50px ${alpha(theme.palette.primary.main, 0.08)}`,
-            "&:before": { display: "none" },
-          }}
-        >
-          <AccordionSummary expandIcon={<ExpandMoreRoundedIcon />}>
-            <Stack direction="row" spacing={1} alignItems="center">
-              <TuneRoundedIcon color="primary" />
-              <Typography variant="subtitle1">
-                {mode === "compare"
-                  ? t("Compare two models")
-                  : t("Single model")}
-              </Typography>
-            </Stack>
-          </AccordionSummary>
-          <AccordionDetails>{renderControlPanel()}</AccordionDetails>
-        </Accordion>
-      ) : (
-        <Paper
-          elevation={0}
-          sx={{
-            p: 2.5,
-            minHeight: 0,
-            overflowY: "auto",
-            borderRadius: 4,
-            border: `1px solid ${alpha(theme.palette.primary.main, 0.16)}`,
-            background:
-              theme.palette.mode === "dark"
-                ? alpha("#0b1323", 0.9)
-                : alpha("#ffffff", 0.78),
-            boxShadow: `0 20px 50px ${alpha(theme.palette.primary.main, 0.08)}`,
-          }}
-        >
-          {renderControlPanel()}
-        </Paper>
-      )}
+  function handleStartDesktopResize(event: ReactMouseEvent<HTMLDivElement>) {
+    event.preventDefault();
+    resizingDesktopPaneRef.current = true;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  }
 
-      <Paper
-        elevation={0}
+  function renderConversationPane() {
+    return (
+      <Box
         sx={{
+          width: "100%",
+          height: "100%",
+          flex: 1,
           minHeight: 0,
           overflow: "hidden",
           display: "flex",
           flexDirection: "column",
-          borderRadius: 4,
-          border: `1px solid ${alpha(theme.palette.primary.main, 0.14)}`,
+          borderRadius: isMobile ? 4 : 0,
+          border: isMobile
+            ? `1px solid ${alpha(theme.palette.primary.main, 0.14)}`
+            : "none",
           background:
             theme.palette.mode === "dark"
               ? "linear-gradient(180deg, rgba(8,16,29,0.96) 0%, rgba(10,18,34,0.98) 100%)"
               : "linear-gradient(180deg, rgba(255,255,255,0.82) 0%, rgba(247,250,255,0.96) 100%)",
-          boxShadow: `0 28px 80px ${alpha(theme.palette.primary.main, 0.12)}`,
+          boxShadow: isMobile
+            ? `0 28px 80px ${alpha(theme.palette.primary.main, 0.12)}`
+            : "none",
         }}
       >
         <Box
@@ -1023,19 +1070,6 @@ function ChatSection({ isMobile }: ChatSectionProps) {
           >
             <Box>
               <Typography variant="h6">{t("Conversation")}</Typography>
-              <Typography
-                variant="body2"
-                color="text.secondary"
-                sx={{ mt: 0.5 }}
-              >
-                {mode === "compare"
-                  ? t(
-                      "Each turn keeps the same user prompt and shows one answer per model.",
-                    )
-                  : t(
-                      "Each turn keeps the shared conversation history for the selected model.",
-                    )}
-              </Typography>
             </Box>
             <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
               {selectedModels.map((modelId) => (
@@ -1224,29 +1258,173 @@ function ChatSection({ isMobile }: ChatSectionProps) {
                 ) : null}
               </Stack>
 
-              <Stack direction="row" spacing={1} justifyContent="flex-end">
-                {hasStreamingResponses ? (
-                  <Button
-                    variant="outlined"
-                    startIcon={<StopRoundedIcon />}
-                    onClick={stopGeneration}
-                  >
-                    {t("Stop generating")}
-                  </Button>
-                ) : null}
-                <Button
-                  variant="contained"
-                  endIcon={<SendRoundedIcon />}
-                  onClick={() => void handleSendPrompt()}
-                  disabled={hasStreamingResponses || draftPrompt.trim() === ""}
+              <Box sx={{ display: "flex", justifyContent: "flex-end" }}>
+                <IconButton
+                  color={hasStreamingResponses ? "warning" : "primary"}
+                  onClick={
+                    hasStreamingResponses
+                      ? stopGeneration
+                      : () => void handleSendPrompt()
+                  }
+                  disabled={!hasStreamingResponses && draftPrompt.trim() === ""}
+                  aria-label={
+                    hasStreamingResponses ? t("Stop generating") : t("Send")
+                  }
+                  sx={{
+                    width: 42,
+                    height: 42,
+                    border: "1px solid",
+                    borderColor: hasStreamingResponses
+                      ? "warning.main"
+                      : "primary.main",
+                    bgcolor: hasStreamingResponses
+                      ? alpha(theme.palette.warning.main, 0.08)
+                      : alpha(theme.palette.primary.main, 0.08),
+                    "&:hover": {
+                      bgcolor: hasStreamingResponses
+                        ? alpha(theme.palette.warning.main, 0.14)
+                        : alpha(theme.palette.primary.main, 0.14),
+                    },
+                    "&.Mui-disabled": {
+                      borderColor: "action.disabledBackground",
+                    },
+                  }}
                 >
-                  {t("Send")}
-                </Button>
-              </Stack>
+                  {hasStreamingResponses ? (
+                    <StopRoundedIcon />
+                  ) : (
+                    <SendRoundedIcon />
+                  )}
+                </IconButton>
+              </Box>
             </Stack>
           </Paper>
         </Box>
-      </Paper>
+      </Box>
+    );
+  }
+
+  return (
+    <Box sx={{ height: "100%", minHeight: 0, overflow: "hidden" }}>
+      {isMobile ? (
+        <Box
+          sx={{
+            height: "100%",
+            minHeight: 0,
+            display: "grid",
+            gridTemplateRows: "auto minmax(0, 1fr)",
+            gap: 2,
+          }}
+        >
+          <Accordion
+            disableGutters
+            expanded={controlsOpen}
+            onChange={(_, expanded) => setControlsOpen(expanded)}
+            sx={{
+              borderRadius: 4,
+              border: `1px solid ${alpha(theme.palette.primary.main, 0.16)}`,
+              background:
+                theme.palette.mode === "dark"
+                  ? alpha("#0b1323", 0.9)
+                  : alpha("#ffffff", 0.82),
+              boxShadow: `0 20px 50px ${alpha(theme.palette.primary.main, 0.08)}`,
+              "&:before": { display: "none" },
+            }}
+          >
+            <AccordionSummary expandIcon={<ExpandMoreRoundedIcon />}>
+              <Stack direction="row" spacing={1} alignItems="center">
+                <TuneRoundedIcon color="primary" />
+                <Typography variant="subtitle1">
+                  {mode === "compare"
+                    ? t("Compare two models")
+                    : t("Single model")}
+                </Typography>
+              </Stack>
+            </AccordionSummary>
+            <AccordionDetails>{renderControlPanel()}</AccordionDetails>
+          </Accordion>
+          <Box sx={{ minHeight: 0 }}>{renderConversationPane()}</Box>
+        </Box>
+      ) : (
+        <Box
+          ref={desktopPaneRef}
+          sx={{
+            height: "100%",
+            minHeight: 0,
+            display: "grid",
+            gridTemplateColumns: `${desktopControlsWidth}px 1px minmax(0, 1fr)`,
+          }}
+        >
+          <Box
+            sx={{
+              minHeight: 0,
+              display: "flex",
+              overflow: "hidden",
+              bgcolor: "background.paper",
+            }}
+          >
+            <Box
+              sx={{
+                p: 2.5,
+                width: "100%",
+                height: "100%",
+                flex: 1,
+                minHeight: 0,
+                overflowY: "auto",
+              }}
+            >
+              {renderControlPanel()}
+            </Box>
+          </Box>
+          <Box
+            role="separator"
+            aria-orientation="vertical"
+            onMouseDown={handleStartDesktopResize}
+            sx={{
+              position: "relative",
+              minHeight: 0,
+              cursor: "col-resize",
+              overflow: "visible",
+              zIndex: 2,
+              "&::before": {
+                content: '""',
+                position: "absolute",
+                top: 0,
+                bottom: 0,
+                left: "50%",
+                transform: "translateX(-50%)",
+                width: "12px",
+                backgroundColor: "transparent",
+              },
+              "&::after": {
+                content: '""',
+                position: "absolute",
+                top: 0,
+                bottom: 0,
+                left: "50%",
+                transform: "translateX(-50%)",
+                width: "1px",
+                bgcolor: "divider",
+                transition: "background-color 120ms ease, width 120ms ease",
+              },
+              "&:hover::after": {
+                width: 3,
+                bgcolor: "primary.main",
+              },
+            }}
+          />
+          <Box
+            sx={{
+              minHeight: 0,
+              display: "flex",
+              overflow: "hidden",
+              bgcolor: "background.paper",
+            }}
+          >
+            {renderConversationPane()}
+          </Box>
+        </Box>
+      )}
     </Box>
   );
 }

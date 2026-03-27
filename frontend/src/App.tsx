@@ -387,12 +387,10 @@ function App() {
                   flexDirection: "column",
                   minHeight: 0,
                   overflow: "hidden",
-                  px: { xs: 2, md: 4 },
-                  py: { xs: 2, md: 4 },
                 }}
               >
                 {error ? (
-                  <Box sx={{ pb: 2, flexShrink: 0 }}>
+                  <Box sx={{ p: 2, flexShrink: 0 }}>
                     <ErrorCard message={error} onClose={() => setError("")} />
                   </Box>
                 ) : null}

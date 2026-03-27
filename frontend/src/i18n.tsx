@@ -249,6 +249,7 @@ const ZH_MESSAGES: Record<string, string> = {
   "Refresh model list": "刷新模型列表",
   "Choose from the model list or enter a model ID directly.":
     "可从模型列表中选择，也可直接输入模型 ID。",
+  "Fine-tuned from {parent}": "微调自{parent}",
   "Each turn keeps the same user prompt and shows one answer per model.":
     "每一轮都会保留同一条用户提问，并分别展示两个模型的回答。",
   "Each turn keeps the shared conversation history for the selected model.":

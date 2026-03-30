@@ -155,6 +155,7 @@ const ZH_MESSAGES: Record<string, string> = {
   'Are you sure you want to delete sample "{title}"? This action cannot be undone.':
     "确认删除样本“{title}”吗？删除后无法恢复。",
   Cancel: "取消",
+  Close: "关闭",
   "Deleting...": "删除中...",
   "Confirm delete": "确认删除",
   "Failed to load files": "加载文件失败",

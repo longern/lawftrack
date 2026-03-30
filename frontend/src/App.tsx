@@ -50,7 +50,7 @@ async function fetchJson<T>(url: string): Promise<T> {
 function App() {
   const { locale, setLocale, t } = useI18n();
   const APP_BAR_HEIGHT = 72;
-  const MOBILE_NAV_HEIGHT = 92;
+  const MOBILE_NAV_HEIGHT = 76;
   const dataViewportHeight = {
     xs: `calc(100dvh - ${APP_BAR_HEIGHT}px - ${MOBILE_NAV_HEIGHT}px)`,
     md: `calc(100dvh - ${APP_BAR_HEIGHT}px)`,
@@ -344,7 +344,15 @@ function App() {
             sx={{
               flex: 1,
               width: { md: `calc(100% - ${DRAWER_WIDTH}px)` },
-              pb: { xs: activeView === "data" ? 0 : 10, md: 0 },
+              pb: {
+                xs:
+                  activeView === "data"
+                    ? 0
+                    : activeView === "chat"
+                      ? 0
+                      : 10,
+                md: 0,
+              },
               overflow: activeView === "data" ? "hidden" : "visible",
             }}
           >

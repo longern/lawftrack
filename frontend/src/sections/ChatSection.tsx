@@ -1,31 +1,22 @@
-import {
-  type MouseEvent as ReactMouseEvent,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
 import AutorenewRoundedIcon from "@mui/icons-material/AutorenewRounded";
+import CloseRoundedIcon from "@mui/icons-material/CloseRounded";
+import CompareArrowsRoundedIcon from "@mui/icons-material/CompareArrowsRounded";
+import ForumRoundedIcon from "@mui/icons-material/ForumRounded";
 import KeyboardArrowDownRoundedIcon from "@mui/icons-material/KeyboardArrowDownRounded";
 import NavigateNextRoundedIcon from "@mui/icons-material/NavigateNextRounded";
-import CompareArrowsRoundedIcon from "@mui/icons-material/CompareArrowsRounded";
-import ExpandMoreRoundedIcon from "@mui/icons-material/ExpandMoreRounded";
-import ForumRoundedIcon from "@mui/icons-material/ForumRounded";
 import SendRoundedIcon from "@mui/icons-material/SendRounded";
 import SmartToyRoundedIcon from "@mui/icons-material/SmartToyRounded";
 import StopRoundedIcon from "@mui/icons-material/StopRounded";
 import TuneRoundedIcon from "@mui/icons-material/TuneRounded";
 import {
-  Accordion,
-  AccordionDetails,
-  AccordionSummary,
   Alert,
   Autocomplete,
   Box,
   Button,
   Chip,
-  Collapse,
   CircularProgress,
+  Collapse,
+  Drawer,
   Fab,
   IconButton,
   Paper,
@@ -38,6 +29,13 @@ import {
   Zoom,
 } from "@mui/material";
 import { alpha, useTheme } from "@mui/material/styles";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+} from "react";
 import { useStickToBottom } from "use-stick-to-bottom";
 import { useI18n } from "../i18n";
 import type { ApiListResponse, DatasetMessage } from "../types/app";
@@ -142,6 +140,14 @@ function trimBoundaryBlankLines(value: string): string {
     .replace(/(?:\r?\n[ \t]*)+$/, "");
 }
 
+function formatModelChipLabel(modelId: string): string {
+  const normalized = modelId.trim();
+  if (!normalized) {
+    return modelId;
+  }
+  return normalized.split("/").pop() ?? normalized;
+}
+
 interface AssistantBubbleProps {
   response: TurnResponse | undefined;
   label: string;
@@ -194,10 +200,14 @@ function AssistantBubble({
             <SmartToyRoundedIcon sx={{ color: accentColor }} />
             <Typography variant="subtitle2">{label}</Typography>
           </Stack>
-          {response?.modelId ? <Chip size="small" label={response.modelId} /> : null}
+          {response?.modelId ? (
+            <Chip size="small" label={response.modelId} />
+          ) : null}
         </Stack>
 
-        {response?.error ? <Alert severity="error">{response.error}</Alert> : null}
+        {response?.error ? (
+          <Alert severity="error">{response.error}</Alert>
+        ) : null}
 
         {response?.status === "streaming" ? (
           <Stack direction="row" spacing={1} alignItems="center">
@@ -247,7 +257,11 @@ function AssistantBubble({
             >
               {t("Thought process")}
             </Button>
-            <Collapse in={reasoningExpanded} timeout="auto" sx={{ width: "100%" }}>
+            <Collapse
+              in={reasoningExpanded}
+              timeout="auto"
+              sx={{ width: "100%" }}
+            >
               <Typography
                 variant="body2"
                 sx={{
@@ -270,9 +284,7 @@ function AssistantBubble({
             whiteSpace: "pre-wrap",
             wordBreak: "break-word",
             color:
-              responseContent.trim() !== ""
-                ? "text.primary"
-                : "text.secondary",
+              responseContent.trim() !== "" ? "text.primary" : "text.secondary",
             minHeight: 48,
             lineHeight: 1.72,
           }}
@@ -342,8 +354,7 @@ function ChatSection({ isMobile }: ChatSectionProps) {
   const modelParentLookup = useMemo(() => {
     const normalizedEntries = availableModels
       .map((model) => {
-        const modelId =
-          typeof model.id === "string" ? model.id.trim() : "";
+        const modelId = typeof model.id === "string" ? model.id.trim() : "";
         if (!modelId) {
           return null;
         }
@@ -872,27 +883,73 @@ function ChatSection({ isMobile }: ChatSectionProps) {
         </Box>
 
         {mode === "compare" ? (
-          <Box
-            sx={{
-              display: "grid",
-              gridTemplateColumns: {
-                xs: "1fr",
-                md: "repeat(2, minmax(0, 1fr))",
-              },
-              gap: 2,
-            }}
-          >
-            <AssistantBubble
-              response={turn.responses.primary}
-              label={t("Model A")}
-              accentColor="#2563eb"
-            />
-            <AssistantBubble
-              response={turn.responses.secondary}
-              label={t("Model B")}
-              accentColor="#d97706"
-            />
-          </Box>
+          isMobile ? (
+            <Box
+              sx={{
+                width: "100%",
+                display: "grid",
+                gridAutoFlow: "column",
+                gridAutoColumns: "calc(100% - 28px)",
+                gap: 1.5,
+                overflowX: "auto",
+                overflowY: "hidden",
+                scrollSnapType: "x mandatory",
+                pr: 3.5,
+                overscrollBehaviorX: "contain",
+                WebkitOverflowScrolling: "touch",
+                scrollbarWidth: "none",
+                "&::-webkit-scrollbar": {
+                  display: "none",
+                },
+              }}
+            >
+              <Box
+                sx={{
+                  minWidth: 0,
+                  scrollSnapAlign: "start",
+                  scrollSnapStop: "always",
+                }}
+              >
+                <AssistantBubble
+                  response={turn.responses.primary}
+                  label={t("Model A")}
+                  accentColor="#2563eb"
+                />
+              </Box>
+              <Box
+                sx={{
+                  minWidth: 0,
+                  scrollSnapAlign: "start",
+                  scrollSnapStop: "always",
+                }}
+              >
+                <AssistantBubble
+                  response={turn.responses.secondary}
+                  label={t("Model B")}
+                  accentColor="#d97706"
+                />
+              </Box>
+            </Box>
+          ) : (
+            <Box
+              sx={{
+                display: "grid",
+                gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                gap: 2,
+              }}
+            >
+              <AssistantBubble
+                response={turn.responses.primary}
+                label={t("Model A")}
+                accentColor="#2563eb"
+              />
+              <AssistantBubble
+                response={turn.responses.secondary}
+                label={t("Model B")}
+                accentColor="#d97706"
+              />
+            </Box>
+          )
         ) : (
           <Box sx={{ display: "flex", justifyContent: "flex-start" }}>
             <Box sx={{ width: { xs: "100%", md: "78%" } }}>
@@ -989,7 +1046,7 @@ function ChatSection({ isMobile }: ChatSectionProps) {
             valueLabelDisplay="auto"
             disabled={hasStreamingResponses}
             onChange={(_, value) =>
-              setTemperature(Array.isArray(value) ? value[0] ?? 0 : value)
+              setTemperature(Array.isArray(value) ? (value[0] ?? 0) : value)
             }
           />
         </Stack>
@@ -1037,50 +1094,61 @@ function ChatSection({ isMobile }: ChatSectionProps) {
           overflow: "hidden",
           display: "flex",
           flexDirection: "column",
-          borderRadius: isMobile ? 4 : 0,
-          border: isMobile
-            ? `1px solid ${alpha(theme.palette.primary.main, 0.14)}`
-            : "none",
-          background:
-            theme.palette.mode === "dark"
+          borderRadius: 0,
+          border: "none",
+          background: isMobile
+            ? "transparent"
+            : theme.palette.mode === "dark"
               ? "linear-gradient(180deg, rgba(8,16,29,0.96) 0%, rgba(10,18,34,0.98) 100%)"
               : "linear-gradient(180deg, rgba(255,255,255,0.82) 0%, rgba(247,250,255,0.96) 100%)",
-          boxShadow: isMobile
-            ? `0 28px 80px ${alpha(theme.palette.primary.main, 0.12)}`
-            : "none",
+          boxShadow: "none",
         }}
       >
         <Box
           sx={{
             px: { xs: 2, md: 3 },
-            py: 2,
-            borderBottom: `1px solid ${alpha(theme.palette.divider, 0.8)}`,
+            py: 1.5,
+            borderBottom: "1px solid",
+            borderColor: "divider",
             background:
               theme.palette.mode === "dark"
-                ? alpha("#0f172a", 0.54)
+                ? "linear-gradient(180deg, rgba(8,16,29,0.96) 0%, rgba(10,18,34,0.98) 100%)"
                 : alpha("#f8fbff", 0.92),
             backdropFilter: "blur(14px)",
           }}
         >
           <Stack
-            direction={{ xs: "column", md: "row" }}
-            spacing={1.5}
-            justifyContent="space-between"
-            alignItems={{ xs: "flex-start", md: "center" }}
+            direction="row"
+            spacing={1}
+            justifyContent={{ xs: "flex-start", md: "flex-end" }}
+            flexWrap={{ xs: "nowrap", md: "wrap" }}
+            useFlexGap
+            sx={{
+              overflowX: { xs: "auto", md: "visible" },
+              overflowY: "hidden",
+              scrollbarWidth: "none",
+              "&::-webkit-scrollbar": {
+                display: "none",
+              },
+            }}
           >
-            <Box>
-              <Typography variant="h6">{t("Conversation")}</Typography>
-            </Box>
-            <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-              {selectedModels.map((modelId) => (
-                <Chip key={modelId} label={modelId} size="small" />
-              ))}
+            {selectedModels.map((modelId) => (
               <Chip
+                key={modelId}
+                label={formatModelChipLabel(modelId)}
                 size="small"
-                color={hasStreamingResponses ? "warning" : "default"}
-                label={hasStreamingResponses ? t("Generating...") : t("Ready")}
+                title={modelId}
+                sx={{
+                  maxWidth: { xs: 180, md: 240 },
+                  "& .MuiChip-label": {
+                    display: "block",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  },
+                }}
               />
-            </Stack>
+            ))}
           </Stack>
         </Box>
 
@@ -1099,6 +1167,7 @@ function ChatSection({ isMobile }: ChatSectionProps) {
               height: "100%",
               minHeight: 0,
               overflowY: "auto",
+              overflowX: "hidden",
               px: { xs: 2, md: 3 },
               py: 3,
               background:
@@ -1180,7 +1249,8 @@ function ChatSection({ isMobile }: ChatSectionProps) {
           sx={{
             flexShrink: 0,
             p: { xs: 1.5, md: 2 },
-            borderTop: `1px solid ${alpha(theme.palette.divider, 0.85)}`,
+            borderTop: "1px solid",
+            borderColor: "divider",
             background:
               theme.palette.mode === "dark"
                 ? alpha("#08101d", 0.94)
@@ -1192,6 +1262,7 @@ function ChatSection({ isMobile }: ChatSectionProps) {
             elevation={0}
             sx={{
               p: 1.5,
+              overflow: "hidden",
               borderRadius: 3.5,
               border: `1px solid ${alpha(theme.palette.primary.main, 0.18)}`,
               background:
@@ -1203,7 +1274,7 @@ function ChatSection({ isMobile }: ChatSectionProps) {
           >
             <TextField
               multiline
-              minRows={2}
+              minRows={isMobile ? 1 : 2}
               maxRows={10}
               value={draftPrompt}
               onChange={(event) => setDraftPrompt(event.target.value)}
@@ -1223,6 +1294,17 @@ function ChatSection({ isMobile }: ChatSectionProps) {
               fullWidth
               disabled={hasStreamingResponses}
               variant="standard"
+              sx={{
+                width: "calc(100% + 12px)",
+                mr: -1.5,
+                "& .MuiInputBase-root": {
+                  alignItems: "flex-start",
+                },
+                "& .MuiInputBase-inputMultiline": {
+                  boxSizing: "border-box",
+                  pr: 1.5,
+                },
+              }}
               slotProps={{
                 input: {
                   disableUnderline: true,
@@ -1231,34 +1313,77 @@ function ChatSection({ isMobile }: ChatSectionProps) {
             />
 
             <Stack
-              direction={{ xs: "column", sm: "row" }}
+              direction="row"
               spacing={1.5}
               justifyContent="space-between"
-              alignItems={{ xs: "stretch", sm: "center" }}
-              sx={{ mt: 1.25 }}
+              alignItems="center"
+              sx={{ mt: 1 }}
             >
-              <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                <Chip
-                  size="small"
-                  variant="outlined"
-                  label={
-                    mode === "compare"
-                      ? t("Ask both models")
-                      : t("Ask one model")
-                  }
-                />
-                {!isMobile ? (
-                  <Typography
-                    variant="caption"
-                    color="text.secondary"
-                    sx={{ alignSelf: "center" }}
-                  >
-                    {t("Enter to send, Shift + Enter for newline")}
-                  </Typography>
-                ) : null}
-              </Stack>
+              {!isMobile ? (
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  sx={{ alignSelf: "center" }}
+                >
+                  {t("Enter to send, Shift + Enter for newline")}
+                </Typography>
+              ) : (
+                <Box sx={{ display: "flex", alignItems: "center" }}>
+                  <Chip
+                    clickable
+                    onClick={() => setControlsOpen(true)}
+                    icon={<TuneRoundedIcon sx={{ fontSize: 18 }} />}
+                    label={
+                      <Stack
+                        direction="row"
+                        spacing={0.5}
+                        alignItems="center"
+                        sx={{ minWidth: 0 }}
+                      >
+                        <Box
+                          component="span"
+                          sx={{
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {mode === "compare"
+                            ? t("Compare two models")
+                            : t("Single model")}
+                        </Box>
+                        <KeyboardArrowDownRoundedIcon sx={{ fontSize: 16 }} />
+                      </Stack>
+                    }
+                    variant="outlined"
+                    sx={{
+                      maxWidth: "100%",
+                      height: 34,
+                      borderRadius: 999,
+                      flexShrink: 1,
+                      bgcolor:
+                        theme.palette.mode === "dark"
+                          ? alpha("#101826", 0.72)
+                          : alpha("#f8fbff", 0.96),
+                      borderColor: alpha(theme.palette.primary.main, 0.18),
+                      boxShadow: `0 8px 18px ${alpha(theme.palette.primary.main, 0.08)}`,
+                      "& .MuiChip-label": {
+                        display: "block",
+                        maxWidth: "100%",
+                        px: 1,
+                      },
+                    }}
+                  />
+                </Box>
+              )}
 
-              <Box sx={{ display: "flex", justifyContent: "flex-end" }}>
+              <Box
+                sx={{
+                  display: "flex",
+                  justifyContent: "flex-end",
+                  flexShrink: 0,
+                }}
+              >
                 <IconButton
                   color={hasStreamingResponses ? "warning" : "primary"}
                   onClick={
@@ -1311,39 +1436,53 @@ function ChatSection({ isMobile }: ChatSectionProps) {
           sx={{
             height: "100%",
             minHeight: 0,
-            display: "grid",
-            gridTemplateRows: "auto minmax(0, 1fr)",
-            gap: 2,
+            display: "flex",
+            flexDirection: "column",
           }}
         >
-          <Accordion
-            disableGutters
-            expanded={controlsOpen}
-            onChange={(_, expanded) => setControlsOpen(expanded)}
-            sx={{
-              borderRadius: 4,
-              border: `1px solid ${alpha(theme.palette.primary.main, 0.16)}`,
-              background:
-                theme.palette.mode === "dark"
-                  ? alpha("#0b1323", 0.9)
-                  : alpha("#ffffff", 0.82),
-              boxShadow: `0 20px 50px ${alpha(theme.palette.primary.main, 0.08)}`,
-              "&:before": { display: "none" },
+          <Drawer
+            anchor="bottom"
+            open={controlsOpen}
+            onClose={() => setControlsOpen(false)}
+            slotProps={{
+              paper: {
+                sx: {
+                  borderTopLeftRadius: 20,
+                  borderTopRightRadius: 20,
+                  maxHeight: "85vh",
+                },
+              },
             }}
           >
-            <AccordionSummary expandIcon={<ExpandMoreRoundedIcon />}>
-              <Stack direction="row" spacing={1} alignItems="center">
-                <TuneRoundedIcon color="primary" />
-                <Typography variant="subtitle1">
-                  {mode === "compare"
-                    ? t("Compare two models")
-                    : t("Single model")}
-                </Typography>
+            <Box sx={{ p: 2, pb: 3, overflowY: "auto" }}>
+              <Stack
+                direction="row"
+                justifyContent="space-between"
+                alignItems="center"
+                sx={{ mb: 2 }}
+              >
+                <Stack direction="row" spacing={1} alignItems="center">
+                  <TuneRoundedIcon color="primary" />
+                  <Typography variant="subtitle1">
+                    {mode === "compare"
+                      ? t("Compare two models")
+                      : t("Single model")}
+                  </Typography>
+                </Stack>
+                <IconButton
+                  edge="end"
+                  aria-label={t("Close")}
+                  onClick={() => setControlsOpen(false)}
+                >
+                  <CloseRoundedIcon />
+                </IconButton>
               </Stack>
-            </AccordionSummary>
-            <AccordionDetails>{renderControlPanel()}</AccordionDetails>
-          </Accordion>
-          <Box sx={{ minHeight: 0 }}>{renderConversationPane()}</Box>
+              {renderControlPanel()}
+            </Box>
+          </Drawer>
+          <Box sx={{ flex: 1, minHeight: 0, display: "flex" }}>
+            {renderConversationPane()}
+          </Box>
         </Box>
       ) : (
         <Box

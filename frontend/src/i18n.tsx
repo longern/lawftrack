@@ -7,7 +7,7 @@ import {
   useState,
 } from "react";
 
-export type AppLocale = "zh-CN" | "en-US";
+export type AppLocale = "zh-CN" | "en-US" | "ja-JP";
 
 type DateTimeFormatOptions = Intl.DateTimeFormatOptions & {
   useSecondsTimestamp?: boolean;
@@ -22,6 +22,7 @@ const ZH_MESSAGES: Record<string, string> = {
   Me: "我的",
   Chinese: "中文",
   English: "英文",
+  Japanese: "日语",
   "Unknown error": "未知错误",
   Healthy: "正常",
   Offline: "离线",
@@ -436,6 +437,441 @@ const ZH_MESSAGES: Record<string, string> = {
     "你可以随时重新打开这份 LAwF 入门说明和标注设计原因。",
 };
 
+const JA_MESSAGES: Record<string, string> = {
+  Overview: "概要",
+  Data: "データ",
+  Training: "学習",
+  Service: "サービス",
+  Chat: "チャット",
+  Me: "設定",
+  Chinese: "中国語",
+  English: "英語",
+  Japanese: "日本語",
+  "Unknown error": "不明なエラー",
+  Healthy: "正常",
+  Offline: "オフライン",
+  Unavailable: "利用不可",
+  Configured: "設定済み",
+  "Not set": "未設定",
+  Gateway: "ゲートウェイ",
+  Connected: "接続済み",
+  "Not ready": "未準備",
+  Health: "状態",
+  Upstream: "アップストリーム",
+  Auth: "認証",
+  "Service name": "サービス名",
+  "Gateway status": "ゲートウェイ状態",
+  "Health status": "ヘルス状態",
+  "vLLM endpoint": "vLLM エンドポイント",
+  "Loading...": "読み込み中...",
+  "Generating...": "生成中...",
+  Language: "言語",
+  Unknown: "不明",
+  "Base model": "ベースモデル",
+  Samples: "サンプル",
+  "Updated at": "更新日時",
+  Status: "ステータス",
+  "No job yet": "ジョブなし",
+  Model: "モデル",
+  "Dataset ID": "データセット ID",
+  "Not linked": "未関連付け",
+  "Created at": "作成日時",
+  "Health check": "ヘルスチェック",
+  "Upstream endpoint": "アップストリーム先",
+  "Not configured": "未設定",
+  "lawftrack Workspace": "lawftrack ワークスペース",
+  "See datasets, training jobs, and gateway health in one place, then jump straight into the next task.":
+    "データセット、学習ジョブ、ゲートウェイ状態を一か所で確認し、そのまま次の作業に進めます。",
+  "Open data workspace": "データワークスペースを開く",
+  "Open training queue": "学習キューを開く",
+  "Recent dataset": "最近のデータセット",
+  "No activity yet": "まだアクティビティはありません",
+  "No recently opened dataset": "最近開いたデータセットはありません",
+  "Create or open a dataset to see its latest configuration and timestamp here.":
+    "データセットを作成または開くと、最新の設定と更新時刻がここに表示されます。",
+  "Recent training job": "最近の学習ジョブ",
+  "No training jobs yet": "まだ学習ジョブはありません",
+  Created: "作成",
+  "Submit a training job to see its status, model, and linked dataset here.":
+    "学習ジョブを送信すると、状態、モデル、関連データセットがここに表示されます。",
+  "Current device": "現在のデバイス",
+  "Server device": "サーバーデバイス",
+  "Service snapshot": "サービススナップショット",
+  "My settings": "設定",
+  "Manage your workspace preferences and keep an eye on the current gateway configuration.":
+    "ワークスペース設定を管理し、現在のゲートウェイ構成を確認できます。",
+  "Settings menu": "設定メニュー",
+  "Use this page to adjust language and inspect the runtime configuration used by this workspace.":
+    "このページでは表示言語を変更し、このワークスペースで使われている実行設定を確認できます。",
+  "Language preference": "表示言語",
+  "Choose the interface language for this browser.":
+    "このブラウザで使うインターフェース言語を選択します。",
+  "Current service connectivity status.": "現在のサービス接続状態です。",
+  "Endpoint address": "エンドポイントアドレス",
+  "Active upstream service address.": "現在有効なアップストリームサービスのアドレスです。",
+  "Authentication configuration for the upstream service.":
+    "アップストリームサービスの認証設定です。",
+  "Host machine reported by the gateway.":
+    "ゲートウェイが報告したホストマシン名です。",
+  "More settings will appear here as workspace preferences expand.":
+    "ワークスペース設定が増えると、ここに順次追加されます。",
+  Open: "開く",
+  Close: "閉じる",
+  Refresh: "更新",
+  "Getting started": "入門",
+  "Getting started guide": "はじめにガイド",
+  "Recommended on first launch": "初回起動時におすすめ",
+  "Read the LAwF method, understand why this workspace uses anchor-style annotation, and jump into your first dataset.":
+    "LAwF の考え方を読み、このワークスペースが anchor 型アノテーションを使う理由を理解して、最初のデータセット作成に進みましょう。",
+  "Open guide": "ガイドを開く",
+  "Back to overview": "概要に戻る",
+  "How it works": "仕組み",
+  Introduction: "概要",
+  "Algorithm principles": "アルゴリズム原理",
+  "LAwF algorithm principle diagram": "LAwF アルゴリズム原理図",
+  "Core mechanism": "中核メカニズム",
+  "It combines dataset management, response correction, training launch, and result tracking in one interface so users can finish the full fine-tuning workflow without writing training scripts.":
+    "lawftrack は、データセット管理、応答修正、学習開始、結果追跡を一つの画面にまとめ、学習スクリプトを書かなくても微調整の流れを完結できるようにします。",
+  "Its core idea is not to rewrite every answer from scratch, but to correct the decisive error positions and keep the rest of the model behavior as stable as possible.":
+    "中核となる考え方は、すべての回答を書き直すことではなく、挙動を左右する誤り位置だけを修正し、それ以外のモデル挙動はできるだけ安定して保つことです。",
+  "Traditional fine-tuning often asks annotators to rewrite the full answer even when only a few crucial tokens are wrong. That raises labeling cost and makes the model more likely to drift away from capabilities it already had.":
+    "従来の微調整では、重要な token が少数だけ誤っていても回答全体を書き直すことが多く、アノテーションコストが上がり、既存能力からも逸れやすくなります。",
+  "lawftrack follows a LAwF-style training approach: users mark the key wrong token, provide the correction, and let the system focus learning on the positions that actually change behavior.":
+    "lawftrack は LAwF 型の学習方針を取り、ユーザーは重要な誤り token を指定して修正し、実際に挙動が変わる位置へ学習を集中させます。",
+  "During training, non-anchor positions keep the base model's target distribution, while the anchor position is explicitly supervised with the human-corrected token.":
+    "学習時には、non-anchor 位置はベースモデルの目標分布を保ち、anchor 位置だけを人手で修正した token で明示的に監督します。",
+  "In the diagram above, SFT pushes every aligned position toward the rewritten answer, while LAwF leaves non-anchor positions unchanged and updates only the anchor token.":
+    "上の図では、SFT はすべての整列位置を再記述した答えへ押し寄せますが、LAwF は non-anchor 位置を維持し、anchor token だけを更新します。",
+  "How it differs from traditional SFT": "従来の SFT との違い",
+  "Traditional SFT asks the model to reproduce the whole target answer. Even when only a small span is wrong, the entire response becomes a training target.":
+    "従来の SFT はモデルに目標回答全体の再現を求めます。小さな範囲だけが誤っていても、応答全体が学習対象になります。",
+  "That means even tokens that were already acceptable are also pushed toward the rewritten sequence, making the optimization target broader than necessary.":
+    "そのため、もともと問題のない token まで再記述シーケンスへ引っ張られ、最適化対象が必要以上に広くなります。",
+  "It is closer to targeted correction than full-answer rewriting.":
+    "これは全文書き換えというより、狙いを絞った修正に近い方法です。",
+  "How it differs from pure distillation": "純粋な蒸留との違い",
+  "Pure distillation mainly keeps the model close to a reference distribution. That helps preserve style and stability, but it does not tell the model which behavior should be corrected.":
+    "純粋な蒸留は、主にモデルを参照分布に近づけるためのものです。スタイルや安定性の維持には有効ですが、どの挙動を修正すべきかまでは示しません。",
+  "lawftrack keeps that distribution-preserving effect on non-anchor positions, then adds human corrections on anchor tokens so the model learns both what should stay unchanged and where it must change.":
+    "lawftrack は non-anchor 位置でその分布保持の効果を残しつつ、anchor token に人手修正を加えることで、何を維持し、どこを変えるべきかの両方を学習させます。",
+  "How it differs from reinforcement learning": "強化学習との違い",
+  "Preference optimization and reinforcement learning are useful for more complex alignment problems, but they usually require heavier data construction, more training control, and higher experimentation cost.":
+    "選好最適化や強化学習は、より複雑なアラインメント問題には有効ですが、一般にデータ構築、学習制御、実験コストがより重くなります。",
+  "lawftrack is designed for the lighter case: the model is mostly correct already, but keeps making recurring mistakes at a few key positions.":
+    "lawftrack は、モデルが概ね正しいものの、いくつかの重要位置で繰り返し誤るような、より軽量なケース向けに設計されています。",
+  "Applicable scenarios": "適用シナリオ",
+  "Because annotation effort is spent only on the positions that really matter, users can iterate faster while keeping more of the base model's original knowledge.":
+    "本当に重要な位置だけにアノテーション工数を使うため、ベースモデルの知識をより多く保ったまま、速く反復できます。",
+  "terminology correction": "用語修正",
+  "factual error repair": "事実誤りの修正",
+  "format and schema constraints": "形式・スキーマ制約",
+  "style alignment": "スタイル整合",
+  "domain-specific answer adjustment": "ドメイン特化の回答調整",
+  "Usage flow": "利用フロー",
+  "Create or open a dataset and choose the base model used for generation and training.":
+    "データセットを作成または開き、生成と学習に使うベースモデルを選びます。",
+  "Generate an answer, inspect the tokenized output, and locate the key error token.":
+    "回答を生成し、token 化された出力を確認して、重要な誤り token を特定します。",
+  "Replace the error token, continue generation, and save the corrected sample.":
+    "誤り token を置き換え、続きを生成し、修正済みサンプルとして保存します。",
+  "Launch a training job after a batch of corrected samples is ready, so the model learns the local corrections instead of relearning every full response.":
+    "修正済みサンプルがまとまったら学習ジョブを開始し、各回答全体を学び直すのではなく、局所的な修正だけを学習させます。",
+  Reinstall: "再インストール",
+  "Run gateway in foreground": "ゲートウェイをフォアグラウンドで起動",
+  "Check gateway status": "ゲートウェイ状態を確認",
+  "Start gateway service": "ゲートウェイサービスを起動",
+  "Gateway data could not be loaded": "ゲートウェイデータを読み込めませんでした",
+  "Service details": "サービス詳細",
+  "Common commands": "よく使うコマンド",
+  Device: "デバイス",
+  Hostname: "ホスト名",
+  "Operating system": "OS",
+  Architecture: "アーキテクチャ",
+  "Python version": "Python バージョン",
+  "GPU snapshot": "GPU スナップショット",
+  "VRAM total": "総 VRAM",
+  "VRAM used": "使用中 VRAM",
+  "VRAM free": "空き VRAM",
+  "GPU utilization": "GPU 使用率",
+  Temperature: "温度",
+  "No GPU detected": "GPU が検出されません",
+  "No NVIDIA GPU metrics available on the server yet.":
+    "サーバーで利用可能な NVIDIA GPU メトリクスはまだありません。",
+  "CPU threads": "CPU スレッド",
+  Viewport: "ビューポート",
+  Network: "ネットワーク",
+  Online: "オンライン",
+  Datasets: "データセット",
+  "New dataset": "新しいデータセット",
+  "Creating...": "作成中...",
+  "Import dataset": "データセットをインポート",
+  "Recently opened": "最近開いた項目",
+  "No base model": "ベースモデル未設定",
+  "All datasets": "すべてのデータセット",
+  "No datasets yet.": "まだデータセットはありません。",
+  "Dataset workspace": "データセットワークスペース",
+  Creating: "作成中",
+  New: "新規",
+  Import: "インポート",
+  "No datasets yet. Create one to get started.":
+    "まだデータセットはありません。まず 1 つ作成してください。",
+  items: "件",
+  "Loading samples...": "サンプルを読み込み中...",
+  "This dataset has no samples yet.": "このデータセットにはまだサンプルがありません。",
+  "Dataset name": "データセット名",
+  "Annotation model / Base model": "アノテーションモデル / ベースモデル",
+  "Choose from the model list or enter a local model path directly.":
+    "モデル一覧から選ぶか、ローカルのモデルパスを直接入力します。",
+  "Saving...": "保存中...",
+  "Save dataset config": "データセット設定を保存",
+  "Dataset metadata": "データセットメタデータ",
+  Welcome: "ようこそ",
+  Dataset: "データセット",
+  Edit: "編集",
+  "Failed to load datasets": "データセットの読み込みに失敗しました",
+  "Failed to load samples": "サンプルの読み込みに失敗しました",
+  "Failed to create dataset": "データセットの作成に失敗しました",
+  "Failed to save dataset": "データセットの保存に失敗しました",
+  "Failed to import dataset": "データセットのインポートに失敗しました",
+  "Failed to create sample": "サンプルの作成に失敗しました",
+  "Please configure a base model for the current dataset first.":
+    "まず現在のデータセットにベースモデルを設定してください。",
+  "Failed to load token data": "token データの読み込みに失敗しました",
+  "Failed to save sample": "サンプルの保存に失敗しました",
+  "The last assistant message already has content. Clear or remove it before generating again.":
+    "最後の assistant メッセージにはすでに内容があります。再生成する前にクリアまたは削除してください。",
+  "Keep at least one message before generating.":
+    "生成前に少なくとも 1 件のメッセージを残してください。",
+  "The model returned no writable delta, so generation could not continue.":
+    "モデルが書き込み可能な差分を返さなかったため、生成を続行できませんでした。",
+  "Failed to continue generation": "続きの生成に失敗しました",
+  "Failed to delete dataset": "データセットの削除に失敗しました",
+  "Failed to delete sample": "サンプルの削除に失敗しました",
+  "Failed to refresh token data": "token データの更新に失敗しました",
+  "Open a dataset before saving samples.":
+    "サンプルを保存する前にデータセットを開いてください。",
+  "Token probability: {probability}": "Token 確率: {probability}",
+  "Token probability unavailable": "Token 確率は利用できません",
+  "Failed to load models": "モデル一覧の読み込みに失敗しました",
+  "Failed to generate assistant message":
+    "assistant メッセージの生成に失敗しました",
+  "Delete dataset": "データセットを削除",
+  "Delete sample": "サンプルを削除",
+  'Are you sure you want to delete dataset "{name}"? This will remove the dataset and all of its samples permanently.':
+    'データセット「{name}」を削除してもよろしいですか？ この操作により、データセットとそのすべてのサンプルが完全に削除されます。',
+  'Are you sure you want to delete sample "{title}"? This action cannot be undone.':
+    'サンプル「{title}」を削除してもよろしいですか？ この操作は元に戻せません。',
+  Cancel: "キャンセル",
+  "Deleting...": "削除中...",
+  "Confirm delete": "削除の確認",
+  "Failed to load files": "ファイルの読み込みに失敗しました",
+  "Failed to load training jobs": "学習ジョブの読み込みに失敗しました",
+  "Failed to load training logs": "学習ログの読み込みに失敗しました",
+  "Failed to refresh training page": "学習ページの更新に失敗しました",
+  "Select a dataset first.": "まずデータセットを選択してください。",
+  "Select a dataset": "データセットを選択",
+  "Create a dataset first to start a training job.":
+    "学習ジョブを始める前に、まずデータセットを作成してください。",
+  "Training job details": "学習ジョブ詳細",
+  "Back to training queue": "学習キューに戻る",
+  "Failed to upload file": "ファイルのアップロードに失敗しました",
+  "Select a training file first.": "まず学習ファイルを選択してください。",
+  "Failed to create training job": "学習ジョブの作成に失敗しました",
+  "Failed to cancel job": "ジョブのキャンセルに失敗しました",
+  "Failed to generate response": "応答の生成に失敗しました",
+  "Training console": "学習コンソール",
+  "Create training job": "学習ジョブを作成",
+  "Training files": "学習ファイル",
+  Upload: "アップロード",
+  "Uploading...": "アップロード中...",
+  "No training files yet. Upload a JSON/JSONL/CSV/Parquet file first.":
+    "まだ学習ファイルはありません。まず JSON/JSONL/CSV/Parquet ファイルをアップロードしてください。",
+  "Use as training file": "学習ファイルとして使用",
+  "Use as validation file": "検証ファイルとして使用",
+  "Training queue": "学習キュー",
+  'No training jobs yet. Click "Create training job" to get started.':
+    'まだ学習ジョブはありません。「学習ジョブを作成」をクリックして始めてください。',
+  "Job details": "ジョブ詳細",
+  "Cancel job": "ジョブをキャンセル",
+  "Select a training job to view details.":
+    "詳細を表示するには学習ジョブを選択してください。",
+  "Basic info": "基本情報",
+  Method: "方法",
+  "File references": "ファイル参照",
+  "Training file": "学習ファイル",
+  "Validation file": "検証ファイル",
+  "Runtime status": "実行状態",
+  "End time": "終了時刻",
+  "Outputs and errors": "出力とエラー",
+  "Fine-tuned model": "微調整済みモデル",
+  "Training curve": "学習曲線",
+  "Logs and events": "ログとイベント",
+  Events: "イベント",
+  "Raw logs": "生ログ",
+  "Download full logs": "完全なログをダウンロード",
+  "Showing the last {count} lines from each log stream.":
+    "各ログストリームの最後の {count} 行を表示しています。",
+  "No events.": "イベントはありません。",
+  "No raw logs.": "生ログはありません。",
+  "No content": "内容はありません",
+  "No loss data available to plot.": "描画できる loss データがありません。",
+  "Training loss curve": "学習 loss 曲線",
+  "Initial loss": "初期 loss",
+  "Latest loss": "最新 loss",
+  "Latest valid loss": "最新の検証 loss",
+  "Lowest loss": "最低 loss",
+  "Validating files": "ファイルを検証中",
+  Queued: "待機中",
+  Running: "実行中",
+  Succeeded: "成功",
+  Failed: "失敗",
+  Cancelled: "キャンセル済み",
+  Paused: "一時停止",
+  "Pending load": "読み込み待ち",
+  Loaded: "読み込み済み",
+  "Load failed": "読み込み失敗",
+  "Train loss": "学習 loss",
+  "Validation loss": "検証 loss",
+  Step: "ステップ",
+  "or /path/to/model": "または /path/to/model",
+  "Do not attach dataset metadata": "データセットメタデータを付与しない",
+  "Training method": "学習方法",
+  "Generated on create": "作成時に生成",
+  "Do not use": "使用しない",
+  "Advanced settings": "詳細設定",
+  "Enable TensorBoard integration": "TensorBoard 連携を有効化",
+  "Submitting...": "送信中...",
+  Prompt: "プロンプト",
+  Response: "応答",
+  Send: "送信",
+  Conversation: "会話",
+  "Model chat": "モデルチャット",
+  "Single model": "単一モデル",
+  "Compare two models": "2つのモデルを比較",
+  "Model A": "モデル A",
+  "Model B": "モデル B",
+  "System prompt": "システムプロンプト",
+  "Optional instructions shared with the selected model(s).":
+    "選択したモデルに共通して送られる任意の指示です。",
+  "Refresh model list": "モデル一覧を更新",
+  "Choose from the model list or enter a model ID directly.":
+    "モデル一覧から選ぶか、モデル ID を直接入力します。",
+  "Fine-tuned from {parent}": "{parent} から微調整",
+  "Each turn keeps the same user prompt and shows one answer per model.":
+    "各ターンで同じユーザープロンプトを保ち、モデルごとに 1 つの回答を表示します。",
+  "Each turn keeps the shared conversation history for the selected model.":
+    "各ターンで選択したモデルの共有会話履歴を保持します。",
+  "New conversation": "新しい会話",
+  Ready: "準備完了",
+  "Start a conversation": "会話を開始",
+  "Choose your model setup, then send a prompt from the composer at the bottom.":
+    "モデル設定を選んでから、下部の入力欄でプロンプトを送信します。",
+  "Message the selected model and keep the conversation going...":
+    "選択したモデルにメッセージを送り、会話を続けましょう...",
+  "Enter to send, Shift + Enter for newline":
+    "Enter で送信、Shift + Enter で改行",
+  "Stop generating": "生成を停止",
+  "Start a conversation by selecting model settings and sending a prompt.":
+    "モデル設定を選び、プロンプトを送信して会話を開始します。",
+  "Ctrl/Cmd + Enter to send": "Ctrl/Cmd + Enter で送信",
+  "Describe the task, question, or scenario you want to discuss.":
+    "相談したいタスク、質問、または状況を入力してください。",
+  "Ask both models": "両方のモデルに聞く",
+  "Ask one model": "1つのモデルに聞く",
+  "Thought process": "思考過程",
+  "Show reasoning": "推論を表示",
+  "Hide reasoning": "推論を隠す",
+  "Scroll to bottom": "一番下へスクロール",
+  "Waiting for model output.": "モデル出力を待っています。",
+  "Please enter a prompt.": "プロンプトを入力してください。",
+  "Select a model first.": "まずモデルを選択してください。",
+  "Select a second model first.": "まず 2 つ目のモデルを選択してください。",
+  "Select two different models to compare.":
+    "比較するには異なる 2 つのモデルを選択してください。",
+  "Message flow": "メッセージフロー",
+  "Generate AI message": "AI メッセージを生成",
+  "Save sample": "サンプルを保存",
+  "Select a sample to start editing.":
+    "編集を始めるにはサンプルを選択してください。",
+  "Add user message": "ユーザーメッセージを追加",
+  "Add assistant message": "assistant メッセージを追加",
+  "Line break token": "改行 token",
+  Reasoning: "推論",
+  "Token rewrite": "Token 書き換え",
+  "Original {target} token: {token}": "元の {target} token: {token}",
+  "Replace with": "置き換え先",
+  "Candidate tokens": "候補 token",
+  "Loading candidates...": "候補を読み込み中...",
+  "No candidates.": "候補はありません。",
+  "Accept and save": "反映して保存",
+  "Discard rewrite": "書き換えを破棄",
+  "Replace and continue": "置き換えて続行",
+  Revert: "元に戻す",
+  "Click any token in an assistant message to replace it and continue generation from that point.":
+    "assistant メッセージ内の token をクリックすると置き換えて、その位置から生成を続けられます。",
+  "Click a token in an assistant message to start rewriting.":
+    "assistant メッセージ内の token をクリックして書き換えを開始します。",
+  "Original token: {token}": "元の token: {token}",
+  Discard: "破棄",
+  "Continue generation": "生成を続ける",
+  "Just now": "たった今",
+  "Start with LAwF and anchor-style annotation":
+    "LAwF と anchor 型アノテーションから始める",
+  "lawftrack is built around LAwF, a token-level fine-tuning idea from the linked repository. It only asks annotators to correct the crucial wrong token, while the rest of the sequence stays close to the reference model.":
+    "lawftrack は LAwF を中心に設計されています。これはリンク先リポジトリに由来する token レベルの微調整アイデアで、重要な誤り token だけを修正し、残りの系列は参照分布にできるだけ近づけます。",
+  "lawftrack is an open-source no-code self-distillation fine-tuning framework for large language models.":
+    "lawftrack は、大規模言語モデル向けのオープンソース・ノーコード自己蒸留微調整フレームワークです。",
+  "Product positioning": "製品位置づけ",
+  "It does not retrain everything. It changes only what should change.":
+    "すべてを再学習するのではなく、変えるべきところだけを変えます。",
+  "The untouched positions still stay close to the base model's output distribution, so the model is corrected locally instead of being reshaped globally.":
+    "手を加えていない位置はベースモデルの出力分布に近いまま保たれるため、モデルは全体を書き換えるのではなく局所的に修正されます。",
+  "How the training algorithm works": "学習アルゴリズムの仕組み",
+  "During training, the base model's original output distribution is used as the teacher signal for most tokens.":
+    "学習時には、ほとんどの token でベースモデル本来の出力分布が参照信号として使われます。",
+  "When a token is marked as a key error, the training target at that position is pulled toward the human correction, while the remaining positions continue to follow the teacher distribution.":
+    "ある token が重要な誤りとしてマークされると、その位置の学習目標は人手修正へ引き寄せられ、残りの位置は引き続き参照分布に従います。",
+  "This combines explicit supervision on anchor tokens with self-distillation on non-anchor tokens, so the model learns what to change without forgetting everything else.":
+    "anchor token 上の明示的監督と non-anchor token 上の自己蒸留を組み合わせることで、何を変えるべきかを学びつつ、他を過度に忘れないようにします。",
+  "lawftrack concentrates the training signal on the critical tokens that determine the behavioral change, so data labeling is lighter and the optimization target is more precise.":
+    "lawftrack は挙動の変化を決める重要 token に学習信号を集中させるため、ラベリング負担が軽く、最適化目標もより精密です。",
+  "How it differs from preference learning or reinforcement learning":
+    "選好学習や強化学習との違い",
+  "Why this works well for targeted fine-tuning":
+    "なぜこれは定向微調整に向いているのか",
+  "Typical workflow in lawftrack": "lawftrack における典型的な利用フロー",
+  "One-sentence summary": "一言でまとめると",
+  "Instead of choosing between rewriting everything and imitating everything, lawftrack takes a third path: correct only the parts that must change, and preserve the rest of the model as much as possible.":
+    "すべてを書き直すか、すべてを模倣するかの二択ではなく、lawftrack は第三の道を取ります。変える必要がある部分だけを修正し、それ以外のモデル挙動はできるだけ保ちます。",
+  "Open LAwF repository": "LAwF リポジトリを開く",
+  "How LAwF works": "LAwF の仕組み",
+  "LAwF blends supervised anchors with the reference model's distribution.":
+    "LAwF は、監督付き anchor と参照モデルの分布を 1 つの学習目標に組み合わせます。",
+  "Annotators mark the first wrong token, provide the correct replacement, and let generation continue from there.":
+    "アノテータは最初の誤り token を指定し、正しい置き換えを与え、その位置から生成を続けます。",
+  "Non-anchor tokens keep the reference model's behavior, which helps preserve prior knowledge instead of overwriting everything.":
+    "non-anchor token は参照モデルの振る舞いを保つため、すべてを上書きせずに既存知識を維持しやすくなります。",
+  "Why this annotation style is needed": "なぜこのアノテーション方式が必要なのか",
+  "Full-sequence supervision is expensive because every answer must be rewritten even when only a few tokens are wrong.":
+    "全系列監督は、少数の token だけが誤っている場合でも回答全体を書き直す必要があるため、コストが高くなります。",
+  "Anchor-only correction cuts labeling cost to the decisive edits that actually change the behavior.":
+    "anchor のみを修正する方式なら、ラベリングコストを実際に挙動を変える決定的な編集だけに絞れます。",
+  "Keeping the untouched tokens close to the reference model reduces catastrophic forgetting during fine-tuning.":
+    "手を加えていない token を参照モデルに近づけて保つことで、微調整時の破滅的忘却を抑えられます。",
+  "How to use it in lawftrack": "lawftrack での使い方",
+  "Write the prompt, generate an assistant answer, and inspect the tokenized output in the data workspace.":
+    "プロンプトを書き、assistant の回答を生成し、データワークスペースで token 化された出力を確認します。",
+  "Click the first wrong assistant token, replace it, then continue generation until the sample becomes correct.":
+    "最初の誤った assistant token をクリックして置き換え、サンプルが正しくなるまで生成を続けます。",
+  "Export the dataset or launch a LAwF training job so the model learns the anchor tokens without drifting too far from the base model.":
+    "データセットをエクスポートするか LAwF 学習ジョブを開始して、ベースモデルから大きく逸れずに anchor token を学習させます。",
+  "Next step": "次のステップ",
+  "Start your first anchor-labeled dataset or revisit training after you have a few corrected samples.":
+    "最初の anchor ラベル付きデータセットを始めるか、修正済みサンプルがいくつかたまったら学習ページに戻ってください。",
+  "Reopen the LAwF walkthrough and the annotation rationale at any time.":
+    "この LAwF ガイドとアノテーション設計の意図はいつでも開き直せます。",
+};
+
 interface I18nContextValue {
   locale: AppLocale;
   isZh: boolean;
@@ -458,7 +894,14 @@ function normalizeLocale(value?: string | null): AppLocale {
   if (!value) {
     return "zh-CN";
   }
-  return value.toLowerCase().startsWith("en") ? "en-US" : "zh-CN";
+  const normalized = value.toLowerCase();
+  if (normalized.startsWith("en")) {
+    return "en-US";
+  }
+  if (normalized.startsWith("ja")) {
+    return "ja-JP";
+  }
+  return "zh-CN";
 }
 
 function toDate(
@@ -500,8 +943,14 @@ export function I18nProvider({ children }: PropsWithChildren) {
 
   const value = useMemo<I18nContextValue>(() => {
     const isZh = locale === "zh-CN";
+    const messages =
+      locale === "zh-CN"
+        ? ZH_MESSAGES
+        : locale === "ja-JP"
+          ? JA_MESSAGES
+          : null;
     const t = (message: string, params?: Record<string, string | number>) => {
-      const translated = isZh ? (ZH_MESSAGES[message] ?? message) : message;
+      const translated = messages?.[message] ?? message;
       return interpolate(translated, params);
     };
 
@@ -542,23 +991,47 @@ export function I18nProvider({ children }: PropsWithChildren) {
           return t("Just now");
         }
         if (diffMinutes < 60) {
-          return isZh ? `${diffMinutes} 分钟前` : `${diffMinutes} min ago`;
+          if (locale === "zh-CN") {
+            return `${diffMinutes} 分钟前`;
+          }
+          if (locale === "ja-JP") {
+            return `${diffMinutes} 分前`;
+          }
+          return `${diffMinutes} min ago`;
         }
 
         const diffHours = Math.round(diffMinutes / 60);
         if (diffHours < 24) {
-          return isZh ? `${diffHours} 小时前` : `${diffHours} hr ago`;
+          if (locale === "zh-CN") {
+            return `${diffHours} 小时前`;
+          }
+          if (locale === "ja-JP") {
+            return `${diffHours} 時間前`;
+          }
+          return `${diffHours} hr ago`;
         }
 
         const diffDays = Math.round(diffHours / 24);
-        return isZh
-          ? `${diffDays} 天前`
-          : `${diffDays} day${diffDays === 1 ? "" : "s"} ago`;
+        if (locale === "zh-CN") {
+          return `${diffDays} 天前`;
+        }
+        if (locale === "ja-JP") {
+          return `${diffDays} 日前`;
+        }
+        return `${diffDays} day${diffDays === 1 ? "" : "s"} ago`;
       },
       formatDatasetCount: (count) =>
-        isZh ? `${count ?? 0} 条样本` : `${count ?? 0} samples`,
+        locale === "zh-CN"
+          ? `${count ?? 0} 条样本`
+          : locale === "ja-JP"
+            ? `${count ?? 0} 件のサンプル`
+            : `${count ?? 0} samples`,
       formatTaskCount: (count) =>
-        isZh ? `${count ?? 0} 个任务` : `${count ?? 0} jobs`,
+        locale === "zh-CN"
+          ? `${count ?? 0} 个任务`
+          : locale === "ja-JP"
+            ? `${count ?? 0} 件のジョブ`
+            : `${count ?? 0} jobs`,
     };
   }, [locale]);
 

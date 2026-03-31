@@ -1,4 +1,5 @@
 import HttpsRoundedIcon from "@mui/icons-material/HttpsRounded";
+import KeyboardArrowDownRoundedIcon from "@mui/icons-material/KeyboardArrowDownRounded";
 import LinkRoundedIcon from "@mui/icons-material/LinkRounded";
 import MemoryRoundedIcon from "@mui/icons-material/MemoryRounded";
 import TranslateRoundedIcon from "@mui/icons-material/TranslateRounded";
@@ -6,7 +7,6 @@ import WifiTetheringRoundedIcon from "@mui/icons-material/WifiTetheringRounded";
 import AutoStoriesRoundedIcon from "@mui/icons-material/AutoStoriesRounded";
 import {
   Button,
-  ButtonGroup,
   Card,
   CardContent,
   Chip,
@@ -15,9 +15,12 @@ import {
   ListItem,
   ListItemIcon,
   ListItemText,
+  Menu,
+  MenuItem,
   Stack,
   Typography,
 } from "@mui/material";
+import { useState } from "react";
 import { useI18n, type AppLocale } from "../i18n";
 import type { GatewayConfig, GatewayHealth, GatewayStatus } from "../types/app";
 
@@ -39,11 +42,28 @@ function MySection({
   onOpenGettingStarted,
 }: MySectionProps) {
   const { t } = useI18n();
+  const [languageMenuAnchor, setLanguageMenuAnchor] =
+    useState<null | HTMLElement>(null);
   const healthOk = health?.status === "ok";
   const healthLabel = healthOk ? t("Healthy") : t("Offline");
   const endpoint = config?.vllm_endpoint || t("Not configured");
   const apiKey = config?.has_api_key ? t("Configured") : t("Not set");
   const hostname = status?.hostname || t("Unknown");
+  const languageLabels: Record<AppLocale, string> = {
+    "zh-CN": "中文",
+    "en-US": "English",
+    "ja-JP": "日本語",
+  };
+  const currentLanguageLabel = languageLabels[locale];
+
+  function handleLanguageMenuClose() {
+    setLanguageMenuAnchor(null);
+  }
+
+  function handleLanguageSelect(nextLocale: AppLocale) {
+    setLocale(nextLocale);
+    handleLanguageMenuClose();
+  }
 
   return (
     <Stack spacing={2.5}>
@@ -62,24 +82,39 @@ function MySection({
                   secondary: { sx: { mt: 0.5 } },
                 }}
               />
-              <ButtonGroup
+              <Button
                 size="small"
                 variant="outlined"
+                onClick={(event) => setLanguageMenuAnchor(event.currentTarget)}
+                endIcon={<KeyboardArrowDownRoundedIcon />}
                 sx={{ flexShrink: 0, ml: 2 }}
               >
-                <Button
-                  onClick={() => setLocale("zh-CN")}
-                  variant={locale === "zh-CN" ? "contained" : "outlined"}
+                {currentLanguageLabel}
+              </Button>
+              <Menu
+                anchorEl={languageMenuAnchor}
+                open={Boolean(languageMenuAnchor)}
+                onClose={handleLanguageMenuClose}
+              >
+                <MenuItem
+                  selected={locale === "zh-CN"}
+                  onClick={() => handleLanguageSelect("zh-CN")}
                 >
-                  {t("Chinese")}
-                </Button>
-                <Button
-                  onClick={() => setLocale("en-US")}
-                  variant={locale === "en-US" ? "contained" : "outlined"}
+                  {languageLabels["zh-CN"]}
+                </MenuItem>
+                <MenuItem
+                  selected={locale === "en-US"}
+                  onClick={() => handleLanguageSelect("en-US")}
                 >
-                  {t("English")}
-                </Button>
-              </ButtonGroup>
+                  {languageLabels["en-US"]}
+                </MenuItem>
+                <MenuItem
+                  selected={locale === "ja-JP"}
+                  onClick={() => handleLanguageSelect("ja-JP")}
+                >
+                  {languageLabels["ja-JP"]}
+                </MenuItem>
+              </Menu>
             </ListItem>
             <Divider component="li" />
             <ListItem sx={{ px: 3, py: 2.25 }}>

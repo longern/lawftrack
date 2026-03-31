@@ -1,10 +1,13 @@
 import { useMemo } from "react";
+import CloseRoundedIcon from "@mui/icons-material/CloseRounded";
 import {
   Box,
+  Button,
   Card,
   CardContent,
   Chip,
   Grid,
+  IconButton,
   Paper,
   Stack,
   Typography,
@@ -31,6 +34,9 @@ interface OverviewSectionProps {
     view: NavView,
     options?: { datasetId?: string; jobId?: string },
   ) => void;
+  onDismissGettingStartedEntry: () => void;
+  onOpenGettingStarted: () => void;
+  showGettingStartedEntry: boolean;
 }
 
 function MetaList({
@@ -73,6 +79,9 @@ function OverviewSection({
   health,
   config,
   onNavigate,
+  onDismissGettingStartedEntry,
+  onOpenGettingStarted,
+  showGettingStartedEntry,
 }: OverviewSectionProps) {
   const { t, formatDateTime, formatRelativeTime, formatDatasetCount } =
     useI18n();
@@ -266,6 +275,63 @@ function OverviewSection({
 
   return (
     <Grid container spacing={3}>
+      {showGettingStartedEntry ? (
+        <Grid size={{ xs: 12 }}>
+          <Card
+            sx={{
+              borderRadius: 4,
+              background: (theme) =>
+                theme.palette.mode === "dark"
+                  ? "linear-gradient(135deg, rgba(37, 99, 235, 0.18), rgba(15, 23, 42, 0.92))"
+                  : "linear-gradient(135deg, rgba(37, 99, 235, 0.1), rgba(255, 255, 255, 0.98))",
+              border: (theme) => `1px solid ${theme.palette.primary.main}`,
+            }}
+          >
+            <CardContent>
+              <Stack spacing={2}>
+                <Stack
+                  direction="row"
+                  spacing={1}
+                  alignItems="flex-start"
+                  justifyContent="space-between"
+                >
+                  <Stack spacing={1}>
+                    <Stack direction="row" spacing={1} alignItems="center">
+                      <Typography variant="h6">
+                        {t("Getting started guide")}
+                      </Typography>
+                      <Chip
+                        size="small"
+                        color="primary"
+                        label={t("Recommended on first launch")}
+                      />
+                    </Stack>
+                    <Typography variant="body2" color="text.secondary">
+                      {t(
+                        "Read the LAwF method, understand why this workspace uses anchor-style annotation, and jump into your first dataset.",
+                      )}
+                    </Typography>
+                  </Stack>
+                  <IconButton
+                    aria-label={t("Close")}
+                    onClick={onDismissGettingStartedEntry}
+                    size="small"
+                    sx={{ flexShrink: 0 }}
+                  >
+                    <CloseRoundedIcon fontSize="small" />
+                  </IconButton>
+                </Stack>
+                <Box>
+                  <Button variant="contained" onClick={onOpenGettingStarted}>
+                    {t("Open guide")}
+                  </Button>
+                </Box>
+              </Stack>
+            </CardContent>
+          </Card>
+        </Grid>
+      ) : null}
+
       <Grid size={{ xs: 12, lg: 6 }}>
         <Card sx={{ height: "100%" }}>
           <CardContent>

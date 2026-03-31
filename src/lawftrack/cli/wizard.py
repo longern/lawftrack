@@ -4,6 +4,10 @@ import argparse
 import sys
 from pathlib import Path
 from typing import Callable
+from urllib.parse import parse_qsl
+from urllib.parse import urlencode
+from urllib.parse import urlsplit
+from urllib.parse import urlunsplit
 
 from ..service import ServiceManagerError
 from ..vllm import check_vllm_connection
@@ -14,6 +18,21 @@ from .wizard_ui import prompt_text_step
 
 class WizardCanceled(Exception):
     pass
+
+
+def build_getting_started_url(url: str) -> str:
+    parsed = urlsplit(url)
+    query = dict(parse_qsl(parsed.query, keep_blank_values=True))
+    query["wizard"] = "1"
+    return urlunsplit(
+        (
+            parsed.scheme,
+            parsed.netloc,
+            parsed.path,
+            urlencode(query),
+            parsed.fragment,
+        )
+    )
 
 
 def collect_wizard_inputs(
@@ -216,8 +235,17 @@ def run_wizard(
             try:
                 print(manager.install(service_config))
                 print(f"Gateway URL: {gateway_access_url(service_config.host, service_config.port)}")
+                print(
+                    "Getting started URL: "
+                    f"{build_getting_started_url(gateway_access_url(service_config.host, service_config.port))}"
+                )
             except ServiceManagerError as exc:
                 raise SystemExit(str(exc)) from exc
+        else:
+            print(
+                "Getting started URL (when the gateway is running): "
+                f"{build_getting_started_url(gateway_access_url('127.0.0.1', default_gateway_port))}"
+            )
         return 0
     except WizardCanceled as exc:
         raise SystemExit("Wizard canceled.") from exc

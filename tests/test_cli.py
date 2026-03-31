@@ -78,6 +78,10 @@ class CliTests(unittest.TestCase):
 
             self.assertEqual(result.returncode, 0)
             self.assertIn("Configuration saved to", result.stdout)
+            self.assertIn(
+                "Getting started URL (when the gateway is running): http://127.0.0.1:5293?wizard=1",
+                result.stdout,
+            )
 
             config_path = Path(temp_dir) / "config.json"
             self.assertTrue(config_path.exists())
@@ -175,6 +179,10 @@ class CliTests(unittest.TestCase):
             )
             self.assertIn(
                 mock.call("Gateway URL: http://127.0.0.1:5293"),
+                mocked_print.call_args_list,
+            )
+            self.assertIn(
+                mock.call("Getting started URL: http://127.0.0.1:5293?wizard=1"),
                 mocked_print.call_args_list,
             )
 

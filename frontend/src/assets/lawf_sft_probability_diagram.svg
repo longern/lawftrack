@@ -1,0 +1,116 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1320" height="660" viewBox="0 0 1320 660" role="img" aria-labelledby="title desc">
+  <title id="title">LAwF vs SFT token probability diagram</title>
+  <desc id="desc">A compact token-level SVG showing how SFT and LAwF set target probabilities for the same example text.</desc>
+  <defs>
+    <style>
+      .bg { fill: #f6f1e8; }
+      .panel { fill: #fffdf8; stroke: #d7cebf; stroke-width: 1.5; }
+      .title { font: 700 28px 'Avenir Next', 'Helvetica Neue', 'Arial', sans-serif; fill: #222; }
+      .subtitle { font: 500 15px 'Avenir Next', 'Helvetica Neue', 'Arial', sans-serif; fill: #505050; }
+      .label { font: 700 22px 'Avenir Next', 'Helvetica Neue', 'Arial', sans-serif; fill: #222; }
+      .small { font: 500 14px 'Avenir Next', 'Helvetica Neue', 'Arial', sans-serif; fill: #505050; }
+      .mini { font: 600 12px 'Avenir Next', 'Helvetica Neue', 'Arial', sans-serif; fill: #5a5a5a; }
+      .token { font: 700 26px 'Avenir Next', 'Helvetica Neue', 'Arial', sans-serif; fill: #1f1f1f; }
+      .prob { font: 500 22px 'Menlo', 'Monaco', monospace; fill: #2b2b2b; }
+      .note { font: 600 13px 'Avenir Next', 'Helvetica Neue', 'Arial', sans-serif; fill: #3a3a3a; }
+      .formula { font: 600 14px 'Menlo', 'Monaco', monospace; fill: #2f2f2f; }
+      .row0 { fill: #f1eee7; stroke: #b8b09f; stroke-width: 1.8; rx: 18; }
+      .row1 { fill: #fff1dd; stroke: #dd9a23; stroke-width: 2; rx: 18; }
+      .row2 { fill: #e7f5e8; stroke: #3f9152; stroke-width: 2; rx: 18; }
+      .anchor { fill: #fde7e2; stroke: #cf6448; stroke-width: 2.4; rx: 18; }
+      .pill { rx: 12; ry: 12; }
+    </style>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1320" height="660"/>
+  <rect class="panel" x="28" y="24" width="1264" height="612" rx="26"/>
+
+  <text class="title" x="56" y="68">How LAwF and SFT Set Token Targets</text>
+  <text class="subtitle" x="56" y="96">Prompt: "Is water wet?"   Aligned tokens: The | answer | is | yes | .</text>
+
+  <rect x="56" y="116" width="148" height="30" fill="#f1eee7" class="pill"/>
+  <text class="note" x="74" y="136">Gray: base model</text>
+  <rect x="196" y="116" width="120" height="30" fill="#fff1dd" class="pill"/>
+  <text class="note" x="214" y="136">Orange: SFT</text>
+  <rect x="326" y="116" width="146" height="30" fill="#e7f5e8" class="pill"/>
+  <text class="note" x="344" y="136">Green: non-anchor</text>
+  <rect x="482" y="116" width="132" height="30" fill="#fde7e2" class="pill"/>
+  <text class="note" x="500" y="136">Red: anchor</text>
+
+  <text class="label" x="60" y="224">Base model</text>
+
+  <text class="label" x="60" y="374">SFT target</text>
+
+  <text class="label" x="60" y="524">LAwF target</text>
+
+  <g transform="translate(200,160)">
+    <rect class="row0" x="0" y="0" width="190" height="110"/>
+    <text class="token" x="95" y="38" text-anchor="middle">The</text>
+    <text class="prob" x="95" y="78" text-anchor="middle">0.89</text>
+
+    <rect class="row0" x="205" y="0" width="190" height="110"/>
+    <text class="token" x="300" y="38" text-anchor="middle">answer</text>
+    <text class="prob" x="300" y="78" text-anchor="middle">0.86</text>
+
+    <rect class="row0" x="410" y="0" width="190" height="110"/>
+    <text class="token" x="505" y="38" text-anchor="middle">is</text>
+    <text class="prob" x="505" y="78" text-anchor="middle">0.93</text>
+
+    <rect class="row0" x="615" y="0" width="190" height="110" fill="#fde7e4" stroke="#be5b51"/>
+    <text class="token" x="710" y="38" text-anchor="middle">no</text>
+    <text class="prob" x="710" y="78" text-anchor="middle">0.62</text>
+
+    <rect class="row0" x="820" y="0" width="190" height="110"/>
+    <text class="token" x="915" y="38" text-anchor="middle">.</text>
+    <text class="prob" x="915" y="78" text-anchor="middle">0.96</text>
+  </g>
+
+  <g transform="translate(200,310)">
+    <rect class="row1" x="0" y="0" width="190" height="110"/>
+    <text class="token" x="95" y="34" text-anchor="middle">The</text>
+    <text class="prob" x="95" y="77" text-anchor="middle">0.89 → 1.00</text>
+
+    <rect class="row1" x="205" y="0" width="190" height="110"/>
+    <text class="token" x="300" y="34" text-anchor="middle">answer</text>
+    <text class="prob" x="300" y="77" text-anchor="middle">0.86 → 1.00</text>
+
+    <rect class="row1" x="410" y="0" width="190" height="110"/>
+    <text class="token" x="505" y="34" text-anchor="middle">is</text>
+    <text class="prob" x="505" y="77" text-anchor="middle">0.93 → 1.00</text>
+
+    <rect class="row1" x="615" y="0" width="190" height="110"/>
+    <text class="token" x="710" y="34" text-anchor="middle">yes</text>
+    <text class="prob" x="710" y="77" text-anchor="middle">0.28 → 1.00</text>
+
+    <rect class="row1" x="820" y="0" width="190" height="110"/>
+    <text class="token" x="915" y="34" text-anchor="middle">.</text>
+    <text class="prob" x="915" y="77" text-anchor="middle">0.96 → 1.00</text>
+  </g>
+
+  <g transform="translate(200,460)">
+    <rect class="row2" x="0" y="0" width="190" height="110"/>
+    <text class="token" x="95" y="34" text-anchor="middle">The</text>
+    <text class="prob" x="95" y="77" text-anchor="middle">0.89 → 0.89</text>
+
+    <rect class="row2" x="205" y="0" width="190" height="110"/>
+    <text class="token" x="300" y="34" text-anchor="middle">answer</text>
+    <text class="prob" x="300" y="77" text-anchor="middle">0.86 → 0.86</text>
+
+    <rect class="row2" x="410" y="0" width="190" height="110"/>
+    <text class="token" x="505" y="34" text-anchor="middle">is</text>
+    <text class="prob" x="505" y="77" text-anchor="middle">0.93 → 0.93</text>
+
+    <rect class="anchor" x="615" y="0" width="190" height="110"/>
+    <text class="token" x="710" y="34" text-anchor="middle">yes</text>
+    <text class="prob" x="710" y="77" text-anchor="middle">0.28 → 1.00</text>
+    <rect x="665" y="-18" width="90" height="24" fill="#cf6448" class="pill"/>
+    <text class="mini" x="710" y="-2" text-anchor="middle" fill="#fff">anchor</text>
+
+    <rect class="row2" x="820" y="0" width="190" height="110"/>
+    <text class="token" x="915" y="34" text-anchor="middle">.</text>
+    <text class="prob" x="915" y="77" text-anchor="middle">0.96 → 0.96</text>
+  </g>
+
+  <rect x="56" y="574" width="1206" height="42" fill="#faf6ef" stroke="#d7cebf" stroke-width="1.2" rx="14"/>
+  <text class="formula" x="80" y="600">SFT pushes every position to 1.00; LAwF keeps non-anchor positions unchanged and only corrects the anchor.</text>
+</svg>

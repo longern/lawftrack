@@ -323,6 +323,117 @@ const ZH_MESSAGES: Record<string, string> = {
   Discard: "放弃",
   "Continue generation": "继续生成",
   "Just now": "刚刚",
+  "Getting started": "入门",
+  "Getting started guide": "入门向导",
+  "Recommended on first launch": "首次打开建议先看",
+  "Read the LAwF method, understand why this workspace uses anchor-style annotation, and jump into your first dataset.":
+    "阅读 LAwF 方法，理解为什么这个工作区采用 anchor 式标注，并直接开始你的第一份数据集。",
+  "Open guide": "打开向导",
+  "Back to overview": "返回总览",
+  "How it works": "工作原理",
+  "Start with LAwF and anchor-style annotation": "从 LAwF 与 anchor 式标注开始",
+  "lawftrack is built around LAwF, a token-level fine-tuning idea from the linked repository. It only asks annotators to correct the crucial wrong token, while the rest of the sequence stays close to the reference model.":
+    "lawftrack 围绕 LAwF 设计。这个方法来自上方链接的仓库，核心是只要求标注者纠正关键错误 token，同时让其余序列尽量贴近参考模型。",
+  "lawftrack is an open-source no-code self-distillation fine-tuning framework for large language models.":
+    "lawftrack 是一款开源无代码大模型自蒸馏微调框架。",
+  Introduction: "概述",
+  "Product positioning": "产品定位",
+  "Algorithm principles": "算法原理",
+  "LAwF algorithm principle diagram": "LAwF 算法原理示意图",
+  "Core mechanism": "核心机制",
+  "It combines dataset management, response correction, training launch, and result tracking in one interface so users can finish the full fine-tuning workflow without writing training scripts.":
+    "lawftrack 是一款开源无代码大模型自蒸馏微调框架。它把数据集管理、回答修正、训练发起和结果追踪整合到同一个界面中，让用户不需要手写训练脚本，也能完成从数据到微调模型的完整流程。",
+  "Its core idea is not to rewrite every answer from scratch, but to correct the decisive error positions and keep the rest of the model behavior as stable as possible.":
+    "它的核心思路不是把每条答案从头重写，而是只纠正真正决定行为变化的错误位置，并尽量保持其余部分的模型行为稳定。",
+  "It does not retrain everything. It changes only what should change.":
+    "它不是把模型整体重训一遍，而是只改真正该改的地方。",
+  "Traditional fine-tuning often asks annotators to rewrite the full answer even when only a few crucial tokens are wrong. That raises labeling cost and makes the model more likely to drift away from capabilities it already had.":
+    "传统微调通常要求标注者把整段答案完整重写，即使真正出错的只是少数几个关键 token。这样既会抬高标注成本，也更容易让模型偏离原本已经具备的能力。",
+  "lawftrack follows a LAwF-style training approach: users mark the key wrong token, provide the correction, and let the system focus learning on the positions that actually change behavior.":
+    "lawftrack 采用 LAwF 风格的训练思路：用户只需要标记关键错误 token，给出修正结果，再让系统把学习重点集中到真正影响行为变化的位置上。",
+  "The untouched positions still stay close to the base model's output distribution, so the model is corrected locally instead of being reshaped globally.":
+    "那些没有被改动的位置仍然会尽量贴近基座模型原本的输出分布，因此模型得到的是局部纠正，而不是整体重塑。",
+  "How the training algorithm works": "训练算法是怎么工作的",
+  "During training, the base model's original output distribution is used as the teacher signal for most tokens.":
+    "训练时，基座模型原本的输出分布会作为大部分 token 的教师信号。",
+  "When a token is marked as a key error, the training target at that position is pulled toward the human correction, while the remaining positions continue to follow the teacher distribution.":
+    "当某个 token 被标记为关键错误时，该位置的训练目标会被明确拉向人工修正结果，而其余位置仍然继续跟随教师分布。",
+  "This combines explicit supervision on anchor tokens with self-distillation on non-anchor tokens, so the model learns what to change without forgetting everything else.":
+    "这相当于把 anchor token 上的显式监督，与非 anchor token 上的自蒸馏结合到同一个训练目标里，让模型学会该改什么，同时不过度遗忘其它能力。",
+  "During training, non-anchor positions keep the base model's target distribution, while the anchor position is explicitly supervised with the human-corrected token.":
+    "训练时，非 anchor 位置保持基座模型原本的目标分布，而 anchor 位置则用人工修正后的 token 进行显式监督。",
+  "In the diagram above, SFT pushes every aligned position toward the rewritten answer, while LAwF leaves non-anchor positions unchanged and updates only the anchor token.":
+    "在上面的示意图里，SFT 会把所有对齐位置都推向重写后的答案，而 LAwF 会保持非 anchor 位置不变，只更新 anchor token。",
+  "How it differs from traditional SFT": "它和传统 SFT 有什么不同",
+  "Traditional SFT asks the model to reproduce the whole target answer. Even when only a small span is wrong, the entire response becomes a training target.":
+    "传统 SFT 的做法，是让模型去复现整段目标答案。即使只有一小段内容是错的，整条回答也会一起成为训练目标。",
+  "lawftrack concentrates the training signal on the critical tokens that determine the behavioral change, so data labeling is lighter and the optimization target is more precise.":
+    "lawftrack 会把训练信号集中到真正决定行为变化的关键 token 上，因此标注负担更轻，训练目标也更精确。",
+  "That means even tokens that were already acceptable are also pushed toward the rewritten sequence, making the optimization target broader than necessary.":
+    "这意味着即使原本已经可以接受的 token，也会被一起推向重写后的序列，因此训练目标会比真正需要的范围更宽。",
+  "It is closer to targeted correction than full-answer rewriting.":
+    "它更像一种定向纠偏，而不是整段重写。",
+  "How it differs from pure distillation": "它和纯蒸馏方法有什么不同",
+  "Pure distillation mainly keeps the model close to a reference distribution. That helps preserve style and stability, but it does not tell the model which behavior should be corrected.":
+    "纯蒸馏的主要作用，是让模型尽量贴近某个参考分布。这样有助于保持风格和稳定性，但它并不会直接告诉模型到底该纠正哪种行为。",
+  "lawftrack keeps that distribution-preserving effect on non-anchor positions, then adds human corrections on anchor tokens so the model learns both what should stay unchanged and where it must change.":
+    "lawftrack 在非 anchor 位置保留这种维持参考分布的效果，同时在 anchor token 上加入人工修正，因此模型学到的不只是哪些部分应当保持不变，还包括哪些位置必须改。",
+  "How it differs from reinforcement learning": "与 RL 的区别",
+  "How it differs from preference learning or reinforcement learning":
+    "它和偏好学习、强化学习有什么不同",
+  "Preference optimization and reinforcement learning are useful for more complex alignment problems, but they usually require heavier data construction, more training control, and higher experimentation cost.":
+    "偏好优化和强化学习适合处理更复杂的对齐问题，但它们通常需要更重的数据构造、更复杂的训练控制，以及更高的实验成本。",
+  "lawftrack is designed for the lighter case: the model is mostly correct already, but keeps making recurring mistakes at a few key positions.":
+    "lawftrack 更适合另一类更轻量的场景：模型整体已经接近正确，但总是在少数几个关键位置重复出错。",
+  "Why this works well for targeted fine-tuning": "为什么这种方式更适合做定向微调",
+  "Because annotation effort is spent only on the positions that really matter, users can iterate faster while keeping more of the base model's original knowledge.":
+    "因为人工标注成本只花在真正重要的位置上，用户可以更快迭代，同时保留更多基座模型原本的知识。",
+  "Applicable scenarios": "适用场景",
+  "terminology correction": "术语修正",
+  "factual error repair": "事实纠错",
+  "format and schema constraints": "格式与结构约束",
+  "style alignment": "风格对齐",
+  "domain-specific answer adjustment": "领域化回答调整",
+  "Typical workflow in lawftrack": "在 lawftrack 里的典型使用流程",
+  "Usage flow": "使用流程",
+  "Generate an answer, inspect the tokenized output, and locate the key error token.":
+    "先生成回答，查看 token 级输出，再定位关键错误 token。",
+  "Replace the error token, continue generation, and save the corrected sample.":
+    "替换错误 token，继续生成后续内容，并保存修正后的样本。",
+  "Launch a training job after a batch of corrected samples is ready, so the model learns the local corrections instead of relearning every full response.":
+    "当你积累了一批修正样本后，就可以直接发起训练任务，让模型学习这些局部修正，而不是把整条回答重新学一遍。",
+  "One-sentence summary": "一句话总结",
+  "Instead of choosing between rewriting everything and imitating everything, lawftrack takes a third path: correct only the parts that must change, and preserve the rest of the model as much as possible.":
+    "传统方法往往是在“全部重写”和“全部模仿”之间做选择，而 lawftrack 选择的是第三条路径：只纠正真正必须改变的部分，并尽量保留模型其余能力。",
+  "Open LAwF repository": "打开 LAwF 仓库",
+  "How LAwF works": "LAwF 如何工作",
+  "LAwF blends supervised anchors with the reference model's distribution.":
+    "LAwF 把监督式 anchor 标注与参考模型分布结合成同一个训练目标。",
+  "Annotators mark the first wrong token, provide the correct replacement, and let generation continue from there.":
+    "标注时只需要定位第一个错误 token，填入正确替换项，再从该位置继续生成。",
+  "Non-anchor tokens keep the reference model's behavior, which helps preserve prior knowledge instead of overwriting everything.":
+    "非 anchor token 会尽量保持参考模型的行为，这样能保留已有知识，而不是把整段输出都重写掉。",
+  "Why this annotation style is needed": "为什么需要这种标注方式",
+  "Full-sequence supervision is expensive because every answer must be rewritten even when only a few tokens are wrong.":
+    "如果沿用整段监督标注，即使只错了少数 token，也要把整条回答重新改写，成本很高。",
+  "Anchor-only correction cuts labeling cost to the decisive edits that actually change the behavior.":
+    "只改 anchor 能把标注成本压缩到真正影响模型行为的关键编辑上。",
+  "Keeping the untouched tokens close to the reference model reduces catastrophic forgetting during fine-tuning.":
+    "让未改动 token 继续贴近参考模型，可以降低微调时的灾难性遗忘。",
+  "How to use it in lawftrack": "在 lawftrack 里怎么使用",
+  "Create or open a dataset and choose the base model used for generation and training.":
+    "创建或打开数据集，并选好用于生成和训练的基座模型。",
+  "Write the prompt, generate an assistant answer, and inspect the tokenized output in the data workspace.":
+    "写下 prompt，生成 assistant 回复，然后在数据工作区检查 token 化后的输出。",
+  "Click the first wrong assistant token, replace it, then continue generation until the sample becomes correct.":
+    "点击第一个错误的 assistant token，替换它，再继续生成，直到整条样本变正确。",
+  "Export the dataset or launch a LAwF training job so the model learns the anchor tokens without drifting too far from the base model.":
+    "导出数据集或直接发起 LAwF 训练任务，让模型学会这些 anchor，同时不过度偏离基座模型。",
+  "Next step": "下一步",
+  "Start your first anchor-labeled dataset or revisit training after you have a few corrected samples.":
+    "现在就开始你的第一份 anchor 标注数据集，或者在积累几条修正样本后回到训练页面。",
+  "Reopen the LAwF walkthrough and the annotation rationale at any time.":
+    "你可以随时重新打开这份 LAwF 入门说明和标注设计原因。",
 };
 
 interface I18nContextValue {

@@ -3,6 +3,7 @@ import LinkRoundedIcon from "@mui/icons-material/LinkRounded";
 import MemoryRoundedIcon from "@mui/icons-material/MemoryRounded";
 import TranslateRoundedIcon from "@mui/icons-material/TranslateRounded";
 import WifiTetheringRoundedIcon from "@mui/icons-material/WifiTetheringRounded";
+import AutoStoriesRoundedIcon from "@mui/icons-material/AutoStoriesRounded";
 import {
   Button,
   ButtonGroup,
@@ -26,6 +27,7 @@ interface MySectionProps {
   status: GatewayStatus | null;
   health: GatewayHealth | null;
   config: GatewayConfig | null;
+  onOpenGettingStarted: () => void;
 }
 
 function MySection({
@@ -34,6 +36,7 @@ function MySection({
   status,
   health,
   config,
+  onOpenGettingStarted,
 }: MySectionProps) {
   const { t } = useI18n();
   const healthOk = health?.status === "ok";
@@ -77,6 +80,29 @@ function MySection({
                   {t("English")}
                 </Button>
               </ButtonGroup>
+            </ListItem>
+            <Divider component="li" />
+            <ListItem sx={{ px: 3, py: 2.25 }}>
+              <ListItemIcon sx={{ minWidth: 42, pt: 0.25 }}>
+                <AutoStoriesRoundedIcon />
+              </ListItemIcon>
+              <ListItemText
+                primary={t("Getting started guide")}
+                secondary={t(
+                  "Reopen the LAwF walkthrough and the annotation rationale at any time.",
+                )}
+                slotProps={{
+                  primary: { fontWeight: 700 },
+                  secondary: { sx: { mt: 0.5 } },
+                }}
+              />
+              <Button
+                variant="outlined"
+                onClick={onOpenGettingStarted}
+                sx={{ ml: 2, flexShrink: 0 }}
+              >
+                {t("Open")}
+              </Button>
             </ListItem>
             <Divider component="li" />
             <ListItem sx={{ px: 3, py: 2.25 }}>

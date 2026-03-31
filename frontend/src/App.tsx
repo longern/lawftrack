@@ -35,6 +35,7 @@ import type {
 } from "./types/app";
 
 const LAST_OPENED_DATASET_STORAGE_KEY = "lawftrack:last-opened-dataset-id";
+const HowItWorksSection = lazy(() => import("./sections/HowItWorksSection"));
 const TrainingSection = lazy(() => import("./sections/TrainingSection"));
 
 async function fetchJson<T>(url: string): Promise<T> {
@@ -62,9 +63,17 @@ function App() {
   const [activeView, setActiveView] = useState<NavView>("overview");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [launchedFromWizard] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      new URLSearchParams(window.location.search).get("wizard") === "1",
+  );
   const [recentDatasetId, setRecentDatasetId] = useState<string | null>(null);
   const [pendingDatasetId, setPendingDatasetId] = useState<string | null>(null);
   const [pendingJobId, setPendingJobId] = useState<string | null>(null);
+  const [showGettingStartedEntry, setShowGettingStartedEntry] =
+    useState(launchedFromWizard);
+  const [showGettingStarted, setShowGettingStarted] = useState(false);
   const [datasets, setDatasets] = useState<DatasetRecord[]>([]);
   const [jobs, setJobs] = useState<FineTuningJob[]>([]);
   const [snapshot, setSnapshot] = useState<AppSnapshot>({
@@ -153,7 +162,9 @@ function App() {
   const gatewayStatus = snapshot.status?.status ?? "unknown";
   const activeNav =
     navItems.find((item) => item.id === activeView) ?? navItems[0];
-
+  const activeTitle = showGettingStarted
+    ? t("Getting started")
+    : activeNav.label;
   const recentDataset = useMemo(() => {
     if (recentDatasetId) {
       const matched = datasets.find(
@@ -189,10 +200,40 @@ function App() {
     setRecentDatasetId(dataset.id);
   }
 
+  function handleOpenGettingStarted() {
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("wizard");
+      window.history.replaceState({}, "", url.toString());
+    }
+    setShowGettingStartedEntry(false);
+    setActiveView("overview");
+    setShowGettingStarted(true);
+  }
+
+  function handleCloseGettingStarted() {
+    setShowGettingStarted(false);
+  }
+
+  function handleDismissGettingStartedEntry() {
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("wizard");
+      window.history.replaceState({}, "", url.toString());
+    }
+    setShowGettingStartedEntry(false);
+  }
+
+  function handleSelectView(view: NavView) {
+    setShowGettingStarted(false);
+    setActiveView(view);
+  }
+
   function handleOverviewNavigate(
     view: NavView,
     options?: { datasetId?: string; jobId?: string },
   ) {
+    setShowGettingStarted(false);
     setActiveView(view);
     setPendingDatasetId(options?.datasetId ?? null);
     setPendingJobId(options?.jobId ?? null);
@@ -234,7 +275,7 @@ function App() {
           >
             <Box sx={{ flex: 1, minWidth: 0 }}>
               <Typography variant="h6" fontWeight={700} noWrap>
-                {activeNav.label}
+                {activeTitle}
               </Typography>
             </Box>
             <Stack direction="row" spacing={1} alignItems="center">
@@ -314,7 +355,7 @@ function App() {
               <AppSidebar
                 activeView={activeView}
                 items={navItems}
-                onSelect={setActiveView}
+                onSelect={handleSelectView}
               />
             </Drawer>
           </Box>
@@ -406,21 +447,40 @@ function App() {
                 </Box>
               </Box>
             ) : (
-              <Container maxWidth="xl" sx={{ py: { xs: 2, md: 4 } }}>
+              <Container
+                maxWidth={
+                  activeView === "overview" && showGettingStarted ? "md" : "xl"
+                }
+                sx={{ py: { xs: 2, md: 4 } }}
+              >
                 <Box sx={{ display: "grid", gap: 2 }}>
                   {error ? (
                     <ErrorCard message={error} onClose={() => setError("")} />
                   ) : null}
                   {activeView === "overview" ? (
-                    <OverviewSection
-                      loading={loading}
-                      recentDataset={recentDataset}
-                      recentJob={recentJob}
-                      status={snapshot.status}
-                      health={snapshot.health}
-                      config={snapshot.config}
-                      onNavigate={handleOverviewNavigate}
-                    />
+                    showGettingStarted ? (
+                      <Suspense fallback={<LinearProgress />}>
+                        <HowItWorksSection
+                          onBack={handleCloseGettingStarted}
+                          onNavigate={handleOverviewNavigate}
+                        />
+                      </Suspense>
+                    ) : (
+                      <OverviewSection
+                        loading={loading}
+                        recentDataset={recentDataset}
+                        recentJob={recentJob}
+                        status={snapshot.status}
+                        health={snapshot.health}
+                        config={snapshot.config}
+                        onNavigate={handleOverviewNavigate}
+                        onDismissGettingStartedEntry={
+                          handleDismissGettingStartedEntry
+                        }
+                        onOpenGettingStarted={handleOpenGettingStarted}
+                        showGettingStartedEntry={showGettingStartedEntry}
+                      />
+                    )
                   ) : activeView === "me" ? (
                     <MySection
                       locale={locale}
@@ -428,6 +488,7 @@ function App() {
                       status={snapshot.status}
                       health={snapshot.health}
                       config={snapshot.config}
+                      onOpenGettingStarted={handleOpenGettingStarted}
                     />
                   ) : null}
                 </Box>
@@ -457,7 +518,7 @@ function App() {
             <BottomNavigation
               showLabels
               value={activeView}
-              onChange={(_, value: NavView) => setActiveView(value)}
+              onChange={(_, value: NavView) => handleSelectView(value)}
               sx={{
                 "& .MuiBottomNavigationAction-root": {
                   minWidth: 0,

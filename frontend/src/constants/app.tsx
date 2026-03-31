@@ -2,6 +2,7 @@ import DataObjectRoundedIcon from "@mui/icons-material/DataObjectRounded";
 import DashboardRoundedIcon from "@mui/icons-material/DashboardRounded";
 import ForumRoundedIcon from "@mui/icons-material/ForumRounded";
 import ModelTrainingRoundedIcon from "@mui/icons-material/ModelTrainingRounded";
+import PersonRoundedIcon from "@mui/icons-material/PersonRounded";
 import type { NavItem } from "../types/app";
 
 export const DRAWER_WIDTH = 280;
@@ -21,6 +22,11 @@ export function getNavItems(t: Translate): NavItem[] {
       id: "chat",
       label: t("Chat"),
       icon: <ForumRoundedIcon />,
+    },
+    {
+      id: "me",
+      label: t("Me"),
+      icon: <PersonRoundedIcon />,
     },
   ];
 }

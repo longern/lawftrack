@@ -17,6 +17,9 @@ interface AppSidebarProps {
 }
 
 function AppSidebar({ activeView, items, onSelect }: AppSidebarProps) {
+  const primaryItems = items.filter((item) => item.id !== "me");
+  const meItem = items.find((item) => item.id === "me");
+
   return (
     <Box sx={{ height: "100%", display: "flex", flexDirection: "column" }}>
       <Box
@@ -33,7 +36,7 @@ function AppSidebar({ activeView, items, onSelect }: AppSidebarProps) {
       </Box>
       <Divider />
       <List sx={{ px: 1.5, py: 2, flex: 1 }}>
-        {items.map((item) => (
+        {primaryItems.map((item) => (
           <ListItemButton
             key={item.id}
             selected={activeView === item.id}
@@ -48,6 +51,24 @@ function AppSidebar({ activeView, items, onSelect }: AppSidebarProps) {
           </ListItemButton>
         ))}
       </List>
+      {meItem ? (
+        <>
+          <Divider />
+          <List sx={{ px: 1.5, py: 2 }}>
+            <ListItemButton
+              selected={activeView === meItem.id}
+              onClick={() => onSelect(meItem.id)}
+              sx={{ minHeight: 52, borderRadius: 3 }}
+            >
+              <ListItemIcon sx={{ minWidth: 40 }}>{meItem.icon}</ListItemIcon>
+              <ListItemText
+                primary={meItem.label}
+                slotProps={{ primary: { fontWeight: 700 } }}
+              />
+            </ListItemButton>
+          </List>
+        </>
+      ) : null}
     </Box>
   );
 }

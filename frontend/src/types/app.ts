@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-export type NavView = "overview" | "data" | "training" | "chat";
+export type NavView = "overview" | "data" | "training" | "chat" | "me";
 
 export interface GpuStatus {
   index: number;

@@ -19,6 +19,7 @@ const ZH_MESSAGES: Record<string, string> = {
   Training: "训练",
   Service: "服务",
   Chat: "对话",
+  Me: "我的",
   Chinese: "中文",
   English: "英文",
   "Unknown error": "未知错误",
@@ -96,6 +97,22 @@ const ZH_MESSAGES: Record<string, string> = {
   "Current device": "当前设备",
   "Server device": "服务端设备",
   "Service snapshot": "服务快照",
+  "My settings": "我的设置",
+  "Manage your workspace preferences and keep an eye on the current gateway configuration.":
+    "在这里管理常用偏好，并随时查看当前网关配置。",
+  "Settings menu": "设置菜单",
+  "Use this page to adjust language and inspect the runtime configuration used by this workspace.":
+    "在这个页面里调整语言，并查看当前工作区正在使用的运行配置。",
+  "Language preference": "语言偏好",
+  "Choose the interface language for this browser.": "为当前浏览器选择界面语言。",
+  "Current service connectivity status.": "当前服务连通状态。",
+  "Endpoint address": "端点地址",
+  "Active upstream service address.": "当前启用的上游服务地址。",
+  "Authentication configuration for the upstream service.":
+    "上游服务的鉴权配置状态。",
+  "Host machine reported by the gateway.": "网关当前上报的主机名。",
+  "More settings will appear here as workspace preferences expand.":
+    "后续更多工作区偏好也会集中放在这里。",
   Datasets: "数据集",
   "New dataset": "新建数据集",
   "Creating...": "创建中...",

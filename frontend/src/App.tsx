@@ -1,16 +1,12 @@
-import { Suspense, lazy, useEffect, useMemo, useState } from "react";
 import {
   AppBar,
   BottomNavigation,
   BottomNavigationAction,
   Box,
-  Button,
-  ButtonGroup,
   Chip,
   Container,
   CssBaseline,
   Drawer,
-  IconButton,
   LinearProgress,
   Paper,
   Stack,
@@ -20,13 +16,15 @@ import {
 } from "@mui/material";
 import { alpha, ThemeProvider } from "@mui/material/styles";
 import useMediaQuery from "@mui/material/useMediaQuery";
-import AppSidebar from "./components/layout/AppSidebar";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import DataWorkspace from "./components/data/DataWorkspace";
+import AppSidebar from "./components/layout/AppSidebar";
 import ErrorCard from "./components/shared/ErrorCard";
 import { DRAWER_WIDTH, getNavItems } from "./constants/app";
 import { useI18n } from "./i18n";
-import OverviewSection from "./sections/OverviewSection";
 import ChatSection from "./sections/ChatSection";
+import MySection from "./sections/MySection";
+import OverviewSection from "./sections/OverviewSection";
 import { createAppTheme } from "./theme/appTheme";
 import type {
   ApiListResponse,
@@ -240,24 +238,6 @@ function App() {
               </Typography>
             </Box>
             <Stack direction="row" spacing={1} alignItems="center">
-              <ButtonGroup
-                size="small"
-                variant="outlined"
-                sx={{ display: { xs: "none", sm: "inline-flex" } }}
-              >
-                <Button
-                  onClick={() => setLocale("zh-CN")}
-                  variant={locale === "zh-CN" ? "contained" : "outlined"}
-                >
-                  {t("Chinese")}
-                </Button>
-                <Button
-                  onClick={() => setLocale("en-US")}
-                  variant={locale === "en-US" ? "contained" : "outlined"}
-                >
-                  {t("English")}
-                </Button>
-              </ButtonGroup>
               <Tooltip
                 arrow
                 placement="bottom-end"
@@ -345,12 +325,7 @@ function App() {
               flex: 1,
               width: { md: `calc(100% - ${DRAWER_WIDTH}px)` },
               pb: {
-                xs:
-                  activeView === "data"
-                    ? 0
-                    : activeView === "chat"
-                      ? 0
-                      : 10,
+                xs: activeView === "data" ? 0 : activeView === "chat" ? 0 : 10,
                 md: 0,
               },
               overflow: activeView === "data" ? "hidden" : "visible",
@@ -446,6 +421,14 @@ function App() {
                       config={snapshot.config}
                       onNavigate={handleOverviewNavigate}
                     />
+                  ) : activeView === "me" ? (
+                    <MySection
+                      locale={locale}
+                      setLocale={setLocale}
+                      status={snapshot.status}
+                      health={snapshot.health}
+                      config={snapshot.config}
+                    />
                   ) : null}
                 </Box>
               </Container>
@@ -475,6 +458,13 @@ function App() {
               showLabels
               value={activeView}
               onChange={(_, value: NavView) => setActiveView(value)}
+              sx={{
+                "& .MuiBottomNavigationAction-root": {
+                  minWidth: 0,
+                  maxWidth: "none",
+                  flex: "1 1 0",
+                },
+              }}
             >
               {navItems.map((item) => (
                 <BottomNavigationAction

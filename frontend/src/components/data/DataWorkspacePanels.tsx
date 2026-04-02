@@ -474,8 +474,10 @@ export function DatasetMetadataForm({
   modelOptionsError,
   modelsLoading,
   onChangeDraft,
+  onExportDataset,
   onLoadModelOptions,
   onSaveDataset,
+  exportingDataset,
   saving,
 }: {
   dataset: DatasetRecord;
@@ -484,8 +486,10 @@ export function DatasetMetadataForm({
   modelOptionsError: string;
   modelsLoading: boolean;
   onChangeDraft: (draft: DatasetDraft | null) => void;
+  onExportDataset: () => void;
   onLoadModelOptions: () => void;
   onSaveDataset: () => void;
+  exportingDataset: boolean;
   saving: boolean;
 }) {
   const { t } = useI18n();
@@ -550,9 +554,18 @@ export function DatasetMetadataForm({
           />
         )}
       />
-      <Button variant="outlined" onClick={onSaveDataset} disabled={saving}>
-        {saving ? t("Saving...") : t("Save dataset config")}
-      </Button>
+      <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
+        <Button variant="outlined" onClick={onSaveDataset} disabled={saving}>
+          {saving ? t("Saving...") : t("Save dataset config")}
+        </Button>
+        <Button
+          variant="outlined"
+          onClick={onExportDataset}
+          disabled={exportingDataset}
+        >
+          {exportingDataset ? t("Exporting...") : t("Export dataset")}
+        </Button>
+      </Stack>
     </Stack>
   );
 }
@@ -564,8 +577,10 @@ export function DatasetMetadataSection(props: {
   modelOptionsError: string;
   modelsLoading: boolean;
   onChangeDraft: (draft: DatasetDraft | null) => void;
+  onExportDataset: () => void;
   onLoadModelOptions: () => void;
   onSaveDataset: () => void;
+  exportingDataset: boolean;
   saving: boolean;
 }) {
   const { t } = useI18n();

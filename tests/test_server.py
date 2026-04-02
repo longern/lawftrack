@@ -710,6 +710,243 @@ class ServerTests(unittest.TestCase):
             self.assertEqual(lawf_records[1]["completion"][0]["content"], "answer-2")
             self.assertEqual(lawf_records[1]["anchors"][0]["token_index"], 1)
 
+    def test_dataset_export_training_file_preserves_tools_and_tool_calls(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            client = self._create_client(temp_dir)
+            created_dataset = client.post(
+                "/api/datasets",
+                json={"name": "tool-export", "base_model": "Qwen/Qwen2.5-7B-Instruct"},
+            ).json()
+
+            create_response = client.post(
+                f"/api/datasets/{created_dataset['id']}/samples",
+                json={
+                    "title": "tool sample",
+                    "tools": [
+                        {
+                            "type": "function",
+                            "function": {
+                                "name": "search_docs",
+                                "description": "Search docs",
+                                "parameters": {
+                                    "type": "object",
+                                    "properties": {"query": {"type": "string"}},
+                                },
+                            },
+                        }
+                    ],
+                    "messages": [
+                        {"role": "user", "content": "Find the contract clause."},
+                        {
+                            "role": "assistant",
+                            "content": "I will search the docs.",
+                            "tool_calls": [
+                                {
+                                    "id": "call-search-1",
+                                    "type": "function",
+                                    "function": {
+                                        "name": "search_docs",
+                                        "arguments": "{\"query\":\"contract clause\"}",
+                                    },
+                                }
+                            ],
+                        },
+                        {
+                            "role": "tool",
+                            "content": "Found clause 9.",
+                            "tool_call_id": "call-search-1",
+                            "name": "search_docs",
+                        },
+                        {"role": "assistant", "content": "Clause 9 is the relevant section."},
+                    ],
+                },
+            )
+            self.assertEqual(create_response.status_code, 200)
+
+            sft_response = client.post(
+                f"/api/datasets/{created_dataset['id']}/training_file",
+                json={"method": {"type": "sft"}},
+            )
+            self.assertEqual(sft_response.status_code, 200)
+            sft_export = sft_response.json()
+            sft_content = client.get(
+                f"/v1/files/{sft_export['file']['id']}/content"
+            ).content.decode("utf-8")
+            sft_record = json.loads(sft_content.splitlines()[0])
+            self.assertEqual(sft_record["tools"][0]["function"]["name"], "search_docs")
+            self.assertEqual(
+                sft_record["messages"][1]["tool_calls"][0]["function"]["name"],
+                "search_docs",
+            )
+            self.assertEqual(sft_record["messages"][2]["tool_call_id"], "call-search-1")
+
+            lawf_response = client.post(
+                f"/api/datasets/{created_dataset['id']}/training_file",
+                json={"method": {"type": "lawf"}},
+            )
+            self.assertEqual(lawf_response.status_code, 200)
+            lawf_export = lawf_response.json()
+            lawf_content = client.get(
+                f"/v1/files/{lawf_export['file']['id']}/content"
+            ).content.decode("utf-8")
+            lawf_records = [
+                json.loads(line)
+                for line in lawf_content.splitlines()
+                if line.strip()
+            ]
+            self.assertEqual(lawf_records[0]["tools"][0]["function"]["name"], "search_docs")
+            self.assertEqual(
+                lawf_records[0]["completion"][0]["tool_calls"][0]["id"],
+                "call-search-1",
+            )
+
+    def test_dataset_import_and_export_round_trip_uses_same_json_format(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            client = self._create_client(temp_dir)
+
+            imported = client.post(
+                "/api/datasets/import",
+                files={
+                    "file": (
+                        "session.json",
+                        json.dumps(
+                            {
+                                "entries": [
+                                    {
+                                        "request": {
+                                            "tools": [
+                                                {
+                                                    "name": "Read",
+                                                    "description": "Read a file",
+                                                    "input_schema": {
+                                                        "type": "object",
+                                                        "properties": {
+                                                            "path": {"type": "string"}
+                                                        },
+                                                    },
+                                                }
+                                            ],
+                                            "messages": [
+                                                {
+                                                    "role": "user",
+                                                    "content": [
+                                                        {"type": "text", "text": "Inspect README"}
+                                                    ],
+                                                },
+                                                {
+                                                    "role": "assistant",
+                                                    "content": [
+                                                        {
+                                                            "type": "thinking",
+                                                            "thinking": "Need to inspect the file.",
+                                                        },
+                                                        {
+                                                            "type": "text",
+                                                            "text": "Let me check the README.",
+                                                        },
+                                                        {
+                                                            "type": "tool_use",
+                                                            "id": "toolu-read-1",
+                                                            "name": "Read",
+                                                            "input": {"path": "README.md"},
+                                                        },
+                                                    ],
+                                                },
+                                                {
+                                                    "role": "user",
+                                                    "content": [
+                                                        {
+                                                            "type": "tool_result",
+                                                            "tool_use_id": "toolu-read-1",
+                                                            "content": "README content",
+                                                        }
+                                                    ],
+                                                },
+                                            ],
+                                        },
+                                        "response": {
+                                            "choices": [
+                                                {
+                                                    "message": {
+                                                        "role": "assistant",
+                                                        "content": "README inspected.",
+                                                        "reasoning_content": "The file was loaded successfully.",
+                                                        "tool_calls": [
+                                                            {
+                                                                "id": "call-finish-1",
+                                                                "type": "function",
+                                                                "function": {
+                                                                    "name": "Write",
+                                                                    "arguments": "{\"path\":\"notes.txt\"}",
+                                                                },
+                                                            }
+                                                        ],
+                                                    }
+                                                }
+                                            ]
+                                        },
+                                    }
+                                ]
+                            },
+                            ensure_ascii=False,
+                        ).encode("utf-8"),
+                        "application/json",
+                    )
+                },
+            )
+            self.assertEqual(imported.status_code, 200)
+            dataset = imported.json()
+
+            samples_response = client.get(f"/api/datasets/{dataset['id']}/samples")
+            self.assertEqual(samples_response.status_code, 200)
+            sample = samples_response.json()["data"][0]
+            self.assertEqual(sample["tools"][0]["function"]["name"], "Read")
+            self.assertEqual(sample["messages"][0]["role"], "user")
+            self.assertEqual(sample["messages"][1]["tool_calls"][0]["id"], "toolu-read-1")
+            self.assertEqual(sample["messages"][2]["role"], "tool")
+            self.assertEqual(sample["messages"][2]["tool_call_id"], "toolu-read-1")
+            self.assertEqual(sample["messages"][3]["tool_calls"][0]["id"], "call-finish-1")
+
+            export_response = client.post(f"/api/datasets/{dataset['id']}/export")
+            self.assertEqual(export_response.status_code, 200)
+            exported = export_response.json()
+            self.assertEqual(exported["object"], "dataset.export")
+            self.assertEqual(exported["sample_count"], 1)
+            self.assertTrue(exported["file"]["filename"].endswith(".json"))
+
+            export_content = client.get(
+                f"/v1/files/{exported['file']['id']}/content"
+            ).content.decode("utf-8")
+            exported_payload = json.loads(export_content)
+            self.assertEqual(exported_payload["name"], dataset["name"])
+            self.assertIn("samples", exported_payload)
+            self.assertEqual(exported_payload["samples"][0]["tools"][0]["function"]["name"], "Read")
+            self.assertEqual(
+                exported_payload["samples"][0]["messages"][1]["tool_calls"][0]["id"],
+                "toolu-read-1",
+            )
+
+            reimported = client.post(
+                "/api/datasets/import",
+                files={
+                    "file": (
+                        "roundtrip.json",
+                        export_content.encode("utf-8"),
+                        "application/json",
+                    )
+                },
+            )
+            self.assertEqual(reimported.status_code, 200)
+            reimported_dataset = reimported.json()
+            reimported_samples = client.get(
+                f"/api/datasets/{reimported_dataset['id']}/samples"
+            ).json()["data"]
+            self.assertEqual(reimported_samples[0]["tools"][0]["function"]["name"], "Read")
+            self.assertEqual(
+                reimported_samples[0]["messages"][1]["tool_calls"][0]["id"],
+                "toolu-read-1",
+            )
+
     def test_exported_dataset_file_can_be_used_for_fine_tuning_job(self) -> None:
         sys.path.insert(0, str(ROOT / "src"))
         try:

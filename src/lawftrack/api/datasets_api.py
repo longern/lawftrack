@@ -39,6 +39,9 @@ class DatasetMessagePayload(BaseModel):
     role: str
     content: str
     reasoning: str | None = None
+    tool_calls: list[dict[str, Any]] | None = None
+    tool_call_id: str | None = None
+    name: str | None = None
 
 
 class DatasetTokenEditPayload(BaseModel):
@@ -54,6 +57,7 @@ class DatasetTokenEditPayload(BaseModel):
 class UpdateDatasetSampleRequest(BaseModel):
     title: str | None = None
     messages: list[DatasetMessagePayload]
+    tools: list[dict[str, Any]] | None = None
     edits: list[DatasetTokenEditPayload] | None = None
     anchors: list[DatasetTokenEditPayload] | None = None
 
@@ -61,6 +65,7 @@ class UpdateDatasetSampleRequest(BaseModel):
 class CreateDatasetSampleRequest(BaseModel):
     title: str | None = None
     messages: list[DatasetMessagePayload] | None = None
+    tools: list[dict[str, Any]] | None = None
     anchors: list[DatasetTokenEditPayload] | None = None
 
 
@@ -90,6 +95,7 @@ class ListTokenCandidatesRequest(BaseModel):
 class RenderCompletionPromptRequest(BaseModel):
     model: str
     messages: list[DatasetMessagePayload]
+    tools: list[dict[str, Any]] | None = None
     assistant_prefill: str = ""
 
 
@@ -125,6 +131,9 @@ def build_sample_message(
     role: str,
     content: str,
     reasoning: str | None = None,
+    tool_calls: list[dict[str, Any]] | None = None,
+    tool_call_id: str | None = None,
+    name: str | None = None,
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "role": role,
@@ -132,6 +141,12 @@ def build_sample_message(
     }
     if reasoning:
         payload["reasoning"] = reasoning
+    if tool_calls:
+        payload["tool_calls"] = tool_calls
+    if tool_call_id:
+        payload["tool_call_id"] = tool_call_id
+    if name:
+        payload["name"] = name
     return payload
 
 
@@ -141,7 +156,7 @@ def render_assistant_prefill(*, reasoning: str | None = None, content: str = "")
     return content
 
 
-def render_prompt_message(message: dict[str, Any]) -> dict[str, str]:
+def render_prompt_message(message: dict[str, Any]) -> dict[str, Any]:
     role = str(message.get("role") or "")
     if role == "assistant":
         content = render_assistant_prefill(
@@ -150,10 +165,20 @@ def render_prompt_message(message: dict[str, Any]) -> dict[str, str]:
         )
     else:
         content = str(message.get("content") or "")
-    return {
+    payload: dict[str, Any] = {
         "role": role,
         "content": content,
     }
+    tool_calls = message.get("tool_calls")
+    if isinstance(tool_calls, list) and tool_calls:
+        payload["tool_calls"] = tool_calls
+    tool_call_id = message.get("tool_call_id")
+    if tool_call_id is not None:
+        payload["tool_call_id"] = str(tool_call_id or "")
+    name = message.get("name")
+    if name is not None:
+        payload["name"] = str(name or "")
+    return payload
 
 
 def build_completion_prompt(
@@ -161,6 +186,7 @@ def build_completion_prompt(
     model: str,
     prompt_messages: list[dict[str, Any]],
     assistant_prefill: str,
+    tools: list[dict[str, Any]] | None = None,
     config_dir: Path | None = None,
 ) -> str:
     if prompt_messages:
@@ -169,10 +195,15 @@ def build_completion_prompt(
             raise TokenizerDependencyError(
                 f"Model tokenizer for `{model}` does not expose a chat template."
             )
+        template_kwargs: dict[str, Any] = {
+            "add_generation_prompt": True,
+            "tokenize": False,
+        }
+        if tools:
+            template_kwargs["tools"] = tools
         prompt = tokenizer.apply_chat_template(
             [render_prompt_message(message) for message in prompt_messages],
-            add_generation_prompt=True,
-            tokenize=False,
+            **template_kwargs,
         )
     else:
         prompt = ""
@@ -298,6 +329,7 @@ def prepare_sample_continuation(
             model=payload.model,
             prompt_messages=messages[: payload.message_index],
             assistant_prefill=assistant_prefill,
+            tools=sample.get("tools"),
             config_dir=config_dir,
         )
     except TokenizerDependencyError as exc:
@@ -605,6 +637,24 @@ def build_router(config_dir: Path | None = None) -> APIRouter:
             "file": created_file,
         }
 
+    @router.post("/{dataset_id}/export")
+    def export_dataset_file(dataset_id: str) -> dict[str, Any]:
+        try:
+            created_file, sample_count = store.export_dataset_file(dataset_id)
+        except FileNotFoundError as exc:
+            raise HTTPException(
+                status_code=404, detail=f"Dataset not found: {dataset_id}"
+            ) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+        return {
+            "object": "dataset.export",
+            "dataset_id": dataset_id,
+            "sample_count": sample_count,
+            "file": created_file,
+        }
+
     @router.post("/{dataset_id}/samples")
     def create_dataset_sample(
         dataset_id: str,
@@ -663,6 +713,7 @@ def build_router(config_dir: Path | None = None) -> APIRouter:
                     serialize_model(message) for message in payload.messages
                 ],
                 assistant_prefill=payload.assistant_prefill,
+                tools=payload.tools,
                 config_dir=config_dir,
             )
         except TokenizerDependencyError as exc:
@@ -780,6 +831,7 @@ def build_router(config_dir: Path | None = None) -> APIRouter:
                     target=target,
                     prefix=prefix,
                 ),
+                tools=sample.get("tools"),
                 config_dir=config_dir,
             )
         except TokenizerDependencyError as exc:

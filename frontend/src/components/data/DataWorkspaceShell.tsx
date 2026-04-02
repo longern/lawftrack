@@ -66,6 +66,7 @@ export interface WorkspaceShellProps {
   onCloseDataset: (datasetId: string) => void;
   onCreateDataset: () => void;
   onDeleteDataset: (dataset: DatasetRecord) => void;
+  onExportDataset: () => void;
   onImportDataset: (event: ChangeEvent<HTMLInputElement>) => void;
   onOpenDataset: (dataset: DatasetRecord) => void;
   onOpenNextDataset: () => void;
@@ -89,6 +90,7 @@ export interface WorkspaceShellProps {
   generating: boolean;
   generatingAssistant: boolean;
   saving: boolean;
+  exportingDataset: boolean;
   savingSample: boolean;
   tokenCandidates: TokenCandidate[];
   candidatesLoading: boolean;
@@ -140,6 +142,7 @@ export function WorkspaceShell({
   onCloseDataset,
   onCreateDataset,
   onDeleteDataset,
+  onExportDataset,
   onImportDataset,
   onOpenDataset,
   onOpenNextDataset,
@@ -165,6 +168,7 @@ export function WorkspaceShell({
   generating,
   generatingAssistant,
   saving,
+  exportingDataset,
   savingSample,
   onCreateSample,
   onDeleteSample,
@@ -216,8 +220,10 @@ export function WorkspaceShell({
         modelOptionsError={modelOptionsError}
         modelsLoading={modelsLoading}
         onChangeDraft={onChangeDraft}
+        onExportDataset={onExportDataset}
         onLoadModelOptions={onLoadModelOptions}
         onSaveDataset={onSaveDataset}
+        exportingDataset={exportingDataset}
         saving={saving}
       />
     ) : null;
@@ -305,8 +311,9 @@ export function WorkspaceShell({
               isMobile={isMobile}
               loading={loading}
               onCreateDataset={onCreateDataset}
-              onDeleteDataset={onDeleteDataset}
-              onImportDataset={onImportDataset}
+        onDeleteDataset={onDeleteDataset}
+        onExportDataset={onExportDataset}
+        onImportDataset={onImportDataset}
               onOpenDataset={onOpenDataset}
               recentDatasets={recentDatasets}
             />
@@ -517,8 +524,10 @@ export function WorkspaceShell({
                   modelOptionsError={modelOptionsError}
                   modelsLoading={modelsLoading}
                   onChangeDraft={onChangeDraft}
+                  onExportDataset={onExportDataset}
                   onLoadModelOptions={onLoadModelOptions}
                   onSaveDataset={onSaveDataset}
+                  exportingDataset={exportingDataset}
                   saving={saving}
                 />
               </Paper>

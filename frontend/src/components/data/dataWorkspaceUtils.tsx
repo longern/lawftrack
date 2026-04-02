@@ -106,6 +106,23 @@ function pushYamlStringField(
   lines.push(`${indent(level)}${key}: ${formatYamlScalar(value)}`);
 }
 
+function pushYamlJsonField(
+  lines: string[],
+  level: number,
+  key: string,
+  value: unknown,
+) {
+  const serialized = JSON.stringify(value, null, 2);
+  if (!serialized) {
+    lines.push(`${indent(level)}${key}: null`);
+    return;
+  }
+  lines.push(`${indent(level)}${key}: |-`);
+  for (const line of serialized.split("\n")) {
+    lines.push(`${indent(level + 1)}${line}`);
+  }
+}
+
 export function serializeSampleAsYaml(sample: DatasetSample): string {
   const lines: string[] = [];
   const anchors = sample.anchors ?? sample.edits;
@@ -118,7 +135,23 @@ export function serializeSampleAsYaml(sample: DatasetSample): string {
     if (message.reasoning) {
       pushYamlStringField(lines, 2, "reasoning", message.reasoning);
     }
+    if (message.name) {
+      pushYamlStringField(lines, 2, "name", message.name);
+    }
+    if (message.tool_call_id) {
+      pushYamlStringField(lines, 2, "tool_call_id", message.tool_call_id);
+    }
+    if (message.tool_calls && message.tool_calls.length > 0) {
+      pushYamlJsonField(lines, 2, "tool_calls", message.tool_calls);
+    }
     pushYamlStringField(lines, 2, "content", message.content);
+  }
+
+  lines.push("tools:");
+  if (!sample.tools || sample.tools.length === 0) {
+    lines.push(`${indent(1)}[]`);
+  } else {
+    pushYamlJsonField(lines, 1, "items", sample.tools);
   }
 
   lines.push("anchors:");

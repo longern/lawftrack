@@ -55,10 +55,31 @@ export interface DatasetRecord {
   sample_count?: number;
 }
 
+export interface DatasetToolFunction {
+  name?: string;
+  description?: string;
+  parameters?: Record<string, unknown>;
+  arguments?: string;
+}
+
+export interface DatasetToolDefinition {
+  type?: string;
+  function?: DatasetToolFunction;
+}
+
+export interface DatasetToolCall {
+  id?: string;
+  type?: string;
+  function?: DatasetToolFunction;
+}
+
 export interface DatasetMessage {
   role: string;
   content: string;
   reasoning?: string | null;
+  tool_calls?: DatasetToolCall[] | null;
+  tool_call_id?: string | null;
+  name?: string | null;
 }
 
 export interface DatasetTokenEdit {
@@ -103,6 +124,7 @@ export interface DatasetSample {
   created_at: number;
   updated_at: number;
   messages: DatasetMessage[];
+  tools?: DatasetToolDefinition[];
   edits: DatasetTokenEdit[];
   anchors?: DatasetTokenEdit[];
 }
@@ -136,6 +158,13 @@ export interface DatasetTrainingFileExport {
   dataset_id: string;
   method: string;
   record_count: number;
+  file: UploadedFile;
+}
+
+export interface DatasetFileExport {
+  object: "dataset.export";
+  dataset_id: string;
+  sample_count: number;
   file: UploadedFile;
 }
 

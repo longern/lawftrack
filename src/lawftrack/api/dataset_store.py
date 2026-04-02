@@ -152,6 +152,7 @@ class DatasetStore:
             "created_at": now,
             "updated_at": now,
             "messages": messages,
+            "tools": self._normalize_tools(payload.get("tools")),
             "edits": annotations,
             "anchors": annotations,
         }
@@ -177,6 +178,11 @@ class DatasetStore:
                 **sample,
                 "title": payload.get("title") or sample.get("title") or f"样本 {index + 1}",
                 "messages": self._normalize_messages(payload.get("messages")),
+                "tools": (
+                    self._normalize_tools(payload.get("tools"))
+                    if "tools" in payload
+                    else self._normalize_tools(sample.get("tools"))
+                ),
                 "edits": annotations,
                 "anchors": annotations,
                 "updated_at": int(time.time()),
@@ -242,6 +248,26 @@ class DatasetStore:
             content_type="application/jsonl",
         )
         return created_file, len(records)
+
+    def export_dataset_file(self, dataset_id: str) -> tuple[dict[str, Any], int]:
+        dataset = self._load_dataset(dataset_id)
+        samples = self._load_or_bootstrap_samples(dataset)
+        payload = {
+            "name": dataset.get("name"),
+            "base_model": dataset.get("base_model"),
+            "samples": [self._serialize_dataset_sample(sample) for sample in samples],
+        }
+        created_file = self.file_store.create_file(
+            filename=self._build_export_filename(
+                dataset,
+                method_type="dataset",
+                file_extension=".json",
+            ),
+            purpose="dataset",
+            content=(json.dumps(payload, ensure_ascii=False, indent=2) + "\n").encode("utf-8"),
+            content_type="application/json",
+        )
+        return created_file, len(samples)
 
     def _load_dataset(self, dataset_id: str) -> dict[str, Any]:
         dataset_path = self.datasets_dir / dataset_id / "dataset.yaml"
@@ -355,10 +381,7 @@ class DatasetStore:
 
         if suffix == ".json":
             parsed = json.loads(text)
-            if isinstance(parsed, list):
-                iterable = parsed
-            else:
-                iterable = [parsed]
+            iterable = self._normalize_training_iterable(parsed)
         else:
             iterable = [
                 json.loads(line)
@@ -380,6 +403,7 @@ class DatasetStore:
                     "created_at": now,
                     "updated_at": now,
                     "messages": messages,
+                    "tools": self._normalize_tools(item.get("tools")),
                     "edits": annotations,
                     "anchors": annotations,
                 }
@@ -408,7 +432,11 @@ class DatasetStore:
         messages = self._normalize_messages(sample.get("messages"))
         if not messages:
             return []
-        return [{"messages": messages}]
+        record: dict[str, Any] = {"messages": messages}
+        tools = self._normalize_tools(sample.get("tools"))
+        if tools:
+            record["tools"] = tools
+        return [record]
 
     def _build_lawf_training_records_for_sample(
         self,
@@ -425,6 +453,7 @@ class DatasetStore:
             if message.get("role") == "assistant" and str(message.get("content") or "").strip()
         ]
         records: list[dict[str, Any]] = []
+        tools = self._normalize_tools(sample.get("tools"))
         for assistant_index in assistant_indices:
             prompt_messages = messages[:assistant_index]
             completion_messages = [messages[assistant_index]]
@@ -442,6 +471,7 @@ class DatasetStore:
                     "prompt": prompt_messages,
                     "completion": completion_messages,
                     "anchors": anchors,
+                    **({"tools": tools} if tools else {}),
                 }
             )
         return records
@@ -451,13 +481,14 @@ class DatasetStore:
         dataset: dict[str, Any],
         *,
         method_type: str,
+        file_extension: str = ".jsonl",
     ) -> str:
         raw_name = str(dataset.get("name") or dataset.get("id") or "dataset")
         slug = "".join(
             character if character.isalnum() or character in {"-", "_", "."} else "-"
             for character in raw_name
         ).strip("-.")
-        return f"{slug or 'dataset'}-{method_type}.jsonl"
+        return f"{slug or 'dataset'}-{method_type}{file_extension}"
 
     def _serialize_training_records(self, records: list[dict[str, Any]]) -> bytes:
         if not records:
@@ -465,6 +496,20 @@ class DatasetStore:
         return (
             "\n".join(json.dumps(record, ensure_ascii=False) for record in records) + "\n"
         ).encode("utf-8")
+
+    def _serialize_dataset_sample(self, sample: dict[str, Any]) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "id": str(sample.get("id") or ""),
+            "title": str(sample.get("title") or ""),
+            "created_at": int(sample.get("created_at", time.time())),
+            "updated_at": int(sample.get("updated_at", time.time())),
+            "messages": self._normalize_messages(sample.get("messages")),
+            "anchors": self._normalize_annotations(sample),
+        }
+        tools = self._normalize_tools(sample.get("tools"))
+        if tools:
+            payload["tools"] = tools
+        return payload
 
     def _derive_sample_title(
         self,
@@ -493,13 +538,113 @@ class DatasetStore:
                 if reasoning_value is None
                 else str(reasoning_value)
             )
+            tool_call_id = (
+                None
+                if item.get("tool_call_id") is None
+                else str(item.get("tool_call_id") or "")
+            )
+            name = None if item.get("name") is None else str(item.get("name") or "")
+            tool_calls = self._normalize_tool_calls(item.get("tool_calls"))
             if not role:
                 continue
             message: dict[str, Any] = {"role": role, "content": content}
             if reasoning:
                 message["reasoning"] = reasoning
+            if tool_call_id:
+                message["tool_call_id"] = tool_call_id
+            if name:
+                message["name"] = name
+            if tool_calls:
+                message["tool_calls"] = tool_calls
             messages.append(message)
         return messages
+
+    def _normalize_tools(self, payload: Any) -> list[dict[str, Any]]:
+        tools: list[dict[str, Any]] = []
+        if not isinstance(payload, list):
+            return tools
+        for item in payload:
+            if not isinstance(item, dict):
+                continue
+            normalized = self._normalize_tool_definition(item)
+            if normalized:
+                tools.append(normalized)
+        return tools
+
+    def _normalize_tool_definition(self, payload: dict[str, Any]) -> dict[str, Any] | None:
+        tool_type = str(payload.get("type") or "function").strip() or "function"
+        function_payload = payload.get("function")
+        if isinstance(function_payload, dict):
+            name = str(function_payload.get("name") or "").strip()
+            if not name:
+                return None
+            normalized_function: dict[str, Any] = {"name": name}
+            if function_payload.get("description") is not None:
+                normalized_function["description"] = str(function_payload.get("description") or "")
+            parameters = function_payload.get("parameters")
+            if isinstance(parameters, dict):
+                normalized_function["parameters"] = parameters
+            return {
+                "type": tool_type,
+                "function": normalized_function,
+            }
+
+        name = str(payload.get("name") or "").strip()
+        if not name:
+            return None
+        normalized_function = {"name": name}
+        if payload.get("description") is not None:
+            normalized_function["description"] = str(payload.get("description") or "")
+        parameters = payload.get("parameters")
+        if not isinstance(parameters, dict):
+            parameters = payload.get("input_schema")
+        if isinstance(parameters, dict):
+            normalized_function["parameters"] = parameters
+        return {
+            "type": tool_type,
+            "function": normalized_function,
+        }
+
+    def _normalize_tool_calls(self, payload: Any) -> list[dict[str, Any]]:
+        tool_calls: list[dict[str, Any]] = []
+        if not isinstance(payload, list):
+            return tool_calls
+        for item in payload:
+            if not isinstance(item, dict):
+                continue
+            normalized = self._normalize_tool_call(item)
+            if normalized:
+                tool_calls.append(normalized)
+        return tool_calls
+
+    def _normalize_tool_call(self, payload: dict[str, Any]) -> dict[str, Any] | None:
+        function_payload = payload.get("function")
+        name = ""
+        arguments = ""
+        if isinstance(function_payload, dict):
+            name = str(function_payload.get("name") or "").strip()
+            arguments = str(function_payload.get("arguments") or "")
+        else:
+            name = str(payload.get("name") or "").strip()
+            input_payload = payload.get("input")
+            if isinstance(input_payload, dict):
+                arguments = json.dumps(input_payload, ensure_ascii=False)
+            elif input_payload is not None:
+                arguments = str(input_payload)
+            else:
+                arguments = str(payload.get("arguments") or "")
+        if not name:
+            return None
+        normalized_call: dict[str, Any] = {
+            "type": str(payload.get("type") or "function").strip() or "function",
+            "function": {
+                "name": name,
+                "arguments": arguments,
+            },
+        }
+        if payload.get("id") is not None:
+            normalized_call["id"] = str(payload.get("id") or "")
+        return normalized_call
 
     def _normalize_edits(self, payload: Any) -> list[dict[str, Any]]:
         edits: list[dict[str, Any]] = []
@@ -564,6 +709,137 @@ class DatasetStore:
         )
         return prompt_messages + completion_messages
 
+    def _normalize_training_iterable(self, payload: Any) -> list[dict[str, Any]]:
+        if isinstance(payload, list):
+            return [item for item in payload if isinstance(item, dict)]
+        if not isinstance(payload, dict):
+            return []
+        samples = payload.get("samples")
+        if isinstance(samples, list):
+            return [item for item in samples if isinstance(item, dict)]
+        entries = payload.get("entries")
+        if isinstance(entries, list):
+            return [
+                self._build_record_from_session_entry(item)
+                for item in entries
+                if isinstance(item, dict)
+            ]
+        return [payload]
+
+    def _build_record_from_session_entry(self, payload: dict[str, Any]) -> dict[str, Any]:
+        request_payload = payload.get("request")
+        response_payload = payload.get("response")
+        if not isinstance(request_payload, dict):
+            return payload
+
+        messages = self._build_messages_from_session_request(request_payload)
+        assistant_message = self._build_message_from_session_response(response_payload)
+        if assistant_message is not None:
+            messages.append(assistant_message)
+        return {
+            "messages": messages,
+            "tools": self._normalize_tools(request_payload.get("tools")),
+        }
+
+    def _build_messages_from_session_request(
+        self,
+        payload: dict[str, Any],
+    ) -> list[dict[str, Any]]:
+        messages: list[dict[str, Any]] = []
+        for raw_message in payload.get("messages") or []:
+            if not isinstance(raw_message, dict):
+                continue
+            role = str(raw_message.get("role") or "").strip()
+            if not role:
+                continue
+            content = raw_message.get("content")
+            if not isinstance(content, list):
+                normalized = self._normalize_messages([raw_message])
+                messages.extend(normalized)
+                continue
+
+            text_parts: list[str] = []
+            reasoning_parts: list[str] = []
+            tool_calls: list[dict[str, Any]] = []
+            tool_messages: list[dict[str, Any]] = []
+            for part in content:
+                if not isinstance(part, dict):
+                    continue
+                part_type = str(part.get("type") or "").strip()
+                if part_type == "text":
+                    text = str(part.get("text") or "")
+                    if text:
+                        text_parts.append(text)
+                    continue
+                if part_type == "thinking":
+                    thinking = str(part.get("thinking") or "")
+                    if thinking:
+                        reasoning_parts.append(thinking)
+                    continue
+                if part_type == "tool_use":
+                    normalized_call = self._normalize_tool_call(part)
+                    if normalized_call:
+                        tool_calls.append(normalized_call)
+                    continue
+                if part_type == "tool_result":
+                    tool_messages.append(
+                        {
+                            "role": "tool",
+                            "content": str(part.get("content") or ""),
+                            "tool_call_id": str(part.get("tool_use_id") or ""),
+                            **(
+                                {"name": str(part.get("name") or "")}
+                                if part.get("name") is not None
+                                else {}
+                            ),
+                        }
+                    )
+
+            if role != "user" or text_parts:
+                normalized_message: dict[str, Any] = {
+                    "role": role,
+                    "content": "\n".join(text_parts),
+                }
+                if reasoning_parts:
+                    normalized_message["reasoning"] = "\n".join(reasoning_parts)
+                if tool_calls:
+                    normalized_message["tool_calls"] = tool_calls
+                if normalized_message["content"] or reasoning_parts or tool_calls:
+                    messages.append(normalized_message)
+            messages.extend(tool_messages)
+        return messages
+
+    def _build_message_from_session_response(
+        self,
+        payload: Any,
+    ) -> dict[str, Any] | None:
+        if not isinstance(payload, dict):
+            return None
+        choices = payload.get("choices")
+        if not isinstance(choices, list) or not choices:
+            return None
+        first_choice = choices[0]
+        if not isinstance(first_choice, dict):
+            return None
+        message_payload = first_choice.get("message")
+        if not isinstance(message_payload, dict):
+            return None
+
+        normalized_messages = self._normalize_messages(
+            [
+                {
+                    "role": message_payload.get("role"),
+                    "content": message_payload.get("content") or "",
+                    "reasoning": message_payload.get("reasoning"),
+                    "reasoning_content": message_payload.get("reasoning_content"),
+                    "tool_calls": message_payload.get("tool_calls"),
+                    "tool_call_id": message_payload.get("tool_call_id"),
+                    "name": message_payload.get("name"),
+                }
+            ]
+        )
+        return normalized_messages[0] if normalized_messages else None
+
     def _normalize_sample(self, payload: Any, index: int) -> dict[str, Any]:
         if not isinstance(payload, dict):
             raise ValueError("Dataset sample payload must be a mapping.")
@@ -578,6 +854,7 @@ class DatasetStore:
             "created_at": int(payload.get("created_at", time.time())),
             "updated_at": int(payload.get("updated_at", time.time())),
             "messages": messages,
+            "tools": self._normalize_tools(payload.get("tools")),
             "edits": annotations,
             "anchors": annotations,
         }

@@ -10,6 +10,7 @@ import {
 } from "@mui/material";
 import type {
   ApiListResponse,
+  DatasetFileExport,
   DatasetMessage,
   DatasetRecord,
   DatasetSample,
@@ -160,6 +161,7 @@ function DataWorkspace({
   const [samplesLoading, setSamplesLoading] = useState(false);
   const [creating, setCreating] = useState(false);
   const [savingSample, setSavingSample] = useState(false);
+  const [exportingDataset, setExportingDataset] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [generatingAssistant, setGeneratingAssistant] = useState(false);
   const [mobileExplorerOpen, setMobileExplorerOpen] = useState(false);
@@ -356,11 +358,28 @@ function DataWorkspace({
 
   function buildSampleSignature(sample: DatasetSample) {
     return JSON.stringify(
-      sample.messages.map((message) => ({
-        role: message.role,
-        content: message.content,
-      })),
+      {
+        messages: sample.messages.map((message) => ({
+          role: message.role,
+          content: message.content,
+          reasoning: message.reasoning ?? null,
+          tool_call_id: message.tool_call_id ?? null,
+          name: message.name ?? null,
+          tool_calls: message.tool_calls ?? [],
+        })),
+        tools: sample.tools ?? [],
+      },
     );
+  }
+
+  function downloadBlob(content: BlobPart, filename: string, type: string) {
+    const blob = new Blob([content], { type });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = filename;
+    anchor.click();
+    URL.revokeObjectURL(url);
   }
 
   async function refreshWorkspace() {
@@ -540,6 +559,40 @@ function DataWorkspace({
       );
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleExportDataset() {
+    if (!activeDataset) {
+      return;
+    }
+    setExportingDataset(true);
+    try {
+      const exported = await fetchJson<DatasetFileExport>(
+        `/api/datasets/${activeDataset.id}/export`,
+        {
+          method: "POST",
+        },
+      );
+      const response = await fetch(`/v1/files/${exported.file.id}/content`);
+      if (!response.ok) {
+        throw new Error(`Request failed: ${response.status}`);
+      }
+      const content = await response.text();
+      downloadBlob(
+        content,
+        exported.file.filename,
+        exported.file.content_type || "application/json",
+      );
+      setError("");
+    } catch (exportError) {
+      setError(
+        exportError instanceof Error
+          ? exportError.message
+          : t("Failed to export dataset"),
+      );
+    } finally {
+      setExportingDataset(false);
     }
   }
 
@@ -1316,6 +1369,7 @@ function DataWorkspace({
         body: JSON.stringify({
           model,
           messages: promptMessages,
+          tools: selectedSample.tools ?? [],
         }),
       });
       const response = await fetch("/v1/completions", {
@@ -1559,6 +1613,7 @@ function DataWorkspace({
         body: JSON.stringify({
           title: sample.title,
           messages: sample.messages,
+          tools: sample.tools ?? [],
           edits: sample.edits,
         }),
       },
@@ -1608,6 +1663,7 @@ function DataWorkspace({
         onCloseDataset={handleCloseDataset}
         onCreateDataset={() => void handleCreateDataset()}
         onDeleteDataset={(dataset) => setDatasetToDelete(dataset)}
+        onExportDataset={() => void handleExportDataset()}
         onImportDataset={handleImportDataset}
         onOpenDataset={openDataset}
         onOpenNextDataset={handleOpenNextDataset}
@@ -1633,6 +1689,7 @@ function DataWorkspace({
         generating={generating}
         generatingAssistant={generatingAssistant}
         saving={saving}
+        exportingDataset={exportingDataset}
         savingSample={savingSample}
         onCreateSample={() => void handleCreateSample()}
         onDeleteSample={(sample) => setSampleToDelete(sample)}

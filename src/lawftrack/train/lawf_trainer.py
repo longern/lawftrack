@@ -18,24 +18,40 @@ def _get_anchor_token_index(anchor: dict[str, Any]) -> int | None:
     return None
 
 
-def _normalize_message_list(payload: Any) -> list[dict[str, str]]:
+def _normalize_message_list(payload: Any) -> list[dict[str, Any]]:
     if not isinstance(payload, list):
         return []
 
-    messages: list[dict[str, str]] = []
+    messages: list[dict[str, Any]] = []
     for item in payload:
         if not isinstance(item, dict):
             continue
         role = str(item.get("role") or "").strip()
         if not role:
             continue
-        messages.append({"role": role, "content": str(item.get("content") or "")})
+        message: dict[str, Any] = {
+            "role": role,
+            "content": str(item.get("content") or ""),
+        }
+        reasoning = item.get("reasoning")
+        if reasoning is not None:
+            message["reasoning"] = str(reasoning or "")
+        tool_calls = item.get("tool_calls")
+        if isinstance(tool_calls, list) and tool_calls:
+            message["tool_calls"] = tool_calls
+        tool_call_id = item.get("tool_call_id")
+        if tool_call_id is not None:
+            message["tool_call_id"] = str(tool_call_id or "")
+        name = item.get("name")
+        if name is not None:
+            message["name"] = str(name or "")
+        messages.append(message)
     return messages
 
 
 def _resolve_prompt_completion_row(
     row: dict[str, Any],
-) -> tuple[list[dict[str, str]] | str, list[dict[str, str]] | str, list[dict[str, Any]], Any]:
+) -> tuple[list[dict[str, Any]] | str, list[dict[str, Any]] | str, list[dict[str, Any]], Any]:
     tools = row.get("tools")
     prompt = row.get("prompt")
     completion = row.get("completion")

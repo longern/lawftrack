@@ -320,6 +320,7 @@ function MessageBubble({
                   <MenuItem value="system">system</MenuItem>
                   <MenuItem value="user">user</MenuItem>
                   <MenuItem value="assistant">assistant</MenuItem>
+                  <MenuItem value="tool">tool</MenuItem>
                 </Select>
               </FormControl>
             ) : (
@@ -449,6 +450,45 @@ function MessageBubble({
               message.content
             )}
           </Box>
+
+          {message.name || message.tool_call_id ? (
+            <Typography
+              variant="caption"
+              sx={{
+                color: (theme) =>
+                  isUser
+                    ? getWorkspaceColors(theme).userMutedText
+                    : getWorkspaceColors(theme).textSecondary,
+                fontFamily: '"IBM Plex Mono", "SFMono-Regular", monospace',
+              }}
+            >
+              {[message.name ? `name=${message.name}` : null, message.tool_call_id ? `tool_call_id=${message.tool_call_id}` : null]
+                .filter(Boolean)
+                .join(" ")}
+            </Typography>
+          ) : null}
+
+          {message.tool_calls && message.tool_calls.length > 0 ? (
+            <Box
+              component="pre"
+              sx={{
+                m: 0,
+                p: 1.25,
+                borderRadius: 2,
+                overflowX: "auto",
+                bgcolor: (theme) =>
+                  isUser
+                    ? alpha("#ffffff", 0.12)
+                    : getWorkspaceColors(theme).canvasBg,
+                color: "inherit",
+                fontSize: 12,
+                lineHeight: 1.5,
+                fontFamily: '"IBM Plex Mono", "SFMono-Regular", monospace',
+              }}
+            >
+              {JSON.stringify(message.tool_calls, null, 2)}
+            </Box>
+          ) : null}
         </Stack>
       </Paper>
     </Box>

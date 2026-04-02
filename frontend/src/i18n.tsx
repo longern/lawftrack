@@ -137,6 +137,8 @@ const ZH_MESSAGES: Record<string, string> = {
     "可从模型列表选择，也可直接输入本地模型目录路径。",
   "Saving...": "保存中...",
   "Save dataset config": "保存数据集配置",
+  "Export dataset": "导出数据集",
+  "Exporting...": "导出中...",
   "Dataset metadata": "数据集元数据",
   Welcome: "欢迎",
   Dataset: "数据集",
@@ -145,6 +147,7 @@ const ZH_MESSAGES: Record<string, string> = {
   "Failed to load samples": "加载样本失败",
   "Failed to create dataset": "创建数据集失败",
   "Failed to save dataset": "保存数据集失败",
+  "Failed to export dataset": "导出数据集失败",
   "Failed to import dataset": "导入数据集失败",
   "Failed to create sample": "创建样本失败",
   "Please configure a base model for the current dataset first.":
@@ -624,6 +627,8 @@ const JA_MESSAGES: Record<string, string> = {
     "モデル一覧から選ぶか、ローカルのモデルパスを直接入力します。",
   "Saving...": "保存中...",
   "Save dataset config": "データセット設定を保存",
+  "Export dataset": "データセットをエクスポート",
+  "Exporting...": "エクスポート中...",
   "Dataset metadata": "データセットメタデータ",
   Welcome: "ようこそ",
   Dataset: "データセット",
@@ -632,6 +637,7 @@ const JA_MESSAGES: Record<string, string> = {
   "Failed to load samples": "サンプルの読み込みに失敗しました",
   "Failed to create dataset": "データセットの作成に失敗しました",
   "Failed to save dataset": "データセットの保存に失敗しました",
+  "Failed to export dataset": "データセットのエクスポートに失敗しました",
   "Failed to import dataset": "データセットのインポートに失敗しました",
   "Failed to create sample": "サンプルの作成に失敗しました",
   "Please configure a base model for the current dataset first.":

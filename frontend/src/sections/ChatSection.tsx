@@ -1104,53 +1104,55 @@ function ChatSection({ isMobile }: ChatSectionProps) {
           boxShadow: "none",
         }}
       >
-        <Box
-          sx={{
-            px: { xs: 2, md: 3 },
-            py: 1.5,
-            borderBottom: "1px solid",
-            borderColor: "divider",
-            background:
-              theme.palette.mode === "dark"
-                ? "linear-gradient(180deg, rgba(8,16,29,0.96) 0%, rgba(10,18,34,0.98) 100%)"
-                : alpha("#f8fbff", 0.92),
-            backdropFilter: "blur(14px)",
-          }}
-        >
-          <Stack
-            direction="row"
-            spacing={1}
-            justifyContent={{ xs: "flex-start", md: "flex-end" }}
-            flexWrap={{ xs: "nowrap", md: "wrap" }}
-            useFlexGap
+        {isMobile ? (
+          <Box
             sx={{
-              overflowX: { xs: "auto", md: "visible" },
-              overflowY: "hidden",
-              scrollbarWidth: "none",
-              "&::-webkit-scrollbar": {
-                display: "none",
-              },
+              px: { xs: 2, md: 3 },
+              py: 1.5,
+              borderBottom: "1px solid",
+              borderColor: "divider",
+              background:
+                theme.palette.mode === "dark"
+                  ? "linear-gradient(180deg, rgba(8,16,29,0.96) 0%, rgba(10,18,34,0.98) 100%)"
+                  : alpha("#f8fbff", 0.92),
+              backdropFilter: "blur(14px)",
             }}
           >
-            {selectedModels.map((modelId) => (
-              <Chip
-                key={modelId}
-                label={formatModelChipLabel(modelId)}
-                size="small"
-                title={modelId}
-                sx={{
-                  maxWidth: { xs: 180, md: 240 },
-                  "& .MuiChip-label": {
-                    display: "block",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                  },
-                }}
-              />
-            ))}
-          </Stack>
-        </Box>
+            <Stack
+              direction="row"
+              spacing={1}
+              justifyContent={{ xs: "flex-start", md: "flex-end" }}
+              flexWrap={{ xs: "nowrap", md: "wrap" }}
+              useFlexGap
+              sx={{
+                overflowX: { xs: "auto", md: "visible" },
+                overflowY: "hidden",
+                scrollbarWidth: "none",
+                "&::-webkit-scrollbar": {
+                  display: "none",
+                },
+              }}
+            >
+              {selectedModels.map((modelId) => (
+                <Chip
+                  key={modelId}
+                  label={formatModelChipLabel(modelId)}
+                  size="small"
+                  title={modelId}
+                  sx={{
+                    maxWidth: { xs: 180, md: 240 },
+                    "& .MuiChip-label": {
+                      display: "block",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    },
+                  }}
+                />
+              ))}
+            </Stack>
+          </Box>
+        ) : null}
 
         {pageError ? (
           <Box sx={{ px: { xs: 2, md: 3 }, pt: 2, flexShrink: 0 }}>

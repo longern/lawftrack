@@ -23,13 +23,20 @@ export function buildTokenRenderSegments(
   text: string,
   tokens: DatasetMessageToken[],
 ) {
-  if (!tokens.length) {
+  const normalizedTokens = tokens.map((token) => ({
+    ...token,
+    text: token.text || token.token || "",
+  }));
+
+  if (!normalizedTokens.length) {
     return [{ kind: "text" as const, text }];
   }
 
-  const concatenatedTokens = tokens.map((token) => token.text || "").join("");
+  const concatenatedTokens = normalizedTokens
+    .map((token) => token.text || "")
+    .join("");
   if (concatenatedTokens === text) {
-    return tokens.map((token) => ({
+    return normalizedTokens.map((token) => ({
       kind: "token" as const,
       tokenIndex: token.token_index,
       text: token.text,
@@ -42,7 +49,7 @@ export function buildTokenRenderSegments(
   > = [];
   let cursor = 0;
 
-  for (const token of tokens) {
+  for (const token of normalizedTokens) {
     if (token.start > cursor) {
       segments.push({ kind: "text", text: text.slice(cursor, token.start) });
     }

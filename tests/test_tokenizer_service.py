@@ -39,6 +39,31 @@ class FakeTokenizer:
         return "".join(self._decoded[int(token_id)] for token_id in input_ids)
 
 
+class FakeFastTokenizerWithSpecialTokens:
+    def __call__(
+        self,
+        text,
+        add_special_tokens=False,
+        return_offsets_mapping=False,
+    ):
+        if text == "<|end_assistant|>":
+            payload = {"input_ids": [99]}
+            if return_offsets_mapping:
+                payload["offset_mapping"] = [(0, 17)]
+            return payload
+        raise AssertionError(text)
+
+    def decode(self, input_ids, clean_up_tokenization_spaces=False):
+        if list(input_ids) == [99]:
+            return ""
+        raise AssertionError(input_ids)
+
+    def convert_ids_to_tokens(self, token_id):
+        if token_id == 99:
+            return "<|end_assistant|>"
+        raise AssertionError(token_id)
+
+
 class TokenizerServiceTests(unittest.TestCase):
     def tearDown(self) -> None:
         tokenizer_service.load_tokenizer.cache_clear()
@@ -69,6 +94,21 @@ class TokenizerServiceTests(unittest.TestCase):
         self.assertEqual(prefix, " there!")
         self.assertEqual(original_token, "Hello")
         self.assertEqual(replacement_token, " there!")
+
+    def test_tokenize_text_falls_back_to_special_token_string_when_decode_is_empty(self) -> None:
+        with mock.patch.object(
+            tokenizer_service,
+            "load_tokenizer",
+            return_value=FakeFastTokenizerWithSpecialTokens(),
+        ):
+            tokens = tokenizer_service.tokenize_text(
+                model="demo-model",
+                text="<|end_assistant|>",
+            )
+
+        self.assertEqual(len(tokens), 1)
+        self.assertEqual(tokens[0]["text"], "<|end_assistant|>")
+        self.assertEqual(tokens[0]["token"], "<|end_assistant|>")
 
     def test_load_tokenizer_prefers_models_dir_nested_candidate(self) -> None:
         class FakeAutoTokenizer:

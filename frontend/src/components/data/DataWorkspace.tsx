@@ -1037,6 +1037,8 @@ function DataWorkspace({
               ? preparation.suggested_max_tokens
               : 8192,
           temperature: 0.7,
+          skip_special_tokens: false,
+          include_stop_str_in_output: true,
         }),
       });
       if (!response.ok || !response.body) {
@@ -1384,6 +1386,8 @@ function DataWorkspace({
               ? promptPayload.suggested_max_tokens
               : 8192,
           temperature: 0.7,
+          skip_special_tokens: false,
+          include_stop_str_in_output: true,
         }),
       });
       if (!response.ok || !response.body) {

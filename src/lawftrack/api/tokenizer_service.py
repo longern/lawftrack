@@ -70,10 +70,7 @@ def tokenize_text(
     tokens: list[dict[str, Any]] = []
     for token_index, (token_id, offset_pair) in enumerate(zip(input_ids, offsets)):
         start, end = int(offset_pair[0]), int(offset_pair[1])
-        rendered = tokenizer.decode(
-            [int(token_id)],
-            clean_up_tokenization_spaces=False,
-        )
+        rendered = _decode_token_text(tokenizer, [int(token_id)])
         if not rendered and end > start:
             rendered = text[start:end]
         tokens.append(
@@ -107,16 +104,13 @@ def build_continuation_prefix(
     if not replacement_ids:
         raise ValueError("Replacement must map to at least one tokenizer token.")
 
-    original_token = tokenizer.decode(
-        [int(input_ids[token_index])],
-        clean_up_tokenization_spaces=False,
-    )
-    replacement_token = tokenizer.decode(
+    original_token = _decode_token_text(tokenizer, [int(input_ids[token_index])])
+    replacement_token = _decode_token_text(
+        tokenizer,
         [int(token_id) for token_id in replacement_ids],
-        clean_up_tokenization_spaces=False,
     )
     prefix_ids = input_ids[:token_index] + replacement_ids
-    prefix = tokenizer.decode(prefix_ids, clean_up_tokenization_spaces=False)
+    prefix = _decode_token_text(tokenizer, prefix_ids)
     return prefix, original_token, replacement_token
 
 
@@ -134,7 +128,7 @@ def build_prefix_before_token(
         raise ValueError(f"Token index {token_index} is out of range.")
 
     prefix_ids = input_ids[:token_index]
-    return tokenizer.decode(prefix_ids, clean_up_tokenization_spaces=False)
+    return _decode_token_text(tokenizer, prefix_ids)
 
 
 def count_text_tokens(
@@ -146,6 +140,22 @@ def count_text_tokens(
     tokenizer = load_tokenizer(model, config_dir=config_dir)
     encoded = tokenizer(text, add_special_tokens=False)
     return len(list(encoded["input_ids"]))
+
+
+def _decode_token_text(tokenizer: Any, input_ids: list[int]) -> str:
+    if not input_ids:
+        return ""
+    rendered = tokenizer.decode(
+        input_ids,
+        clean_up_tokenization_spaces=False,
+    )
+    if rendered:
+        return str(rendered)
+
+    converted = tokenizer.convert_ids_to_tokens(input_ids[0] if len(input_ids) == 1 else input_ids)
+    if isinstance(converted, list):
+        return "".join(str(item) for item in converted)
+    return str(converted or "")
 
 
 def get_tokenizer_max_length(

@@ -710,7 +710,7 @@ class ServerTests(unittest.TestCase):
             self.assertEqual(lawf_records[1]["completion"][0]["content"], "answer-2")
             self.assertEqual(lawf_records[1]["anchors"][0]["token_index"], 1)
 
-    def test_dataset_export_training_file_preserves_tools_and_tool_calls(self) -> None:
+    def test_dataset_export_training_file_keeps_assistant_tool_calls_inside_content(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             client = self._create_client(temp_dir)
             created_dataset = client.post(
@@ -774,10 +774,8 @@ class ServerTests(unittest.TestCase):
             ).content.decode("utf-8")
             sft_record = json.loads(sft_content.splitlines()[0])
             self.assertEqual(sft_record["tools"][0]["function"]["name"], "search_docs")
-            self.assertEqual(
-                sft_record["messages"][1]["tool_calls"][0]["function"]["name"],
-                "search_docs",
-            )
+            self.assertIn("<tool_call>", sft_record["messages"][1]["content"])
+            self.assertIn("search_docs", sft_record["messages"][1]["content"])
             self.assertEqual(sft_record["messages"][2]["tool_call_id"], "call-search-1")
 
             lawf_response = client.post(
@@ -795,10 +793,8 @@ class ServerTests(unittest.TestCase):
                 if line.strip()
             ]
             self.assertEqual(lawf_records[0]["tools"][0]["function"]["name"], "search_docs")
-            self.assertEqual(
-                lawf_records[0]["completion"][0]["tool_calls"][0]["id"],
-                "call-search-1",
-            )
+            self.assertIn("<tool_call>", lawf_records[0]["completion"][0]["content"])
+            self.assertIn("call-search-1", lawf_records[0]["completion"][0]["content"])
 
     def test_dataset_import_and_export_round_trip_uses_same_json_format(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -902,10 +898,11 @@ class ServerTests(unittest.TestCase):
             sample = samples_response.json()["data"][0]
             self.assertEqual(sample["tools"][0]["function"]["name"], "Read")
             self.assertEqual(sample["messages"][0]["role"], "user")
-            self.assertEqual(sample["messages"][1]["tool_calls"][0]["id"], "toolu-read-1")
+            self.assertIn("<think>Need to inspect the file.</think>", sample["messages"][1]["content"])
+            self.assertIn("toolu-read-1", sample["messages"][1]["content"])
             self.assertEqual(sample["messages"][2]["role"], "tool")
             self.assertEqual(sample["messages"][2]["tool_call_id"], "toolu-read-1")
-            self.assertEqual(sample["messages"][3]["tool_calls"][0]["id"], "call-finish-1")
+            self.assertIn("call-finish-1", sample["messages"][3]["content"])
 
             export_response = client.post(f"/api/datasets/{dataset['id']}/export")
             self.assertEqual(export_response.status_code, 200)
@@ -921,9 +918,9 @@ class ServerTests(unittest.TestCase):
             self.assertEqual(exported_payload["name"], dataset["name"])
             self.assertIn("samples", exported_payload)
             self.assertEqual(exported_payload["samples"][0]["tools"][0]["function"]["name"], "Read")
-            self.assertEqual(
-                exported_payload["samples"][0]["messages"][1]["tool_calls"][0]["id"],
+            self.assertIn(
                 "toolu-read-1",
+                exported_payload["samples"][0]["messages"][1]["content"],
             )
 
             reimported = client.post(
@@ -942,10 +939,75 @@ class ServerTests(unittest.TestCase):
                 f"/api/datasets/{reimported_dataset['id']}/samples"
             ).json()["data"]
             self.assertEqual(reimported_samples[0]["tools"][0]["function"]["name"], "Read")
-            self.assertEqual(
-                reimported_samples[0]["messages"][1]["tool_calls"][0]["id"],
+            self.assertIn(
                 "toolu-read-1",
+                reimported_samples[0]["messages"][1]["content"],
             )
+
+    def test_dataset_export_roundtrip_does_not_double_template_assistant_messages(self) -> None:
+        sys.path.insert(0, str(ROOT / "src"))
+        try:
+            import lawftrack.api.dataset_store as dataset_store_module
+        finally:
+            sys.path.pop(0)
+
+        def fake_render_message_delta_from_chat_template(
+            *,
+            model,
+            prompt_messages,
+            message,
+            tools=None,
+            config_dir=None,
+        ):
+            return f"<|im_start|>assistant\n{message['content']}<|im_end|>"
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with mock.patch.object(
+                dataset_store_module,
+                "render_message_delta_from_chat_template",
+                side_effect=fake_render_message_delta_from_chat_template,
+            ):
+                client = self._create_client(temp_dir)
+                reimport_response = client.post(
+                    "/api/datasets/import",
+                    files={
+                        "file": (
+                            "roundtrip.json",
+                            json.dumps(
+                                {
+                                    "name": "roundtrip-template",
+                                    "base_model": "Qwen/Qwen2.5-7B-Instruct",
+                                    "samples": [
+                                        {
+                                            "id": "sample-0001",
+                                            "title": "Template roundtrip sample",
+                                            "messages": [
+                                                {"role": "user", "content": "hi"},
+                                                {
+                                                    "role": "assistant",
+                                                    "content": "<|im_start|>assistant\nhello<|im_end|>",
+                                                },
+                                            ],
+                                            "anchors": [],
+                                        }
+                                    ],
+                                },
+                                ensure_ascii=False,
+                            ).encode("utf-8"),
+                            "application/json",
+                        )
+                    },
+                )
+                self.assertEqual(reimport_response.status_code, 200)
+                reimported_dataset = reimport_response.json()
+                reimported_sample = client.get(
+                    f"/api/datasets/{reimported_dataset['id']}/samples"
+                ).json()["data"][0]
+
+                self.assertEqual(
+                    reimported_sample["messages"][1]["content"],
+                    "<|im_start|>assistant\nhello<|im_end|>",
+                )
 
     def test_exported_dataset_file_can_be_used_for_fine_tuning_job(self) -> None:
         sys.path.insert(0, str(ROOT / "src"))
@@ -1333,6 +1395,7 @@ class ServerTests(unittest.TestCase):
 
         initial_reasoning = "Initial reasoning"
         initial_content = "Hello"
+        initial_template_content = "<think>Initial reasoning</think>\n\nHello"
         continued_content = "Updated completion tail"
 
         class DummyResponse:
@@ -1376,7 +1439,7 @@ class ServerTests(unittest.TestCase):
         ]
 
         def fake_tokenize(model, text, config_dir=None):
-            if text == initial_content:
+            if text == initial_template_content:
                 return initial_tokens
             if text == continued_content:
                 return continued_tokens
@@ -1449,12 +1512,15 @@ class ServerTests(unittest.TestCase):
             continued_payload = continue_response.json()
             continued_sample = continued_payload["sample"]
             self.assertEqual(continued_sample["messages"][1]["content"], continued_content)
-            self.assertEqual(continued_sample["messages"][1]["reasoning"], initial_reasoning)
             self.assertEqual(continued_sample["edits"][0]["original_token"], "Hello")
             self.assertEqual(continued_sample["edits"][0]["replacement_token"], "Updated")
             self.assertEqual(continued_payload["tokenization"]["messages"][1]["tokens"][0]["text"], "Updated")
             self.assertEqual(captured_request["json"]["prompt"], "PROMPT:Updated")
             self.assertEqual(captured_request["json"]["max_tokens"], 4096)
+            self.assertEqual(
+                captured_request["json"]["include_stop_str_in_output"],
+                True,
+            )
             self.assertTrue(str(captured_request["url"]).endswith("/v1/completions"))
 
             save_response = client.put(
@@ -1471,7 +1537,7 @@ class ServerTests(unittest.TestCase):
                 },
             )
             self.assertEqual(save_response.status_code, 200)
-            self.assertEqual(save_response.json()["messages"][1]["reasoning"], initial_reasoning)
+            self.assertEqual(save_response.json()["messages"][1]["content"], continued_content)
 
     def test_continue_prepare_returns_prompt_metadata_for_frontend_streaming(self) -> None:
         sys.path.insert(0, str(ROOT / "src"))
@@ -1559,7 +1625,7 @@ class ServerTests(unittest.TestCase):
         ]
 
         def fake_tokenize(model, text, config_dir=None):
-            if text == "Updated completion tail":
+            if text == "<think>Initial reasoning</think>\n\nUpdated completion tail":
                 return continued_tokens
             if text == "Initial reasoning":
                 return reasoning_tokens
@@ -1828,7 +1894,10 @@ class ServerTests(unittest.TestCase):
 
         initial_reasoning = "Step one"
         initial_content = "Original answer"
+        initial_template_content = "<think>Step one</think>\n\nOriginal answer"
         continued_reasoning = "Revised plan"
+        continued_template_content = "<think>Revised plan</think>\n\nOriginal answer"
+        continued_template_content_without_gap = "<think>Revised plan</think>Original answer"
 
         class DummyResponse:
             def __init__(self, payload):
@@ -1860,7 +1929,7 @@ class ServerTests(unittest.TestCase):
                     {"token_index": 0, "token_id": 1, "token": "Step", "text": "Step", "start": 0, "end": 4},
                     {"token_index": 1, "token_id": 2, "token": " one", "text": " one", "start": 4, "end": 8},
                 ]
-            if text == initial_content:
+            if text == initial_template_content:
                 return [
                     {"token_index": 0, "token_id": 3, "token": "Original", "text": "Original", "start": 0, "end": 8},
                     {"token_index": 1, "token_id": 4, "token": " answer", "text": " answer", "start": 8, "end": 15},
@@ -1869,6 +1938,12 @@ class ServerTests(unittest.TestCase):
                 return [
                     {"token_index": 0, "token_id": 5, "token": "Revised", "text": "Revised", "start": 0, "end": 7},
                     {"token_index": 1, "token_id": 6, "token": " plan", "text": " plan", "start": 7, "end": 12},
+                ]
+            if text in {continued_template_content, continued_template_content_without_gap}:
+                return [
+                    {"token_index": 0, "token_id": 7, "token": "<think>Revised", "text": "<think>Revised", "start": 0, "end": 15},
+                    {"token_index": 1, "token_id": 8, "token": " plan</think>\\n\\nOriginal", "text": " plan</think>\n\nOriginal", "start": 15, "end": 39},
+                    {"token_index": 2, "token_id": 9, "token": " answer", "text": " answer", "start": 39, "end": 46},
                 ]
             raise AssertionError(text)
 
@@ -1935,8 +2010,10 @@ class ServerTests(unittest.TestCase):
 
             self.assertEqual(continue_response.status_code, 200)
             continued_payload = continue_response.json()
-            self.assertEqual(continued_payload["sample"]["messages"][1]["reasoning"], continued_reasoning)
-            self.assertEqual(continued_payload["sample"]["messages"][1]["content"], initial_content)
+            self.assertTrue(
+                continued_payload["sample"]["messages"][1]["content"]
+                in {continued_template_content, continued_template_content_without_gap}
+            )
             self.assertEqual(continued_payload["sample"]["edits"][0]["target"], "reasoning")
             self.assertEqual(
                 continued_payload["tokenization"]["messages"][1]["reasoning_tokens"][0]["text"],
@@ -1944,9 +2021,10 @@ class ServerTests(unittest.TestCase):
             )
             self.assertEqual(
                 continued_payload["tokenization"]["messages"][1]["tokens"][0]["text"],
-                "Original",
+                "<think>Revised",
             )
             self.assertEqual(captured_request["json"]["prompt"], "PROMPT:<think>Revised")
+            self.assertEqual(captured_request["json"]["skip_special_tokens"], False)
             self.assertTrue(str(captured_request["url"]).endswith("/v1/completions"))
 
     def test_dataset_sample_candidate_tokens_use_completions(self) -> None:
@@ -2363,6 +2441,89 @@ class ServerTests(unittest.TestCase):
             self.assertEqual(response.status_code, 200)
             self.assertIn("text/event-stream", response.headers["content-type"])
             self.assertIn('data: {"choices":[{"delta":{"content":"\u4f60\u597d"}}]}', response.text)
+
+    def test_chat_template_delta_preserves_special_end_tokens(self) -> None:
+        sys.path.insert(0, str(ROOT / "src"))
+        try:
+            import lawftrack.api.chat_template_storage as storage_module
+        finally:
+            sys.path.pop(0)
+
+        class FakeTokenizer:
+            _text_to_id = {"hi": 101, "hello": 102}
+            _id_to_text = {
+                1: "<|user|>",
+                2: "<|end_user|>",
+                3: "<|assistant|>",
+                4: "<|end_assistant|>",
+                101: "hi",
+                102: "hello",
+            }
+
+            def apply_chat_template(
+                self,
+                messages,
+                *,
+                tools=None,
+                add_generation_prompt=False,
+                tokenize=False,
+            ):
+                if tokenize:
+                    token_ids = []
+                    for message in messages:
+                        role = message["role"]
+                        content_id = self._text_to_id.get(str(message.get("content") or ""))
+                        if role == "user":
+                            token_ids.append(1)
+                            if content_id is not None:
+                                token_ids.append(content_id)
+                            token_ids.append(2)
+                        elif role == "assistant":
+                            token_ids.append(3)
+                            if content_id is not None:
+                                token_ids.append(content_id)
+                            token_ids.append(4)
+                    if add_generation_prompt:
+                        token_ids.append(3)
+                    return {"input_ids": token_ids}
+
+                rendered_parts = []
+                for message in messages:
+                    role = message["role"]
+                    content = str(message.get("content") or "")
+                    if role == "user":
+                        rendered_parts.append(f"<|user|>{content}<|end_user|>")
+                    elif role == "assistant":
+                        rendered_parts.append(f"<|assistant|>{content}")
+                if add_generation_prompt:
+                    rendered_parts.append("<|assistant|>")
+                return "".join(rendered_parts)
+
+            def decode(
+                self,
+                token_ids,
+                clean_up_tokenization_spaces=False,
+                skip_special_tokens=False,
+            ):
+                return "".join(self._id_to_text[int(token_id)] for token_id in token_ids)
+
+        with mock.patch.object(
+            storage_module,
+            "load_tokenizer",
+            return_value=FakeTokenizer(),
+        ):
+            delta = storage_module.render_message_delta_from_chat_template(
+                model="demo-model",
+                prompt_messages=[{"role": "user", "content": "hi"}],
+                message={"role": "assistant", "content": "hello"},
+            )
+            generation_delta = storage_module.render_generation_prompt_delta_from_chat_template(
+                model="demo-model",
+                messages=[{"role": "user", "content": "hi"}],
+            )
+
+        self.assertEqual(delta, "<|assistant|>hello<|end_assistant|>")
+        self.assertEqual(generation_delta, "<|assistant|>")
 
 
 if __name__ == "__main__":

@@ -9,7 +9,11 @@ from typing import Any
 
 import yaml
 
+from .chat_template_storage import message_has_assistant_metadata
+from .chat_template_storage import render_message_delta_from_chat_template
 from .files_store import FileStore
+from .message_templates import render_assistant_message_template
+from .tokenizer_service import TokenizerDependencyError
 from ..config import get_config_dir
 
 
@@ -84,12 +88,20 @@ class DatasetStore:
         dataset_id = f"ds-{uuid.uuid4().hex[:24]}"
         dataset_name = self._normalize_dataset_name(Path(filename).stem)
         self._ensure_unique_dataset_name(dataset_name)
+        base_model = None
+        if Path(filename).suffix.lower() == ".json":
+            try:
+                parsed = json.loads(content.decode("utf-8"))
+            except json.JSONDecodeError:
+                parsed = None
+            if isinstance(parsed, dict) and parsed.get("base_model") is not None:
+                base_model = parsed.get("base_model")
         dataset = self._build_dataset_record(
             dataset_id,
             now,
             {
                 "name": dataset_name,
-                "base_model": None,
+                "base_model": base_model,
             },
         )
         self._write_dataset(dataset)
@@ -99,6 +111,7 @@ class DatasetStore:
                 dataset_id=dataset_id,
                 filename=filename,
                 content=content,
+                base_model=base_model,
             ),
         )
         return self._enrich_dataset(dataset)
@@ -139,7 +152,12 @@ class DatasetStore:
         samples = self._load_or_bootstrap_samples(dataset)
         now = int(time.time())
         sample_index = len(samples) + 1
-        messages = self._normalize_messages(payload.get("messages")) or [
+        tools = self._normalize_tools(payload.get("tools"))
+        messages = self._normalize_messages(
+            payload.get("messages"),
+            model=dataset.get("base_model"),
+            tools=tools,
+        ) or [
             {"role": "user", "content": ""},
             {"role": "assistant", "content": ""},
         ]
@@ -152,7 +170,7 @@ class DatasetStore:
             "created_at": now,
             "updated_at": now,
             "messages": messages,
-            "tools": self._normalize_tools(payload.get("tools")),
+            "tools": tools,
             "edits": annotations,
             "anchors": annotations,
         }
@@ -173,16 +191,21 @@ class DatasetStore:
             if str(sample.get("id")) != sample_id:
                 continue
             annotations = self._normalize_annotations(payload)
+            tools = (
+                self._normalize_tools(payload.get("tools"))
+                if "tools" in payload
+                else self._normalize_tools(sample.get("tools"))
+            )
 
             samples[index] = {
                 **sample,
                 "title": payload.get("title") or sample.get("title") or f"样本 {index + 1}",
-                "messages": self._normalize_messages(payload.get("messages")),
-                "tools": (
-                    self._normalize_tools(payload.get("tools"))
-                    if "tools" in payload
-                    else self._normalize_tools(sample.get("tools"))
+                "messages": self._normalize_messages(
+                    payload.get("messages"),
+                    model=dataset.get("base_model"),
+                    tools=tools,
                 ),
+                "tools": tools,
                 "edits": annotations,
                 "anchors": annotations,
                 "updated_at": int(time.time()),
@@ -208,6 +231,7 @@ class DatasetStore:
 
     def update_dataset(self, dataset_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         dataset = self._load_dataset(dataset_id)
+        current_base_model = dataset.get("base_model")
         if "name" in payload:
             dataset_name = self._normalize_dataset_name(payload.get("name"))
             self._ensure_unique_dataset_name(
@@ -216,11 +240,31 @@ class DatasetStore:
             )
             dataset["name"] = dataset_name
         if "base_model" in payload:
-            dataset["base_model"] = payload["base_model"]
+            next_base_model = payload["base_model"]
+            dataset["base_model"] = next_base_model
         dataset.pop("training_file_id", None)
         dataset.pop("training_filename", None)
         dataset["updated_at"] = int(time.time())
         self._write_dataset(dataset)
+        if (
+            not current_base_model
+            and dataset.get("base_model")
+        ):
+            samples = self._load_or_bootstrap_samples(dataset)
+            normalized_samples = [
+                {
+                    **sample,
+                    "messages": self._normalize_messages(
+                        sample.get("messages"),
+                        model=dataset.get("base_model"),
+                        tools=self._normalize_tools(sample.get("tools")),
+                        assume_assistant_content_is_raw=True,
+                    ),
+                    "tools": self._normalize_tools(sample.get("tools")),
+                }
+                for sample in samples
+            ]
+            self._write_samples(dataset_id, normalized_samples)
         return self._enrich_dataset(dataset)
 
     def delete_dataset(self, dataset_id: str) -> None:
@@ -347,6 +391,7 @@ class DatasetStore:
             dataset_id=dataset_id,
             filename=str(metadata.get("filename") or "train.jsonl"),
             content=content,
+            base_model=dataset.get("base_model"),
         )
         self._write_samples(dataset_id, samples)
         return samples
@@ -363,6 +408,7 @@ class DatasetStore:
             dataset_id=dataset_id,
             filename=str(metadata.get("filename") or "train.jsonl"),
             content=content,
+            base_model=dataset.get("base_model"),
         )
         self._write_samples(dataset_id, samples)
         return samples
@@ -373,14 +419,19 @@ class DatasetStore:
         dataset_id: str,
         filename: str,
         content: bytes,
+        base_model: str | None = None,
     ) -> list[dict[str, Any]]:
         now = int(time.time())
         records: list[dict[str, Any]] = []
         suffix = Path(filename).suffix.lower()
         text = content.decode("utf-8")
+        source_is_dataset_export = False
 
         if suffix == ".json":
             parsed = json.loads(text)
+            source_is_dataset_export = bool(
+                isinstance(parsed, dict) and isinstance(parsed.get("samples"), list)
+            )
             iterable = self._normalize_training_iterable(parsed)
         else:
             iterable = [
@@ -393,6 +444,14 @@ class DatasetStore:
             if not isinstance(item, dict):
                 continue
             messages = self._extract_messages_from_record(item)
+            tools = self._normalize_tools(item.get("tools"))
+            if base_model:
+                messages = self._normalize_messages(
+                    messages,
+                    model=base_model,
+                    tools=tools,
+                    assume_assistant_content_is_raw=not source_is_dataset_export,
+                )
             annotations = self._normalize_annotations(item)
             records.append(
                 {
@@ -403,7 +462,7 @@ class DatasetStore:
                     "created_at": now,
                     "updated_at": now,
                     "messages": messages,
-                    "tools": self._normalize_tools(item.get("tools")),
+                    "tools": tools,
                     "edits": annotations,
                     "anchors": annotations,
                 }
@@ -521,7 +580,14 @@ class DatasetStore:
                 return str(message["content"])[:24] or f"样本 {index + 1}"
         return f"样本 {index + 1}"
 
-    def _normalize_messages(self, payload: Any) -> list[dict[str, Any]]:
+    def _normalize_messages(
+        self,
+        payload: Any,
+        *,
+        model: str | None = None,
+        tools: list[dict[str, Any]] | None = None,
+        assume_assistant_content_is_raw: bool = False,
+    ) -> list[dict[str, Any]]:
         messages: list[dict[str, Any]] = []
         if not isinstance(payload, list):
             return messages
@@ -530,14 +596,6 @@ class DatasetStore:
                 continue
             role = str(item.get("role") or "").strip()
             content = str(item.get("content") or "")
-            reasoning_value = item.get("reasoning")
-            if reasoning_value is None:
-                reasoning_value = item.get("reasoning_content")
-            reasoning = (
-                None
-                if reasoning_value is None
-                else str(reasoning_value)
-            )
             tool_call_id = (
                 None
                 if item.get("tool_call_id") is None
@@ -547,15 +605,62 @@ class DatasetStore:
             tool_calls = self._normalize_tool_calls(item.get("tool_calls"))
             if not role:
                 continue
-            message: dict[str, Any] = {"role": role, "content": content}
-            if reasoning:
-                message["reasoning"] = reasoning
+            if role == "assistant":
+                reasoning_value = item.get("reasoning")
+                if reasoning_value is None:
+                    reasoning_value = item.get("reasoning_content")
+                raw_assistant_message = {
+                    "role": role,
+                    "content": content,
+                    **(
+                        {"reasoning": str(reasoning_value)}
+                        if reasoning_value is not None
+                        else {}
+                    ),
+                    **({"tool_calls": tool_calls} if tool_calls else {}),
+                }
+                should_render_template = bool(
+                    model
+                    and (
+                        assume_assistant_content_is_raw
+                        or message_has_assistant_metadata(raw_assistant_message)
+                    )
+                )
+                if should_render_template:
+                    try:
+                        normalized_content = render_message_delta_from_chat_template(
+                            model=str(model),
+                            prompt_messages=messages,
+                            message=raw_assistant_message,
+                            tools=tools,
+                            config_dir=self.config_dir,
+                        )
+                    except TokenizerDependencyError:
+                        normalized_content = render_assistant_message_template(
+                            content=content,
+                            reasoning=(
+                                None
+                                if reasoning_value is None
+                                else str(reasoning_value)
+                            ),
+                            tool_calls=tool_calls,
+                        )
+                else:
+                    normalized_content = content
+                message = {
+                    "role": role,
+                    "content": normalized_content,
+                }
+                if not should_render_template and reasoning_value is not None:
+                    message["reasoning"] = str(reasoning_value)
+                if not should_render_template and tool_calls:
+                    message["tool_calls"] = tool_calls
+            else:
+                message = {"role": role, "content": content}
             if tool_call_id:
                 message["tool_call_id"] = tool_call_id
             if name:
                 message["name"] = name
-            if tool_calls:
-                message["tool_calls"] = tool_calls
             messages.append(message)
         return messages
 
@@ -796,14 +901,21 @@ class DatasetStore:
                     )
 
             if role != "user" or text_parts:
-                normalized_message: dict[str, Any] = {
-                    "role": role,
-                    "content": "\n".join(text_parts),
-                }
-                if reasoning_parts:
-                    normalized_message["reasoning"] = "\n".join(reasoning_parts)
-                if tool_calls:
-                    normalized_message["tool_calls"] = tool_calls
+                normalized_message: dict[str, Any]
+                if role == "assistant":
+                    normalized_message = {
+                        "role": role,
+                        "content": render_assistant_message_template(
+                            content="\n".join(text_parts),
+                            reasoning="\n".join(reasoning_parts) or None,
+                            tool_calls=tool_calls,
+                        ),
+                    }
+                else:
+                    normalized_message = {
+                        "role": role,
+                        "content": "\n".join(text_parts),
+                    }
                 if normalized_message["content"] or reasoning_parts or tool_calls:
                     messages.append(normalized_message)
             messages.extend(tool_messages)
@@ -824,21 +936,39 @@ class DatasetStore:
         message_payload = first_choice.get("message")
         if not isinstance(message_payload, dict):
             return None
-
-        normalized_messages = self._normalize_messages(
-            [
-                {
-                    "role": message_payload.get("role"),
-                    "content": message_payload.get("content") or "",
-                    "reasoning": message_payload.get("reasoning"),
-                    "reasoning_content": message_payload.get("reasoning_content"),
-                    "tool_calls": message_payload.get("tool_calls"),
-                    "tool_call_id": message_payload.get("tool_call_id"),
-                    "name": message_payload.get("name"),
-                }
-            ]
-        )
-        return normalized_messages[0] if normalized_messages else None
+        role = str(message_payload.get("role") or "").strip()
+        if not role:
+            return None
+        message: dict[str, Any] = {
+            "role": role,
+            "content": (
+                render_assistant_message_template(
+                    content=str(message_payload.get("content") or ""),
+                    reasoning=(
+                        None
+                        if (
+                            message_payload.get("reasoning") is None
+                            and message_payload.get("reasoning_content") is None
+                        )
+                        else str(
+                            message_payload.get(
+                                "reasoning",
+                                message_payload.get("reasoning_content"),
+                            )
+                            or ""
+                        )
+                    ),
+                    tool_calls=self._normalize_tool_calls(message_payload.get("tool_calls")),
+                )
+                if role == "assistant"
+                else str(message_payload.get("content") or "")
+            ),
+        }
+        if message_payload.get("tool_call_id") is not None:
+            message["tool_call_id"] = str(message_payload.get("tool_call_id") or "")
+        if message_payload.get("name") is not None:
+            message["name"] = str(message_payload.get("name") or "")
+        return message
 
     def _normalize_sample(self, payload: Any, index: int) -> dict[str, Any]:
         if not isinstance(payload, dict):

@@ -10,8 +10,14 @@ from fastapi import UploadFile
 import httpx
 from pydantic import BaseModel
 
+from .chat_template_storage import extract_message_text
+from .chat_template_storage import message_has_assistant_metadata
+from .chat_template_storage import render_message_delta_from_chat_template
+from .chat_template_storage import render_prompt_from_stored_messages
 from .dataset_store import DatasetStore
 from .dataset_store import DuplicateDatasetNameError
+from .message_templates import parse_assistant_message_template
+from .message_templates import render_assistant_message_template
 from .tokenizer_service import TokenizerDependencyError
 from .tokenizer_service import build_prefix_before_token
 from .tokenizer_service import build_continuation_prefix
@@ -109,21 +115,29 @@ def serialize_model(model: BaseModel) -> dict[str, Any]:
     return model.dict(exclude_unset=True)
 
 
-def extract_message_text(value: Any) -> str:
-    if isinstance(value, str):
-        return value
-    if isinstance(value, list):
-        return "".join(
-            str(item.get("text") or "") for item in value if isinstance(item, dict)
-        )
-    return ""
-
-
 def extract_reasoning_from_message(message: dict[str, Any]) -> str | None:
+    if str(message.get("role") or "") == "assistant":
+        parsed = parse_assistant_message_template(message.get("content"))
+        reasoning = extract_message_text(parsed.get("reasoning"))
+        if reasoning:
+            return reasoning
     reasoning = extract_message_text(
         message.get("reasoning", message.get("reasoning_content"))
     )
     return reasoning or None
+
+
+def extract_content_from_message(message: dict[str, Any]) -> str:
+    if str(message.get("role") or "") == "assistant":
+        return extract_message_text(message.get("content"))
+    return extract_message_text(message.get("content"))
+
+
+def extract_tool_calls_from_message(message: dict[str, Any]) -> list[dict[str, Any]]:
+    tool_calls = message.get("tool_calls")
+    if isinstance(tool_calls, list):
+        return [item for item in tool_calls if isinstance(item, dict)]
+    return []
 
 
 def build_sample_message(
@@ -156,31 +170,6 @@ def render_assistant_prefill(*, reasoning: str | None = None, content: str = "")
     return content
 
 
-def render_prompt_message(message: dict[str, Any]) -> dict[str, Any]:
-    role = str(message.get("role") or "")
-    if role == "assistant":
-        content = render_assistant_prefill(
-            reasoning=extract_reasoning_from_message(message),
-            content=str(message.get("content") or ""),
-        )
-    else:
-        content = str(message.get("content") or "")
-    payload: dict[str, Any] = {
-        "role": role,
-        "content": content,
-    }
-    tool_calls = message.get("tool_calls")
-    if isinstance(tool_calls, list) and tool_calls:
-        payload["tool_calls"] = tool_calls
-    tool_call_id = message.get("tool_call_id")
-    if tool_call_id is not None:
-        payload["tool_call_id"] = str(tool_call_id or "")
-    name = message.get("name")
-    if name is not None:
-        payload["name"] = str(name or "")
-    return payload
-
-
 def build_completion_prompt(
     *,
     model: str,
@@ -189,25 +178,19 @@ def build_completion_prompt(
     tools: list[dict[str, Any]] | None = None,
     config_dir: Path | None = None,
 ) -> str:
-    if prompt_messages:
-        tokenizer = load_tokenizer(model, config_dir=config_dir)
-        if not hasattr(tokenizer, "apply_chat_template"):
-            raise TokenizerDependencyError(
-                f"Model tokenizer for `{model}` does not expose a chat template."
-            )
-        template_kwargs: dict[str, Any] = {
-            "add_generation_prompt": True,
-            "tokenize": False,
-        }
-        if tools:
-            template_kwargs["tools"] = tools
-        prompt = tokenizer.apply_chat_template(
-            [render_prompt_message(message) for message in prompt_messages],
-            **template_kwargs,
+    tokenizer = load_tokenizer(model, config_dir=config_dir)
+    if not hasattr(tokenizer, "apply_chat_template"):
+        raise TokenizerDependencyError(
+            f"Model tokenizer for `{model}` does not expose a chat template."
         )
-    else:
-        prompt = ""
-    return f"{prompt}{assistant_prefill}"
+    return render_prompt_from_stored_messages(
+        model=model,
+        messages=prompt_messages,
+        tools=tools,
+        assistant_prefill=assistant_prefill,
+        add_generation_prompt=True,
+        config_dir=config_dir,
+    )
 
 
 def build_completion_prefill(
@@ -218,10 +201,7 @@ def build_completion_prefill(
 ) -> str:
     if target == "reasoning":
         return f"<think>{prefix}"
-    return render_assistant_prefill(
-        reasoning=extract_reasoning_from_message(target_message),
-        content=prefix,
-    )
+    return prefix
 
 
 def extract_completion_text(payload: dict[str, Any]) -> str:
@@ -232,16 +212,19 @@ def extract_completion_text(payload: dict[str, Any]) -> str:
 
 
 def parse_prefilled_assistant_text(text: str) -> tuple[str | None, str]:
-    if not text.startswith("<think>"):
-        return None, text
-
-    closing_tag = "</think>"
-    closing_index = text.find(closing_tag)
-    if closing_index < 0:
-        return text[len("<think>") :] or None, ""
-    reasoning = text[len("<think>") : closing_index] or None
-    content = text[closing_index + len(closing_tag) :]
+    parsed = parse_assistant_message_template(text)
+    reasoning = extract_message_text(parsed.get("reasoning")) or None
+    content = str(parsed.get("content") or "")
     return reasoning, content
+
+
+def replace_prefilled_assistant_reasoning(text: str, reasoning: str) -> str:
+    if text.startswith("<think>"):
+        closing_tag = "</think>"
+        closing_index = text.find(closing_tag)
+        if closing_index >= 0:
+            return f"<think>{reasoning}</think>{text[closing_index + len(closing_tag):]}"
+    return render_assistant_prefill(reasoning=reasoning, content=text)
 
 
 def extract_completion_logprob_candidates(
@@ -299,7 +282,11 @@ def prepare_sample_continuation(
     try:
         prefix, original_token, replacement_token = build_continuation_prefix(
             model=payload.model,
-            text=str(target_message.get(target) or ""),
+            text=(
+                str(extract_reasoning_from_message(target_message) or "")
+                if target == "reasoning"
+                else extract_content_from_message(target_message)
+            ),
             token_index=payload.token_index,
             replacement_text=payload.replacement_token,
             config_dir=config_dir,
@@ -351,6 +338,8 @@ def prepare_sample_continuation(
         "prompt": prompt,
         "temperature": payload.temperature,
         "max_tokens": max_tokens,
+        "skip_special_tokens": False,
+        "include_stop_str_in_output": True,
     }
 
     return {
@@ -381,8 +370,11 @@ def build_continued_sample(
     completion_text: str,
 ) -> dict[str, Any]:
     messages = list(sample.get("messages", []))
+    parsed_target_message = parse_assistant_message_template(
+        target_message.get("content")
+    )
     existing_reasoning = extract_reasoning_from_message(target_message)
-    existing_content = str(target_message.get("content") or "")
+    existing_content = str(parsed_target_message.get("content") or "")
     if target == "reasoning":
         merged_reasoning, _ignored_content = parse_prefilled_assistant_text(
             build_completion_prefill(
@@ -392,16 +384,15 @@ def build_continued_sample(
             )
             + completion_text
         )
-        content = existing_content
+        content = replace_prefilled_assistant_reasoning(
+            str(target_message.get("content") or ""),
+            merged_reasoning or "",
+        )
     else:
         content = f"{prefix}{completion_text}"
         merged_reasoning = existing_reasoning
     next_messages = messages[: payload.message_index] + [
-        build_sample_message(
-            role="assistant",
-            content=content,
-            reasoning=merged_reasoning,
-        )
+        {"role": "assistant", "content": content}
     ]
     previous_edits = [
         dict(edit)
@@ -475,13 +466,44 @@ def build_sample_tokenization_payload(
     sample_id: str,
     model: str,
     messages: list[dict[str, Any]],
+    tools: list[dict[str, Any]] | None = None,
     config_dir: Path | None = None,
 ) -> dict[str, Any]:
     tokenized_messages = []
-    for index, message in enumerate(messages):
+    normalized_messages: list[dict[str, Any]] = []
+    for message in messages:
+        role = str(message.get("role") or "")
+        if role == "assistant" and message_has_assistant_metadata(message):
+            try:
+                normalized_content = render_message_delta_from_chat_template(
+                    model=model,
+                    prompt_messages=normalized_messages,
+                    message=message,
+                    tools=tools,
+                    config_dir=config_dir,
+                )
+            except TokenizerDependencyError:
+                normalized_content = render_assistant_message_template(
+                    content=extract_message_text(message.get("content")),
+                    reasoning=extract_message_text(
+                        message.get("reasoning", message.get("reasoning_content"))
+                    )
+                    or None,
+                    tool_calls=extract_tool_calls_from_message(message),
+                )
+            normalized_messages.append(
+                {
+                    "role": "assistant",
+                    "content": normalized_content,
+                }
+            )
+        else:
+            normalized_messages.append(dict(message))
+
+    for index, message in enumerate(normalized_messages):
         if message.get("role") == "assistant":
-            reasoning_text = str(message.get("reasoning") or "")
-            content_text = str(message.get("content") or "")
+            reasoning_text = str(extract_reasoning_from_message(message) or "")
+            content_text = extract_content_from_message(message)
             reasoning_tokens = (
                 tokenize_text(
                     model=model,
@@ -695,6 +717,7 @@ def build_router(config_dir: Path | None = None) -> APIRouter:
                     if payload.messages is not None
                     else list(sample.get("messages", []))
                 ),
+                tools=sample.get("tools"),
                 config_dir=config_dir,
             )
         except TokenizerDependencyError as exc:
@@ -803,7 +826,7 @@ def build_router(config_dir: Path | None = None) -> APIRouter:
         target_text = str(
             extract_reasoning_from_message(target_message)
             if target == "reasoning"
-            else target_message.get("content") or ""
+            else extract_content_from_message(target_message)
         )
         try:
             prefix = build_prefix_before_token(
@@ -947,6 +970,7 @@ def build_router(config_dir: Path | None = None) -> APIRouter:
                 sample_id=sample_id,
                 model=payload.model,
                 messages=next_sample["messages"],
+                tools=sample.get("tools"),
                 config_dir=config_dir,
             )
         except TokenizerDependencyError as exc:

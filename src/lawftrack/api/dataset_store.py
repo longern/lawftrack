@@ -9,11 +9,8 @@ from typing import Any
 
 import yaml
 
-from .chat_template_storage import message_has_assistant_metadata
 from .chat_template_storage import render_message_delta_from_chat_template
 from .files_store import FileStore
-from .message_templates import render_assistant_message_template
-from .tokenizer_service import TokenizerDependencyError
 from ..config import get_config_dir
 
 
@@ -606,55 +603,21 @@ class DatasetStore:
             if not role:
                 continue
             if role == "assistant":
-                reasoning_value = item.get("reasoning")
-                if reasoning_value is None:
-                    reasoning_value = item.get("reasoning_content")
-                raw_assistant_message = {
-                    "role": role,
-                    "content": content,
-                    **(
-                        {"reasoning": str(reasoning_value)}
-                        if reasoning_value is not None
-                        else {}
-                    ),
-                    **({"tool_calls": tool_calls} if tool_calls else {}),
-                }
-                should_render_template = bool(
-                    model
-                    and (
-                        assume_assistant_content_is_raw
-                        or message_has_assistant_metadata(raw_assistant_message)
+                normalized_content = (
+                    render_message_delta_from_chat_template(
+                        model=str(model),
+                        prompt_messages=messages,
+                        message={"role": role, "content": content},
+                        tools=tools,
+                        config_dir=self.config_dir,
                     )
+                    if model and assume_assistant_content_is_raw
+                    else content
                 )
-                if should_render_template:
-                    try:
-                        normalized_content = render_message_delta_from_chat_template(
-                            model=str(model),
-                            prompt_messages=messages,
-                            message=raw_assistant_message,
-                            tools=tools,
-                            config_dir=self.config_dir,
-                        )
-                    except TokenizerDependencyError:
-                        normalized_content = render_assistant_message_template(
-                            content=content,
-                            reasoning=(
-                                None
-                                if reasoning_value is None
-                                else str(reasoning_value)
-                            ),
-                            tool_calls=tool_calls,
-                        )
-                else:
-                    normalized_content = content
                 message = {
                     "role": role,
                     "content": normalized_content,
                 }
-                if not should_render_template and reasoning_value is not None:
-                    message["reasoning"] = str(reasoning_value)
-                if not should_render_template and tool_calls:
-                    message["tool_calls"] = tool_calls
             else:
                 message = {"role": role, "content": content}
             if tool_call_id:
@@ -762,11 +725,6 @@ class DatasetStore:
                 {
                     "message_index": int(item.get("message_index", 0)),
                     "token_index": int(item.get("token_index", 0)),
-                    "target": (
-                        "reasoning"
-                        if str(item.get("target") or "content").strip().lower() == "reasoning"
-                        else "content"
-                    ),
                     "original_token": (
                         None if item.get("original_token") is None else str(item.get("original_token") or "")
                     ),
@@ -822,153 +780,7 @@ class DatasetStore:
         samples = payload.get("samples")
         if isinstance(samples, list):
             return [item for item in samples if isinstance(item, dict)]
-        entries = payload.get("entries")
-        if isinstance(entries, list):
-            return [
-                self._build_record_from_session_entry(item)
-                for item in entries
-                if isinstance(item, dict)
-            ]
         return [payload]
-
-    def _build_record_from_session_entry(self, payload: dict[str, Any]) -> dict[str, Any]:
-        request_payload = payload.get("request")
-        response_payload = payload.get("response")
-        if not isinstance(request_payload, dict):
-            return payload
-
-        messages = self._build_messages_from_session_request(request_payload)
-        assistant_message = self._build_message_from_session_response(response_payload)
-        if assistant_message is not None:
-            messages.append(assistant_message)
-        return {
-            "messages": messages,
-            "tools": self._normalize_tools(request_payload.get("tools")),
-        }
-
-    def _build_messages_from_session_request(
-        self,
-        payload: dict[str, Any],
-    ) -> list[dict[str, Any]]:
-        messages: list[dict[str, Any]] = []
-        for raw_message in payload.get("messages") or []:
-            if not isinstance(raw_message, dict):
-                continue
-            role = str(raw_message.get("role") or "").strip()
-            if not role:
-                continue
-            content = raw_message.get("content")
-            if not isinstance(content, list):
-                normalized = self._normalize_messages([raw_message])
-                messages.extend(normalized)
-                continue
-
-            text_parts: list[str] = []
-            reasoning_parts: list[str] = []
-            tool_calls: list[dict[str, Any]] = []
-            tool_messages: list[dict[str, Any]] = []
-            for part in content:
-                if not isinstance(part, dict):
-                    continue
-                part_type = str(part.get("type") or "").strip()
-                if part_type == "text":
-                    text = str(part.get("text") or "")
-                    if text:
-                        text_parts.append(text)
-                    continue
-                if part_type == "thinking":
-                    thinking = str(part.get("thinking") or "")
-                    if thinking:
-                        reasoning_parts.append(thinking)
-                    continue
-                if part_type == "tool_use":
-                    normalized_call = self._normalize_tool_call(part)
-                    if normalized_call:
-                        tool_calls.append(normalized_call)
-                    continue
-                if part_type == "tool_result":
-                    tool_messages.append(
-                        {
-                            "role": "tool",
-                            "content": str(part.get("content") or ""),
-                            "tool_call_id": str(part.get("tool_use_id") or ""),
-                            **(
-                                {"name": str(part.get("name") or "")}
-                                if part.get("name") is not None
-                                else {}
-                            ),
-                        }
-                    )
-
-            if role != "user" or text_parts:
-                normalized_message: dict[str, Any]
-                if role == "assistant":
-                    normalized_message = {
-                        "role": role,
-                        "content": render_assistant_message_template(
-                            content="\n".join(text_parts),
-                            reasoning="\n".join(reasoning_parts) or None,
-                            tool_calls=tool_calls,
-                        ),
-                    }
-                else:
-                    normalized_message = {
-                        "role": role,
-                        "content": "\n".join(text_parts),
-                    }
-                if normalized_message["content"] or reasoning_parts or tool_calls:
-                    messages.append(normalized_message)
-            messages.extend(tool_messages)
-        return messages
-
-    def _build_message_from_session_response(
-        self,
-        payload: Any,
-    ) -> dict[str, Any] | None:
-        if not isinstance(payload, dict):
-            return None
-        choices = payload.get("choices")
-        if not isinstance(choices, list) or not choices:
-            return None
-        first_choice = choices[0]
-        if not isinstance(first_choice, dict):
-            return None
-        message_payload = first_choice.get("message")
-        if not isinstance(message_payload, dict):
-            return None
-        role = str(message_payload.get("role") or "").strip()
-        if not role:
-            return None
-        message: dict[str, Any] = {
-            "role": role,
-            "content": (
-                render_assistant_message_template(
-                    content=str(message_payload.get("content") or ""),
-                    reasoning=(
-                        None
-                        if (
-                            message_payload.get("reasoning") is None
-                            and message_payload.get("reasoning_content") is None
-                        )
-                        else str(
-                            message_payload.get(
-                                "reasoning",
-                                message_payload.get("reasoning_content"),
-                            )
-                            or ""
-                        )
-                    ),
-                    tool_calls=self._normalize_tool_calls(message_payload.get("tool_calls")),
-                )
-                if role == "assistant"
-                else str(message_payload.get("content") or "")
-            ),
-        }
-        if message_payload.get("tool_call_id") is not None:
-            message["tool_call_id"] = str(message_payload.get("tool_call_id") or "")
-        if message_payload.get("name") is not None:
-            message["name"] = str(message_payload.get("name") or "")
-        return message
 
     def _normalize_sample(self, payload: Any, index: int) -> dict[str, Any]:
         if not isinstance(payload, dict):

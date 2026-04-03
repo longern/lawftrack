@@ -33,12 +33,6 @@ def _normalize_message_list(payload: Any) -> list[dict[str, Any]]:
             "role": role,
             "content": str(item.get("content") or ""),
         }
-        reasoning = item.get("reasoning")
-        if reasoning is not None:
-            message["reasoning"] = str(reasoning or "")
-        tool_calls = item.get("tool_calls")
-        if isinstance(tool_calls, list) and tool_calls:
-            message["tool_calls"] = tool_calls
         tool_call_id = item.get("tool_call_id")
         if tool_call_id is not None:
             message["tool_call_id"] = str(tool_call_id or "")

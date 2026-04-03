@@ -137,8 +137,7 @@ export function TokenActionPanel({
             {selectedToken ? (
               <>
                 <Typography variant="body2" sx={{ color: "#fca5a5" }}>
-                  {t("Original {target} token: {token}", {
-                    target: "content",
+                  {t("Original token: {token}", {
                     token: selectedToken.originalToken,
                   })}
                 </Typography>
@@ -313,8 +312,6 @@ export function TokenActionMiniPanel({
         <Typography variant="caption" sx={{ color: "text.secondary" }}>
           {selectedSample?.title} |{" "}
           {t("Original token: {token}", { token: selectedToken.originalToken })}
-          {" | "}
-          {selectedToken.target}
         </Typography>
       ) : null}
       <TextField

@@ -8,7 +8,6 @@ export interface DatasetDraft {
 export interface TokenSelection {
   messageIndex: number;
   tokenIndex: number;
-  target: "content";
   currentToken: string;
   originalToken: string;
 }

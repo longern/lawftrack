@@ -59,11 +59,7 @@ function MessageBubble({
   onDelete?: () => void;
   onSetEditing: (editing: boolean) => void;
   selectedToken: TokenSelection | null;
-  onSelectToken: (
-    messageIndex: number,
-    tokenIndex: number,
-    target: "content",
-  ) => void;
+  onSelectToken: (messageIndex: number, tokenIndex: number) => void;
 }) {
   const { t } = useI18n();
   const isAssistant = message.role === "assistant";
@@ -111,34 +107,27 @@ function MessageBubble({
 
   function renderTokenizedSegments(
     segments: ReturnType<typeof buildTokenRenderSegments>,
-    target: "content",
   ) {
     return segments.map((segment, index) => {
       if (segment.kind === "text") {
         return renderLineBreakableText(
           segment.text,
-          `${messageIndex}-${target}-gap-${index}`,
+          `${messageIndex}-gap-${index}`,
         );
       }
 
       const tokenIndex = segment.tokenIndex;
       const matchingEdit =
-        sortedEdits.find(
-          (item) =>
-            (item.target ?? "content") === target &&
-            tokenIndex === item.token_index,
-        ) ?? null;
+        sortedEdits.find((item) => tokenIndex === item.token_index) ?? null;
       const isChanged = Boolean(matchingEdit);
       const isRegenerated = sortedEdits.some(
         (item) =>
-          (item.target ?? "content") === target &&
           item.regenerated_from_token_index !== null &&
           tokenIndex >= item.regenerated_from_token_index,
       );
       const isSelected =
         selectedToken?.messageIndex === messageIndex &&
-        selectedToken?.tokenIndex === tokenIndex &&
-        selectedToken?.target === target;
+        selectedToken?.tokenIndex === tokenIndex;
 
       const tokenButtonSx = {
         border: "none",
@@ -193,12 +182,12 @@ function MessageBubble({
         if (part) {
           items.push(
             <Box
-              key={`${messageIndex}-${target}-${tokenIndex}-${partIndex}`}
+              key={`${messageIndex}-${tokenIndex}-${partIndex}`}
               component="button"
               type="button"
               onClick={() => {
                 if (!hasContinuationDraft) {
-                  onSelectToken(messageIndex, tokenIndex, target);
+                  onSelectToken(messageIndex, tokenIndex);
                 }
               }}
               sx={tokenButtonSx}
@@ -210,14 +199,14 @@ function MessageBubble({
         if (partIndex < parts.length - 1) {
           items.push(
             <Box
-              key={`${messageIndex}-${target}-${tokenIndex}-newline-${partIndex}`}
+              key={`${messageIndex}-${tokenIndex}-newline-${partIndex}`}
               component="button"
               type="button"
               title={t("Line break token")}
               aria-label={t("Line break token")}
               onClick={() => {
                 if (!hasContinuationDraft) {
-                  onSelectToken(messageIndex, tokenIndex, target);
+                  onSelectToken(messageIndex, tokenIndex);
                 }
               }}
               sx={{
@@ -233,7 +222,7 @@ function MessageBubble({
           );
           items.push(
             <br
-              key={`${messageIndex}-${target}-${tokenIndex}-br-${partIndex}`}
+              key={`${messageIndex}-${tokenIndex}-br-${partIndex}`}
             />,
           );
         }
@@ -445,7 +434,7 @@ function MessageBubble({
                 }}
               />
             ) : isAssistant ? (
-              renderTokenizedSegments(contentSegments, "content")
+              renderTokenizedSegments(contentSegments)
             ) : (
               message.content
             )}
@@ -466,28 +455,6 @@ function MessageBubble({
                 .filter(Boolean)
                 .join(" ")}
             </Typography>
-          ) : null}
-
-          {message.tool_calls && message.tool_calls.length > 0 ? (
-            <Box
-              component="pre"
-              sx={{
-                m: 0,
-                p: 1.25,
-                borderRadius: 2,
-                overflowX: "auto",
-                bgcolor: (theme) =>
-                  isUser
-                    ? alpha("#ffffff", 0.12)
-                    : getWorkspaceColors(theme).canvasBg,
-                color: "inherit",
-                fontSize: 12,
-                lineHeight: 1.5,
-                fontFamily: '"IBM Plex Mono", "SFMono-Regular", monospace',
-              }}
-            >
-              {JSON.stringify(message.tool_calls, null, 2)}
-            </Box>
           ) : null}
         </Stack>
       </Paper>
@@ -521,7 +488,6 @@ export function MessageFlowPanel({
   onSelectToken: (
     messageIndex: number,
     tokenIndex: number,
-    target: "content",
   ) => void;
   onUpdateSampleMessages: (
     updater: (messages: DatasetMessage[]) => DatasetMessage[],

@@ -76,8 +76,6 @@ export interface DatasetToolCall {
 export interface DatasetMessage {
   role: string;
   content: string;
-  reasoning?: string | null;
-  tool_calls?: DatasetToolCall[] | null;
   tool_call_id?: string | null;
   name?: string | null;
 }
@@ -85,7 +83,6 @@ export interface DatasetMessage {
 export interface DatasetTokenEdit {
   message_index: number;
   token_index: number;
-  target?: "content" | "reasoning";
   original_token?: string | null;
   replacement_token: string;
   regenerated_from_token_index: number | null;
@@ -104,8 +101,6 @@ export interface DatasetMessageToken {
 export interface DatasetMessageTokenization {
   message_index: number;
   role: string;
-  reasoning?: string | null;
-  reasoning_tokens: DatasetMessageToken[];
   content: string;
   tokens: DatasetMessageToken[];
 }

@@ -16,25 +16,6 @@ def extract_message_text(value: Any) -> str:
     return ""
 
 
-def message_has_assistant_metadata(message: dict[str, Any]) -> bool:
-    tool_calls = message.get("tool_calls")
-    return bool(
-        message.get("reasoning") is not None
-        or message.get("reasoning_content") is not None
-        or (isinstance(tool_calls, list) and tool_calls)
-    )
-
-
-def build_assistant_template_input_content(message: dict[str, Any]) -> str:
-    reasoning = extract_message_text(
-        message.get("reasoning", message.get("reasoning_content"))
-    )
-    content = extract_message_text(message.get("content"))
-    if reasoning:
-        return f"<think>{reasoning}</think>{content}"
-    return content
-
-
 def _build_template_message(
     message: dict[str, Any],
     *,
@@ -46,7 +27,7 @@ def _build_template_message(
         if assistant_mode == "placeholder":
             payload["content"] = ""
         else:
-            payload["content"] = build_assistant_template_input_content(message)
+            payload["content"] = extract_message_text(message.get("content"))
             tool_calls = message.get("tool_calls")
             if isinstance(tool_calls, list) and tool_calls:
                 payload["tool_calls"] = [
@@ -224,7 +205,7 @@ def render_prompt_from_stored_messages(
 
     for message in messages:
         role = str(message.get("role") or "")
-        if role == "assistant" and not message_has_assistant_metadata(message):
+        if role == "assistant":
             rendered_parts.append(extract_message_text(message.get("content")))
             logical_history.append(
                 _build_template_message(message, assistant_mode="placeholder")

@@ -139,17 +139,11 @@ export function serializeSampleAsYaml(sample: DatasetSample): string {
   lines.push("messages:");
   for (const message of sample.messages) {
     lines.push(`${indent(1)}- role: ${formatYamlScalar(message.role)}`);
-    if (message.reasoning) {
-      pushYamlStringField(lines, 2, "reasoning", message.reasoning);
-    }
     if (message.name) {
       pushYamlStringField(lines, 2, "name", message.name);
     }
     if (message.tool_call_id) {
       pushYamlStringField(lines, 2, "tool_call_id", message.tool_call_id);
-    }
-    if (message.tool_calls && message.tool_calls.length > 0) {
-      pushYamlJsonField(lines, 2, "tool_calls", message.tool_calls);
     }
     pushYamlStringField(lines, 2, "content", message.content);
   }
@@ -168,9 +162,6 @@ export function serializeSampleAsYaml(sample: DatasetSample): string {
     for (const anchor of anchors) {
       lines.push(
         `${indent(1)}- message_index: ${formatYamlScalar(anchor.message_index)}`,
-      );
-      lines.push(
-        `${indent(2)}target: ${formatYamlScalar(anchor.target ?? "content")}`,
       );
       lines.push(
         `${indent(2)}token_index: ${formatYamlScalar(anchor.token_index)}`,

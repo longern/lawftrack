@@ -114,7 +114,6 @@ export interface WorkspaceShellProps {
   onSelectToken: (
     messageIndex: number,
     tokenIndex: number,
-    target: "content",
   ) => void;
   onSetReplacementToken: (value: string) => void;
 }

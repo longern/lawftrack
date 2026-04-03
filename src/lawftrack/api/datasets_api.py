@@ -11,13 +11,9 @@ import httpx
 from pydantic import BaseModel
 
 from .chat_template_storage import extract_message_text
-from .chat_template_storage import message_has_assistant_metadata
-from .chat_template_storage import render_message_delta_from_chat_template
 from .chat_template_storage import render_prompt_from_stored_messages
 from .dataset_store import DatasetStore
 from .dataset_store import DuplicateDatasetNameError
-from .message_templates import parse_assistant_message_template
-from .message_templates import render_assistant_message_template
 from .tokenizer_service import TokenizerDependencyError
 from .tokenizer_service import build_prefix_before_token
 from .tokenizer_service import build_continuation_prefix
@@ -44,8 +40,6 @@ class UpdateDatasetRequest(BaseModel):
 class DatasetMessagePayload(BaseModel):
     role: str
     content: str
-    reasoning: str | None = None
-    tool_calls: list[dict[str, Any]] | None = None
     tool_call_id: str | None = None
     name: str | None = None
 
@@ -53,7 +47,6 @@ class DatasetMessagePayload(BaseModel):
 class DatasetTokenEditPayload(BaseModel):
     message_index: int
     token_index: int
-    target: str | None = "content"
     original_token: str | None = None
     replacement_token: str
     regenerated_from_token_index: int | None = None
@@ -84,7 +77,6 @@ class ContinueDatasetSampleRequest(BaseModel):
     model: str
     message_index: int
     token_index: int
-    target: str | None = "content"
     replacement_token: str
     max_tokens: int | None = None
     temperature: float = 0.7
@@ -94,7 +86,6 @@ class ListTokenCandidatesRequest(BaseModel):
     model: str
     message_index: int
     token_index: int
-    target: str | None = "content"
     top_logprobs: int = 10
 
 
@@ -115,59 +106,15 @@ def serialize_model(model: BaseModel) -> dict[str, Any]:
     return model.dict(exclude_unset=True)
 
 
-def extract_reasoning_from_message(message: dict[str, Any]) -> str | None:
-    if str(message.get("role") or "") == "assistant":
-        parsed = parse_assistant_message_template(message.get("content"))
-        reasoning = extract_message_text(parsed.get("reasoning"))
-        if reasoning:
-            return reasoning
-    reasoning = extract_message_text(
-        message.get("reasoning", message.get("reasoning_content"))
-    )
-    return reasoning or None
-
-
 def extract_content_from_message(message: dict[str, Any]) -> str:
-    if str(message.get("role") or "") == "assistant":
-        return extract_message_text(message.get("content"))
     return extract_message_text(message.get("content"))
 
 
-def extract_tool_calls_from_message(message: dict[str, Any]) -> list[dict[str, Any]]:
-    tool_calls = message.get("tool_calls")
-    if isinstance(tool_calls, list):
-        return [item for item in tool_calls if isinstance(item, dict)]
-    return []
-
-
-def build_sample_message(
-    *,
-    role: str,
-    content: str,
-    reasoning: str | None = None,
-    tool_calls: list[dict[str, Any]] | None = None,
-    tool_call_id: str | None = None,
-    name: str | None = None,
-) -> dict[str, Any]:
-    payload: dict[str, Any] = {
-        "role": role,
-        "content": content,
-    }
-    if reasoning:
-        payload["reasoning"] = reasoning
-    if tool_calls:
-        payload["tool_calls"] = tool_calls
-    if tool_call_id:
-        payload["tool_call_id"] = tool_call_id
-    if name:
-        payload["name"] = name
-    return payload
-
-
-def render_assistant_prefill(*, reasoning: str | None = None, content: str = "") -> str:
-    if reasoning:
-        return f"<think>{reasoning}</think>{content}"
-    return content
+def extract_completion_text(payload: dict[str, Any]) -> str:
+    choices = payload.get("choices") or []
+    if not choices:
+        return ""
+    return extract_message_text(choices[0].get("text"))
 
 
 def build_completion_prompt(
@@ -191,40 +138,6 @@ def build_completion_prompt(
         add_generation_prompt=True,
         config_dir=config_dir,
     )
-
-
-def build_completion_prefill(
-    *,
-    target_message: dict[str, Any],
-    target: str,
-    prefix: str,
-) -> str:
-    if target == "reasoning":
-        return f"<think>{prefix}"
-    return prefix
-
-
-def extract_completion_text(payload: dict[str, Any]) -> str:
-    choices = payload.get("choices") or []
-    if not choices:
-        return ""
-    return extract_message_text(choices[0].get("text"))
-
-
-def parse_prefilled_assistant_text(text: str) -> tuple[str | None, str]:
-    parsed = parse_assistant_message_template(text)
-    reasoning = extract_message_text(parsed.get("reasoning")) or None
-    content = str(parsed.get("content") or "")
-    return reasoning, content
-
-
-def replace_prefilled_assistant_reasoning(text: str, reasoning: str) -> str:
-    if text.startswith("<think>"):
-        closing_tag = "</think>"
-        closing_index = text.find(closing_tag)
-        if closing_index >= 0:
-            return f"<think>{reasoning}</think>{text[closing_index + len(closing_tag):]}"
-    return render_assistant_prefill(reasoning=reasoning, content=text)
 
 
 def extract_completion_logprob_candidates(
@@ -273,20 +186,10 @@ def prepare_sample_continuation(
             status_code=400,
             detail="Only assistant messages support token continuation.",
         )
-    target = (payload.target or "content").strip().lower()
-    if target not in {"content", "reasoning"}:
-        raise HTTPException(
-            status_code=400, detail="Target must be `content` or `reasoning`."
-        )
-
     try:
         prefix, original_token, replacement_token = build_continuation_prefix(
             model=payload.model,
-            text=(
-                str(extract_reasoning_from_message(target_message) or "")
-                if target == "reasoning"
-                else extract_content_from_message(target_message)
-            ),
+            text=extract_content_from_message(target_message),
             token_index=payload.token_index,
             replacement_text=payload.replacement_token,
             config_dir=config_dir,
@@ -307,15 +210,10 @@ def prepare_sample_continuation(
         headers["authorization"] = f"Bearer {current_config['api_key']}"
 
     try:
-        assistant_prefill = build_completion_prefill(
-            target_message=target_message,
-            target=target,
-            prefix=prefix,
-        )
         prompt = build_completion_prompt(
             model=payload.model,
             prompt_messages=messages[: payload.message_index],
-            assistant_prefill=assistant_prefill,
+            assistant_prefill=prefix,
             tools=sample.get("tools"),
             config_dir=config_dir,
         )
@@ -345,12 +243,11 @@ def prepare_sample_continuation(
     return {
         "messages": messages,
         "target_message": target_message,
-        "target": target,
         "prefix": prefix,
         "original_token": original_token,
         "replacement_token": replacement_token,
         "replacement_token_count": replacement_token_count,
-        "assistant_prefill": assistant_prefill,
+        "assistant_prefill": prefix,
         "headers": headers,
         "upstream_url": build_vllm_url(current_config["vllm_endpoint"], "completions"),
         "upstream_payload": upstream_payload,
@@ -361,8 +258,6 @@ def build_continued_sample(
     *,
     sample: dict[str, Any],
     payload: ContinueDatasetSampleRequest,
-    target_message: dict[str, Any],
-    target: str,
     prefix: str,
     original_token: str,
     replacement_token: str,
@@ -370,27 +265,7 @@ def build_continued_sample(
     completion_text: str,
 ) -> dict[str, Any]:
     messages = list(sample.get("messages", []))
-    parsed_target_message = parse_assistant_message_template(
-        target_message.get("content")
-    )
-    existing_reasoning = extract_reasoning_from_message(target_message)
-    existing_content = str(parsed_target_message.get("content") or "")
-    if target == "reasoning":
-        merged_reasoning, _ignored_content = parse_prefilled_assistant_text(
-            build_completion_prefill(
-                target_message=target_message,
-                target=target,
-                prefix=prefix,
-            )
-            + completion_text
-        )
-        content = replace_prefilled_assistant_reasoning(
-            str(target_message.get("content") or ""),
-            merged_reasoning or "",
-        )
-    else:
-        content = f"{prefix}{completion_text}"
-        merged_reasoning = existing_reasoning
+    content = f"{prefix}{completion_text}"
     next_messages = messages[: payload.message_index] + [
         {"role": "assistant", "content": content}
     ]
@@ -402,10 +277,7 @@ def build_continued_sample(
             int(edit.get("message_index", -1)) < payload.message_index
             or (
                 int(edit.get("message_index", -1)) == payload.message_index
-                and (
-                    str(edit.get("target") or "content") != target
-                    or int(edit.get("token_index", -1)) < payload.token_index
-                )
+                and int(edit.get("token_index", -1)) < payload.token_index
             )
         )
     ]
@@ -413,7 +285,6 @@ def build_continued_sample(
         {
             "message_index": payload.message_index,
             "token_index": payload.token_index,
-            "target": target,
             "original_token": original_token,
             "replacement_token": replacement_token,
             "regenerated_from_token_index": payload.token_index
@@ -470,49 +341,9 @@ def build_sample_tokenization_payload(
     config_dir: Path | None = None,
 ) -> dict[str, Any]:
     tokenized_messages = []
-    normalized_messages: list[dict[str, Any]] = []
-    for message in messages:
-        role = str(message.get("role") or "")
-        if role == "assistant" and message_has_assistant_metadata(message):
-            try:
-                normalized_content = render_message_delta_from_chat_template(
-                    model=model,
-                    prompt_messages=normalized_messages,
-                    message=message,
-                    tools=tools,
-                    config_dir=config_dir,
-                )
-            except TokenizerDependencyError:
-                normalized_content = render_assistant_message_template(
-                    content=extract_message_text(message.get("content")),
-                    reasoning=extract_message_text(
-                        message.get("reasoning", message.get("reasoning_content"))
-                    )
-                    or None,
-                    tool_calls=extract_tool_calls_from_message(message),
-                )
-            normalized_messages.append(
-                {
-                    "role": "assistant",
-                    "content": normalized_content,
-                }
-            )
-        else:
-            normalized_messages.append(dict(message))
-
-    for index, message in enumerate(normalized_messages):
+    for index, message in enumerate(messages):
         if message.get("role") == "assistant":
-            reasoning_text = str(extract_reasoning_from_message(message) or "")
             content_text = extract_content_from_message(message)
-            reasoning_tokens = (
-                tokenize_text(
-                    model=model,
-                    text=reasoning_text,
-                    config_dir=config_dir,
-                )
-                if reasoning_text
-                else []
-            )
             tokens = (
                 tokenize_text(
                     model=model,
@@ -523,15 +354,11 @@ def build_sample_tokenization_payload(
                 else []
             )
         else:
-            reasoning_text = ""
-            reasoning_tokens = []
             tokens = []
         tokenized_messages.append(
             {
                 "message_index": index,
                 "role": message.get("role"),
-                "reasoning": reasoning_text or None,
-                "reasoning_tokens": reasoning_tokens,
                 "content": message.get("content"),
                 "tokens": tokens,
             }
@@ -561,6 +388,8 @@ def build_router(config_dir: Path | None = None) -> APIRouter:
             return store.create_dataset(serialize_model(payload))
         except DuplicateDatasetNameError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except TokenizerDependencyError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -575,6 +404,8 @@ def build_router(config_dir: Path | None = None) -> APIRouter:
                 dataset = store.import_metadata_file(filename=filename, content=content)
             except DuplicateDatasetNameError as exc:
                 raise HTTPException(status_code=409, detail=str(exc)) from exc
+            except TokenizerDependencyError as exc:
+                raise HTTPException(status_code=503, detail=str(exc)) from exc
             except ValueError as exc:
                 raise HTTPException(status_code=400, detail=str(exc)) from exc
             return dataset
@@ -588,6 +419,8 @@ def build_router(config_dir: Path | None = None) -> APIRouter:
                 )
             except DuplicateDatasetNameError as exc:
                 raise HTTPException(status_code=409, detail=str(exc)) from exc
+            except TokenizerDependencyError as exc:
+                raise HTTPException(status_code=503, detail=str(exc)) from exc
             except ValueError as exc:
                 raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -781,7 +614,6 @@ def build_router(config_dir: Path | None = None) -> APIRouter:
             "prompt": prepared["upstream_payload"]["prompt"],
             "suggested_max_tokens": prepared["upstream_payload"]["max_tokens"],
             "prefix": prepared["prefix"],
-            "target": prepared["target"],
             "original_token": prepared["original_token"],
             "replacement_token": prepared["replacement_token"],
             "regenerated_from_token_index": payload.token_index
@@ -817,17 +649,7 @@ def build_router(config_dir: Path | None = None) -> APIRouter:
                 status_code=400,
                 detail="Only assistant messages support token continuation.",
             )
-        target = (payload.target or "content").strip().lower()
-        if target not in {"content", "reasoning"}:
-            raise HTTPException(
-                status_code=400, detail="Target must be `content` or `reasoning`."
-            )
-
-        target_text = str(
-            extract_reasoning_from_message(target_message)
-            if target == "reasoning"
-            else extract_content_from_message(target_message)
-        )
+        target_text = extract_content_from_message(target_message)
         try:
             prefix = build_prefix_before_token(
                 model=payload.model,
@@ -849,11 +671,7 @@ def build_router(config_dir: Path | None = None) -> APIRouter:
             prompt = build_completion_prompt(
                 model=payload.model,
                 prompt_messages=messages[: payload.message_index],
-                assistant_prefill=build_completion_prefill(
-                    target_message=target_message,
-                    target=target,
-                    prefix=prefix,
-                ),
+                assistant_prefill=prefix,
                 tools=sample.get("tools"),
                 config_dir=config_dir,
             )
@@ -928,8 +746,6 @@ def build_router(config_dir: Path | None = None) -> APIRouter:
             payload=payload,
             config_dir=config_dir,
         )
-        target_message = prepared["target_message"]
-        target = prepared["target"]
         prefix = prepared["prefix"]
         original_token = prepared["original_token"]
         replacement_token = prepared["replacement_token"]
@@ -956,8 +772,6 @@ def build_router(config_dir: Path | None = None) -> APIRouter:
         next_sample = build_continued_sample(
             sample=sample,
             payload=payload,
-            target_message=target_message,
-            target=target,
             prefix=prefix,
             original_token=original_token,
             replacement_token=replacement_token,
@@ -1021,6 +835,8 @@ def build_router(config_dir: Path | None = None) -> APIRouter:
             return store.update_dataset(dataset_id, serialize_model(payload))
         except DuplicateDatasetNameError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except TokenizerDependencyError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         except FileNotFoundError as exc:

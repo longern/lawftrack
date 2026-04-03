@@ -85,13 +85,11 @@ function buildContinuationPreviewEditList(
   regeneratedFromTokenIndex: number,
   keepRewriteMark = true,
 ) {
-  const target = selection.target;
   const previousEdits = sample.edits.filter(
     (edit) =>
       edit.message_index < selection.messageIndex ||
       (edit.message_index === selection.messageIndex &&
-        ((edit.target ?? "content") !== target ||
-          edit.token_index < selection.tokenIndex)),
+        edit.token_index < selection.tokenIndex),
   );
   if (!keepRewriteMark) {
     return previousEdits;
@@ -101,7 +99,6 @@ function buildContinuationPreviewEditList(
     {
       message_index: selection.messageIndex,
       token_index: selection.tokenIndex,
-      target,
       original_token: originalToken,
       replacement_token: replacementToken,
       regenerated_from_token_index: regeneratedFromTokenIndex,
@@ -214,8 +211,7 @@ function DataWorkspace({
     selectedSample.edits.find(
       (edit) =>
         edit.message_index === selectedToken.messageIndex &&
-        edit.token_index === selectedToken.tokenIndex &&
-        (edit.target ?? "content") === selectedToken.target,
+        edit.token_index === selectedToken.tokenIndex,
     ),
   );
   const tokenSequence = useMemo(
@@ -225,7 +221,6 @@ function DataWorkspace({
           ? message.tokens.map((token) => ({
               messageIndex: message.message_index,
               tokenIndex: token.token_index,
-              target: "content" as const,
             }))
           : [],
       ),
@@ -237,8 +232,7 @@ function DataWorkspace({
         ? tokenSequence.findIndex(
             (token) =>
               token.messageIndex === selectedToken.messageIndex &&
-              token.tokenIndex === selectedToken.tokenIndex &&
-              token.target === selectedToken.target,
+              token.tokenIndex === selectedToken.tokenIndex,
           )
         : -1,
     [selectedToken, tokenSequence],
@@ -362,10 +356,8 @@ function DataWorkspace({
         messages: sample.messages.map((message) => ({
           role: message.role,
           content: message.content,
-          reasoning: message.reasoning ?? null,
           tool_call_id: message.tool_call_id ?? null,
           name: message.name ?? null,
-          tool_calls: message.tool_calls ?? [],
         })),
         tools: sample.tools ?? [],
       },
@@ -762,7 +754,6 @@ function DataWorkspace({
   async function handleSelectToken(
     messageIndex: number,
     tokenIndex: number,
-    _target: "content" = "content",
   ) {
     if (!visibleSample || continuationDraft) {
       return;
@@ -776,7 +767,6 @@ function DataWorkspace({
       tokenization,
       messageIndex,
       tokenIndex,
-      "content",
     );
   }
 
@@ -785,7 +775,6 @@ function DataWorkspace({
     tokenization: DatasetSampleTokenization,
     messageIndex: number,
     tokenIndex: number,
-    target: "content",
   ) {
     const message = tokenization.messages.find(
       (item) => item.message_index === messageIndex,
@@ -800,18 +789,11 @@ function DataWorkspace({
     setSelectedToken({
       messageIndex,
       tokenIndex,
-      target,
       currentToken: tokenText,
       originalToken: tokenText,
     });
     setReplacementToken(tokenText);
-    void loadTokenCandidates(
-      sample,
-      tokenization,
-      messageIndex,
-      tokenIndex,
-      target,
-    );
+    void loadTokenCandidates(sample, tokenization, messageIndex, tokenIndex);
   }
 
   async function handleSelectAdjacentToken(direction: -1 | 1) {
@@ -827,8 +809,7 @@ function DataWorkspace({
     const currentIndex = tokenSequence.findIndex(
       (token) =>
         token.messageIndex === selectedToken.messageIndex &&
-        token.tokenIndex === selectedToken.tokenIndex &&
-        token.target === selectedToken.target,
+        token.tokenIndex === selectedToken.tokenIndex,
     );
     const nextToken = tokenSequence[currentIndex + direction];
     if (!nextToken) {
@@ -839,7 +820,6 @@ function DataWorkspace({
       tokenization,
       nextToken.messageIndex,
       nextToken.tokenIndex,
-      nextToken.target,
     );
   }
 
@@ -856,7 +836,6 @@ function DataWorkspace({
     tokenization: DatasetSampleTokenization | null,
     messageIndex: number,
     tokenIndex: number,
-    target: "content",
   ) {
     if (!draft || !activeDataset || !tokenization) {
       return;
@@ -901,7 +880,6 @@ function DataWorkspace({
             model,
             message_index: messageIndex,
             token_index: tokenIndex,
-            target,
             top_logprobs: 10,
           }),
         },
@@ -990,7 +968,6 @@ function DataWorkspace({
             model,
             message_index: selectedToken.messageIndex,
             token_index: selectedToken.tokenIndex,
-            target: selectedToken.target,
             replacement_token: submittedReplacementToken,
           }),
         },
@@ -1116,8 +1093,7 @@ function DataWorkspace({
         ...latestSample,
         edits: latestSample.edits.map((edit) =>
           edit.message_index === selectedToken.messageIndex &&
-          edit.token_index === selectedToken.tokenIndex &&
-          (edit.target ?? "content") === selectedToken.target
+          edit.token_index === selectedToken.tokenIndex
             ? {
                 ...edit,
                 original_token: preparation.original_token,
@@ -1130,8 +1106,7 @@ function DataWorkspace({
         anchors:
           latestSample.anchors?.map((edit) =>
             edit.message_index === selectedToken.messageIndex &&
-            edit.token_index === selectedToken.tokenIndex &&
-            (edit.target ?? "content") === selectedToken.target
+            edit.token_index === selectedToken.tokenIndex
               ? {
                   ...edit,
                   original_token: preparation.original_token,
@@ -1236,8 +1211,7 @@ function DataWorkspace({
     const activeEdit = acceptedSample.edits.find(
       (edit) =>
         edit.message_index === selectedToken.messageIndex &&
-        edit.token_index === selectedToken.tokenIndex &&
-        (edit.target ?? "content") === selectedToken.target,
+        edit.token_index === selectedToken.tokenIndex,
     );
     setSelectedToken({
       ...selectedToken,
@@ -1344,7 +1318,7 @@ function DataWorkspace({
     const optimisticMessages = shouldFillExistingAssistant
       ? selectedSample.messages.map((message, index) =>
           index === selectedSample.messages.length - 1
-            ? { ...message, content: "", reasoning: undefined }
+            ? { ...message, content: "" }
             : message,
         )
       : [...selectedSample.messages, { role: "assistant", content: "" }];
@@ -1454,7 +1428,6 @@ function DataWorkspace({
                 ? {
                     ...message,
                     content: rawAssistantText,
-                    reasoning: undefined,
                   }
                 : message,
             ),

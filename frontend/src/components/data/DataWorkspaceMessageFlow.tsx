@@ -159,7 +159,7 @@ function MessageBubble({
           isSelected
             ? `0 0 0 1px ${alpha(theme.palette.primary.main, 0.75)} inset`
             : "none",
-        fontWeight: isChanged ? 800 : isSelected ? 700 : 500,
+        fontWeight: isChanged ? 800 : isSelected ? 700 : undefined,
         transition: "background-color 120ms ease",
         "&:hover": {
           backgroundColor: (theme: Parameters<typeof getWorkspaceColors>[0]) =>
@@ -221,9 +221,7 @@ function MessageBubble({
             </Box>,
           );
           items.push(
-            <br
-              key={`${messageIndex}-${tokenIndex}-br-${partIndex}`}
-            />,
+            <br key={`${messageIndex}-${tokenIndex}-br-${partIndex}`} />,
           );
         }
         return items;
@@ -451,7 +449,12 @@ function MessageBubble({
                 fontFamily: '"IBM Plex Mono", "SFMono-Regular", monospace',
               }}
             >
-              {[message.name ? `name=${message.name}` : null, message.tool_call_id ? `tool_call_id=${message.tool_call_id}` : null]
+              {[
+                message.name ? `name=${message.name}` : null,
+                message.tool_call_id
+                  ? `tool_call_id=${message.tool_call_id}`
+                  : null,
+              ]
                 .filter(Boolean)
                 .join(" ")}
             </Typography>
@@ -485,10 +488,7 @@ export function MessageFlowPanel({
   onGenerateAssistantMessage: () => void;
   selectedToken: TokenSelection | null;
   onSaveSample: () => void;
-  onSelectToken: (
-    messageIndex: number,
-    tokenIndex: number,
-  ) => void;
+  onSelectToken: (messageIndex: number, tokenIndex: number) => void;
   onUpdateSampleMessages: (
     updater: (messages: DatasetMessage[]) => DatasetMessage[],
   ) => void;

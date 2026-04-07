@@ -47,18 +47,43 @@ export function buildTokenRenderSegments(
     | { kind: "text"; text: string }
     | { kind: "token"; tokenIndex: number; text: string }
   > = [];
+  const codePointToCodeUnitOffsets = [0];
+  let codeUnitCursor = 0;
+
+  // Token offset mappings come from Python/Hugging Face fast tokenizers.
+  // Those offsets are based on Python string indexing, while JS `slice`
+  // uses UTF-16 code units. Convert once so emoji and other astral symbols
+  // do not split the residual text into invalid tail fragments.
+  for (const codePoint of text) {
+    codeUnitCursor += codePoint.length;
+    codePointToCodeUnitOffsets.push(codeUnitCursor);
+  }
+
+  function toJsOffset(offset: number): number {
+    if (!Number.isFinite(offset) || offset <= 0) {
+      return 0;
+    }
+    if (offset >= codePointToCodeUnitOffsets.length - 1) {
+      return text.length;
+    }
+    return codePointToCodeUnitOffsets[offset] ?? text.length;
+  }
+
   let cursor = 0;
 
   for (const token of normalizedTokens) {
-    if (token.start > cursor) {
-      segments.push({ kind: "text", text: text.slice(cursor, token.start) });
+    const tokenStart = toJsOffset(token.start);
+    const tokenEnd = Math.max(tokenStart, toJsOffset(token.end));
+
+    if (tokenStart > cursor) {
+      segments.push({ kind: "text", text: text.slice(cursor, tokenStart) });
     }
     segments.push({
       kind: "token",
       tokenIndex: token.token_index,
       text: token.text,
     });
-    cursor = token.end;
+    cursor = tokenEnd;
   }
 
   if (cursor < text.length) {

@@ -36,6 +36,9 @@ import {
   useState,
   type MouseEvent as ReactMouseEvent,
 } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkBreaks from "remark-breaks";
+import remarkGfm from "remark-gfm";
 import { useStickToBottom } from "use-stick-to-bottom";
 import { useI18n } from "../i18n";
 import type { ApiListResponse, DatasetMessage } from "../types/app";
@@ -152,6 +155,145 @@ interface AssistantBubbleProps {
   response: TurnResponse | undefined;
   label: string;
   accentColor: string;
+}
+
+interface MarkdownMessageProps {
+  content: string;
+  accentColor: string;
+  emptyLabel: string;
+}
+
+function MarkdownMessage({
+  content,
+  accentColor,
+  emptyLabel,
+}: MarkdownMessageProps) {
+  const hasContent = content.trim() !== "";
+
+  if (!hasContent) {
+    return (
+      <Typography
+        variant="body1"
+        color="text.secondary"
+        sx={{ minHeight: 48, lineHeight: 1.72 }}
+      >
+        {emptyLabel}
+      </Typography>
+    );
+  }
+
+  return (
+    <Box
+      sx={{
+        minHeight: 48,
+        color: "text.primary",
+        lineHeight: 1.72,
+        wordBreak: "break-word",
+        overflowWrap: "anywhere",
+        "& > :first-of-type": {
+          mt: 0,
+        },
+        "& > :last-child": {
+          mb: 0,
+        },
+        "& p": {
+          my: 1.1,
+        },
+        "& h1, & h2, & h3, & h4, & h5, & h6": {
+          mt: 1.8,
+          mb: 0.9,
+          lineHeight: 1.3,
+          fontWeight: 700,
+        },
+        "& h1": {
+          fontSize: "1.35rem",
+        },
+        "& h2": {
+          fontSize: "1.2rem",
+        },
+        "& h3": {
+          fontSize: "1.08rem",
+        },
+        "& ul, & ol": {
+          my: 1.1,
+          pl: 3,
+        },
+        "& li": {
+          my: 0.4,
+        },
+        "& li > p": {
+          my: 0.25,
+        },
+        "& a": {
+          color: accentColor,
+        },
+        "& blockquote": {
+          my: 1.2,
+          mx: 0,
+          px: 1.5,
+          py: 0.8,
+          borderLeft: `3px solid ${alpha(accentColor, 0.45)}`,
+          backgroundColor: alpha(accentColor, 0.08),
+          borderRadius: 1.5,
+          color: "text.secondary",
+        },
+        "& hr": {
+          my: 1.8,
+          border: 0,
+          borderTop: `1px solid ${alpha(accentColor, 0.2)}`,
+        },
+        "& :not(pre) > code": {
+          px: 0.7,
+          py: 0.2,
+          borderRadius: 1,
+          fontSize: "0.92em",
+          fontFamily:
+            'ui-monospace, SFMono-Regular, SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace',
+          backgroundColor: alpha(accentColor, 0.12),
+        },
+        "& pre": {
+          my: 1.2,
+          p: 1.5,
+          overflowX: "auto",
+          borderRadius: 2,
+          fontSize: "0.9rem",
+          lineHeight: 1.6,
+          backgroundColor:
+            (theme) =>
+              theme.palette.mode === "dark"
+                ? alpha("#000000", 0.28)
+                : alpha("#0f172a", 0.06),
+        },
+        "& pre code": {
+          fontFamily:
+            'ui-monospace, SFMono-Regular, SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace',
+          backgroundColor: "transparent",
+          padding: 0,
+          borderRadius: 0,
+        },
+        "& table": {
+          display: "block",
+          width: "100%",
+          my: 1.2,
+          overflowX: "auto",
+          borderCollapse: "collapse",
+        },
+        "& th, & td": {
+          px: 1,
+          py: 0.75,
+          border: `1px solid ${alpha(accentColor, 0.18)}`,
+          textAlign: "left",
+        },
+        "& th": {
+          backgroundColor: alpha(accentColor, 0.08),
+        },
+      }}
+    >
+      <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} skipHtml>
+        {content}
+      </ReactMarkdown>
+    </Box>
+  );
 }
 
 function AssistantBubble({
@@ -278,21 +420,11 @@ function AssistantBubble({
           </Stack>
         ) : null}
 
-        <Typography
-          variant="body1"
-          sx={{
-            whiteSpace: "pre-wrap",
-            wordBreak: "break-word",
-            color:
-              responseContent.trim() !== "" ? "text.primary" : "text.secondary",
-            minHeight: 48,
-            lineHeight: 1.72,
-          }}
-        >
-          {responseContent.trim() !== ""
-            ? responseContent
-            : t("Waiting for model output.")}
-        </Typography>
+        <MarkdownMessage
+          content={responseContent}
+          accentColor={accentColor}
+          emptyLabel={t("Waiting for model output.")}
+        />
       </Stack>
     </Paper>
   );

@@ -6,6 +6,15 @@ export default defineConfig({
   build: {
     outDir: "../src/lawftrack/_frontend",
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes("@mui/icons-material")) {
+            return "mui-icons";
+          }
+        },
+      },
+    },
   },
   server: {
     host: "127.0.0.1",

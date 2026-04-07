@@ -17,12 +17,10 @@ import {
 import { alpha, ThemeProvider } from "@mui/material/styles";
 import useMediaQuery from "@mui/material/useMediaQuery";
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
-import DataWorkspace from "./components/data/DataWorkspace";
 import AppSidebar from "./components/layout/AppSidebar";
 import ErrorCard from "./components/shared/ErrorCard";
 import { DRAWER_WIDTH, getNavItems } from "./constants/app";
 import { useI18n } from "./i18n";
-import ChatSection from "./sections/ChatSection";
 import MySection from "./sections/MySection";
 import OverviewSection from "./sections/OverviewSection";
 import { createAppTheme } from "./theme/appTheme";
@@ -35,6 +33,8 @@ import type {
 } from "./types/app";
 
 const LAST_OPENED_DATASET_STORAGE_KEY = "lawftrack:last-opened-dataset-id";
+const DataWorkspace = lazy(() => import("./components/data/DataWorkspace"));
+const ChatSection = lazy(() => import("./sections/ChatSection"));
 const HowItWorksSection = lazy(() => import("./sections/HowItWorksSection"));
 const TrainingSection = lazy(() => import("./sections/TrainingSection"));
 
@@ -395,12 +395,14 @@ function App() {
                   </Box>
                 ) : null}
                 <Box sx={{ flex: 1, minHeight: 0 }}>
-                  <DataWorkspace
-                    isMobile={isMobile}
-                    initialDatasetId={pendingDatasetId}
-                    onDatasetOpen={handleOpenDataset}
-                    onInitialDatasetHandled={() => setPendingDatasetId(null)}
-                  />
+                  <Suspense fallback={<LinearProgress />}>
+                    <DataWorkspace
+                      isMobile={isMobile}
+                      initialDatasetId={pendingDatasetId}
+                      onDatasetOpen={handleOpenDataset}
+                      onInitialDatasetHandled={() => setPendingDatasetId(null)}
+                    />
+                  </Suspense>
                 </Box>
               </Box>
             ) : activeView === "chat" ? (
@@ -419,7 +421,9 @@ function App() {
                   </Box>
                 ) : null}
                 <Box sx={{ flex: 1, minHeight: 0 }}>
-                  <ChatSection isMobile={isMobile} />
+                  <Suspense fallback={<LinearProgress />}>
+                    <ChatSection isMobile={isMobile} />
+                  </Suspense>
                 </Box>
               </Box>
             ) : activeView === "training" ? (

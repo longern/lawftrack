@@ -1884,6 +1884,54 @@ class ServerTests(unittest.TestCase):
                 ],
             )
 
+    def test_render_completion_prompt_returns_template_error_as_json_detail(self) -> None:
+        sys.path.insert(0, str(ROOT / "src"))
+        try:
+            import lawftrack.api.datasets_api as datasets_api_module
+            import lawftrack.api.chat_template_storage as storage_module
+        finally:
+            sys.path.pop(0)
+
+        class FakeTokenizer:
+            def apply_chat_template(self, messages, **kwargs):
+                raise storage_module.TemplateError("bad template")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = Path(temp_dir) / "config.json"
+            config_path.write_text(
+                json.dumps({"vllm_endpoint": "http://localhost:8000/v1", "api_key": ""}),
+                encoding="utf-8",
+            )
+
+            client = self._create_client(temp_dir)
+            with mock.patch.object(
+                datasets_api_module,
+                "load_tokenizer",
+                return_value=FakeTokenizer(),
+            ):
+                with mock.patch.object(
+                    storage_module,
+                    "load_tokenizer",
+                    return_value=FakeTokenizer(),
+                ):
+                    response = client.post(
+                        "/api/datasets/render_completion_prompt",
+                        json={
+                            "model": "demo-model",
+                            "messages": [{"role": "user", "content": "hi"}],
+                        },
+                    )
+
+        self.assertEqual(response.status_code, 400)
+        payload = response.json()
+        self.assertEqual(payload["detail"]["code"], "chat_template_error")
+        self.assertEqual(payload["detail"]["template_error"], "bad template")
+        self.assertEqual(
+            payload["detail"]["parameters"]["messages"],
+            [{"role": "user", "content": "hi"}],
+        )
+        self.assertTrue(payload["detail"]["parameters"]["tokenize"])
+
     def test_suggest_completion_max_tokens_caps_to_model_config_limit(self) -> None:
         sys.path.insert(0, str(ROOT / "src"))
         try:
@@ -2228,6 +2276,60 @@ class ServerTests(unittest.TestCase):
 
         self.assertEqual(delta, "<|assistant|>hello<|end_assistant|>")
         self.assertEqual(generation_delta, "<|assistant|>")
+
+    def test_render_prompt_from_stored_messages_batches_system_and_user_messages(self) -> None:
+        sys.path.insert(0, str(ROOT / "src"))
+        try:
+            import lawftrack.api.chat_template_storage as storage_module
+        finally:
+            sys.path.pop(0)
+
+        class FakeTokenizer:
+            def apply_chat_template(
+                self,
+                messages,
+                *,
+                tools=None,
+                add_generation_prompt=False,
+                tokenize=False,
+            ):
+                roles = [message.get("role") for message in messages]
+                if roles == ["system"]:
+                    raise storage_module.TemplateError("system-only is invalid")
+                rendered = "|".join(
+                    f"{message['role']}:{message.get('content', '')}" for message in messages
+                )
+                if tokenize:
+                    if add_generation_prompt:
+                        rendered += "|assistant:"
+                    return {"input_ids": [ord(character) for character in rendered]}
+                if add_generation_prompt:
+                    rendered += "|assistant:"
+                return rendered
+
+            def decode(
+                self,
+                token_ids,
+                clean_up_tokenization_spaces=False,
+                skip_special_tokens=False,
+            ):
+                return "".join(chr(int(token_id)) for token_id in token_ids)
+
+        with mock.patch.object(
+            storage_module,
+            "load_tokenizer",
+            return_value=FakeTokenizer(),
+        ):
+            prompt = storage_module.render_prompt_from_stored_messages(
+                model="demo-model",
+                messages=[
+                    {"role": "system", "content": "sys"},
+                    {"role": "user", "content": "usr"},
+                ],
+                add_generation_prompt=True,
+            )
+
+        self.assertEqual(prompt, "system:sys|user:usr|assistant:")
 
 
 if __name__ == "__main__":

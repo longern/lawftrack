@@ -5,6 +5,18 @@ from typing import Any
 
 from .tokenizer_service import load_tokenizer
 
+try:
+    from jinja2.exceptions import TemplateError
+except ModuleNotFoundError:  # pragma: no cover - jinja2 is an optional dependency
+    class TemplateError(Exception):
+        pass
+
+
+class ChatTemplateRenderError(ValueError):
+    def __init__(self, detail: dict[str, Any]) -> None:
+        super().__init__(str(detail.get("message") or "Chat template rendering failed."))
+        self.detail = detail
+
 
 def extract_message_text(value: Any) -> str:
     if isinstance(value, str):
@@ -59,7 +71,22 @@ def _apply_chat_template_token_ids(
     }
     if tools:
         template_kwargs["tools"] = tools
-    token_ids = tokenizer.apply_chat_template(messages, **template_kwargs)
+    try:
+        token_ids = tokenizer.apply_chat_template(messages, **template_kwargs)
+    except TemplateError as exc:
+        raise ChatTemplateRenderError(
+            {
+                "code": "chat_template_error",
+                "message": "tokenizer.apply_chat_template raised TemplateError.",
+                "template_error": str(exc),
+                "parameters": {
+                    "model": model,
+                    "tokenizer_class": type(tokenizer).__name__,
+                    "messages": messages,
+                    **template_kwargs,
+                },
+            }
+        ) from exc
     return _normalize_token_ids(token_ids)
 
 
@@ -154,6 +181,50 @@ def render_message_delta_from_chat_template(
     )
 
 
+def render_message_group_delta_from_chat_template(
+    *,
+    model: str,
+    prompt_messages: list[dict[str, Any]],
+    messages: list[dict[str, Any]],
+    tools: list[dict[str, Any]] | None = None,
+    config_dir: Path | None = None,
+) -> str:
+    if not messages:
+        return ""
+    context_messages = [
+        _build_template_message(item, assistant_mode="placeholder")
+        if str(item.get("role") or "") == "assistant"
+        else _build_template_message(item, assistant_mode="raw")
+        for item in prompt_messages
+    ]
+    before_ids = _apply_chat_template_token_ids(
+        model=model,
+        messages=context_messages,
+        tools=tools,
+        add_generation_prompt=False,
+        config_dir=config_dir,
+    )
+    after_ids = _apply_chat_template_token_ids(
+        model=model,
+        messages=context_messages
+        + [
+            _build_template_message(message, assistant_mode="raw")
+            for message in messages
+        ],
+        tools=tools,
+        add_generation_prompt=False,
+        config_dir=config_dir,
+    )
+    return _decode_token_ids(
+        model=model,
+        token_ids=_extract_template_delta(
+            before_ids=before_ids,
+            after_ids=after_ids,
+        ),
+        config_dir=config_dir,
+    )
+
+
 def render_generation_prompt_delta_from_chat_template(
     *,
     model: str,
@@ -202,31 +273,40 @@ def render_prompt_from_stored_messages(
 ) -> str:
     rendered_parts: list[str] = []
     logical_history: list[dict[str, Any]] = []
+    pending_non_assistant_messages: list[dict[str, Any]] = []
+
+    def flush_pending_non_assistant_messages() -> None:
+        nonlocal pending_non_assistant_messages
+        if not pending_non_assistant_messages:
+            return
+        rendered_parts.append(
+            render_message_group_delta_from_chat_template(
+                model=model,
+                prompt_messages=logical_history,
+                messages=pending_non_assistant_messages,
+                tools=tools,
+                config_dir=config_dir,
+            )
+        )
+        logical_history.extend(
+            _build_template_message(message, assistant_mode="raw")
+            for message in pending_non_assistant_messages
+        )
+        pending_non_assistant_messages = []
 
     for message in messages:
         role = str(message.get("role") or "")
         if role == "assistant":
+            flush_pending_non_assistant_messages()
             rendered_parts.append(extract_message_text(message.get("content")))
             logical_history.append(
                 _build_template_message(message, assistant_mode="placeholder")
             )
             continue
 
-        rendered_parts.append(
-            render_message_delta_from_chat_template(
-                model=model,
-                prompt_messages=logical_history,
-                message=message,
-                tools=tools,
-                config_dir=config_dir,
-            )
-        )
-        logical_history.append(
-            _build_template_message(
-                message,
-                assistant_mode="placeholder" if role == "assistant" else "raw",
-            )
-        )
+        pending_non_assistant_messages.append(message)
+
+    flush_pending_non_assistant_messages()
 
     if add_generation_prompt:
         rendered_parts.append(

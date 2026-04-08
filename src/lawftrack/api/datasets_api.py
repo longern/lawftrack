@@ -10,6 +10,7 @@ from fastapi import UploadFile
 import httpx
 from pydantic import BaseModel
 
+from .chat_template_storage import ChatTemplateRenderError
 from .chat_template_storage import extract_message_text
 from .chat_template_storage import render_prompt_from_stored_messages
 from .dataset_store import DatasetStore
@@ -104,6 +105,12 @@ def serialize_model(model: BaseModel) -> dict[str, Any]:
     if hasattr(model, "model_dump"):
         return model.model_dump(exclude_unset=True)
     return model.dict(exclude_unset=True)
+
+
+def build_bad_request_detail(exc: ValueError) -> Any:
+    if isinstance(exc, ChatTemplateRenderError):
+        return exc.detail
+    return str(exc)
 
 
 def extract_content_from_message(message: dict[str, Any]) -> str:
@@ -202,7 +209,10 @@ def prepare_sample_continuation(
     except TokenizerDependencyError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=400,
+            detail=build_bad_request_detail(exc),
+        ) from exc
 
     current_config = load_config(config_dir)
     headers = {"content-type": "application/json"}
@@ -220,7 +230,10 @@ def prepare_sample_continuation(
     except TokenizerDependencyError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=400,
+            detail=build_bad_request_detail(exc),
+        ) from exc
 
     max_tokens = (
         payload.max_tokens
@@ -391,7 +404,10 @@ def build_router(config_dir: Path | None = None) -> APIRouter:
         except TokenizerDependencyError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
         except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+            raise HTTPException(
+                status_code=400,
+                detail=build_bad_request_detail(exc),
+            ) from exc
 
     @router.post("/import")
     async def import_dataset(file: UploadFile = File(...)) -> dict[str, Any]:
@@ -407,7 +423,10 @@ def build_router(config_dir: Path | None = None) -> APIRouter:
             except TokenizerDependencyError as exc:
                 raise HTTPException(status_code=503, detail=str(exc)) from exc
             except ValueError as exc:
-                raise HTTPException(status_code=400, detail=str(exc)) from exc
+                raise HTTPException(
+                    status_code=400,
+                    detail=build_bad_request_detail(exc),
+                ) from exc
             return dataset
 
         if suffix in {".json", ".jsonl"}:
@@ -422,7 +441,10 @@ def build_router(config_dir: Path | None = None) -> APIRouter:
             except TokenizerDependencyError as exc:
                 raise HTTPException(status_code=503, detail=str(exc)) from exc
             except ValueError as exc:
-                raise HTTPException(status_code=400, detail=str(exc)) from exc
+                raise HTTPException(
+                    status_code=400,
+                    detail=build_bad_request_detail(exc),
+                ) from exc
 
         raise HTTPException(
             status_code=400,
@@ -447,7 +469,10 @@ def build_router(config_dir: Path | None = None) -> APIRouter:
                 status_code=404, detail=f"Dataset not found: {dataset_id}"
             ) from exc
         except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+            raise HTTPException(
+                status_code=400,
+                detail=build_bad_request_detail(exc),
+            ) from exc
 
         return {
             "object": "list",
@@ -464,7 +489,10 @@ def build_router(config_dir: Path | None = None) -> APIRouter:
         try:
             method = normalize_training_method(serialized.get("method"))
         except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+            raise HTTPException(
+                status_code=400,
+                detail=build_bad_request_detail(exc),
+            ) from exc
 
         try:
             created_file, record_count = store.export_training_file(
@@ -476,7 +504,10 @@ def build_router(config_dir: Path | None = None) -> APIRouter:
                 status_code=404, detail=f"Dataset not found: {dataset_id}"
             ) from exc
         except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+            raise HTTPException(
+                status_code=400,
+                detail=build_bad_request_detail(exc),
+            ) from exc
 
         if record_count <= 0:
             raise HTTPException(
@@ -501,7 +532,10 @@ def build_router(config_dir: Path | None = None) -> APIRouter:
                 status_code=404, detail=f"Dataset not found: {dataset_id}"
             ) from exc
         except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+            raise HTTPException(
+                status_code=400,
+                detail=build_bad_request_detail(exc),
+            ) from exc
 
         return {
             "object": "dataset.export",
@@ -522,7 +556,10 @@ def build_router(config_dir: Path | None = None) -> APIRouter:
                 status_code=404, detail=f"Dataset not found: {dataset_id}"
             ) from exc
         except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+            raise HTTPException(
+                status_code=400,
+                detail=build_bad_request_detail(exc),
+            ) from exc
 
     @router.post("/{dataset_id}/samples/{sample_id}/tokenize")
     def tokenize_dataset_sample(
@@ -556,7 +593,10 @@ def build_router(config_dir: Path | None = None) -> APIRouter:
         except TokenizerDependencyError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
         except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+            raise HTTPException(
+                status_code=400,
+                detail=build_bad_request_detail(exc),
+            ) from exc
 
     @router.post("/render_completion_prompt")
     def render_completion_prompt(
@@ -575,7 +615,10 @@ def build_router(config_dir: Path | None = None) -> APIRouter:
         except TokenizerDependencyError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
         except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+            raise HTTPException(
+                status_code=400,
+                detail=build_bad_request_detail(exc),
+            ) from exc
 
         return {
             "object": "dataset.completion_prompt",
@@ -660,7 +703,10 @@ def build_router(config_dir: Path | None = None) -> APIRouter:
         except TokenizerDependencyError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
         except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+            raise HTTPException(
+                status_code=400,
+                detail=build_bad_request_detail(exc),
+            ) from exc
 
         current_config = load_config(config_dir)
         headers = {"content-type": "application/json"}
@@ -678,7 +724,10 @@ def build_router(config_dir: Path | None = None) -> APIRouter:
         except TokenizerDependencyError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
         except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+            raise HTTPException(
+                status_code=400,
+                detail=build_bad_request_detail(exc),
+            ) from exc
 
         async with httpx.AsyncClient(follow_redirects=True, timeout=120.0) as client:
             upstream_response = await client.post(
@@ -790,7 +839,10 @@ def build_router(config_dir: Path | None = None) -> APIRouter:
         except TokenizerDependencyError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
         except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+            raise HTTPException(
+                status_code=400,
+                detail=build_bad_request_detail(exc),
+            ) from exc
 
         return {"sample": next_sample, "tokenization": tokenization}
 
@@ -811,7 +863,10 @@ def build_router(config_dir: Path | None = None) -> APIRouter:
             )
             raise HTTPException(status_code=404, detail=detail) from exc
         except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+            raise HTTPException(
+                status_code=400,
+                detail=build_bad_request_detail(exc),
+            ) from exc
 
     @router.delete("/{dataset_id}/samples/{sample_id}")
     def delete_dataset_sample(dataset_id: str, sample_id: str) -> dict[str, Any]:
@@ -838,7 +893,10 @@ def build_router(config_dir: Path | None = None) -> APIRouter:
         except TokenizerDependencyError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
         except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+            raise HTTPException(
+                status_code=400,
+                detail=build_bad_request_detail(exc),
+            ) from exc
         except FileNotFoundError as exc:
             raise HTTPException(
                 status_code=404, detail=f"Dataset not found: {dataset_id}"

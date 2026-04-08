@@ -88,6 +88,7 @@ export interface WorkspaceShellProps {
   replacementToken: string;
   hasContinuationDraft: boolean;
   generating: boolean;
+  onAbortGeneration: () => void;
   generatingAssistant: boolean;
   saving: boolean;
   exportingDataset: boolean;
@@ -165,6 +166,7 @@ export function WorkspaceShell({
   hasContinuationDraft,
   replacementToken,
   generating,
+  onAbortGeneration,
   generatingAssistant,
   saving,
   exportingDataset,
@@ -192,6 +194,7 @@ export function WorkspaceShell({
     activeDataset && draft ? (
       <TokenActionPanel
         generating={generating}
+        onAbortGeneration={onAbortGeneration}
         hasContinuationDraft={hasContinuationDraft}
         selectedTokenHasRewriteMark={selectedTokenHasRewriteMark}
         onAcceptContinuationDraft={onAcceptContinuationDraft}
@@ -310,9 +313,8 @@ export function WorkspaceShell({
               isMobile={isMobile}
               loading={loading}
               onCreateDataset={onCreateDataset}
-        onDeleteDataset={onDeleteDataset}
-        onExportDataset={onExportDataset}
-        onImportDataset={onImportDataset}
+              onDeleteDataset={onDeleteDataset}
+              onImportDataset={onImportDataset}
               onOpenDataset={onOpenDataset}
               recentDatasets={recentDatasets}
             />
@@ -474,6 +476,7 @@ export function WorkspaceShell({
             >
               <TokenActionMiniPanel
                 generating={generating}
+                onAbortGeneration={onAbortGeneration}
                 hasContinuationDraft={hasContinuationDraft}
                 selectedTokenHasRewriteMark={selectedTokenHasRewriteMark}
                 onAcceptContinuationDraft={onAcceptContinuationDraft}

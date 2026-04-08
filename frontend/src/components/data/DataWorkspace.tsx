@@ -18,113 +18,25 @@ import type {
 } from "../../types/app";
 import { WorkspaceShell } from "./DataWorkspaceShell";
 import { useI18n } from "../../i18n";
-import type {
-  ContinuationDraft,
-  DatasetDraft,
-  TokenCandidate,
-  TokenSelection,
-} from "./dataWorkspaceTypes";
+import type { DatasetDraft, TokenCandidate, TokenSelection } from "./dataWorkspaceTypes";
 import {
   FALLBACK_BASE_MODEL,
   type RemoteModelRecord,
   listModelOptionIds,
   resolvePreferredBaseModel,
 } from "../../utils/modelSelection";
+import {
+  buildNextDatasetName,
+  decodeCandidateToken,
+  fetchJson,
+} from "./dataWorkspaceApi";
+import { useTokenContinuation } from "./useTokenContinuation";
 
 interface DataWorkspaceProps {
   isMobile: boolean;
   initialDatasetId?: string | null;
   onDatasetOpen?: (dataset: DatasetRecord) => void;
   onInitialDatasetHandled?: () => void;
-}
-
-async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(url, init);
-  if (!response.ok) {
-    let message = `Request failed: ${response.status}`;
-    try {
-      const payload = (await response.json()) as { detail?: string };
-      if (payload.detail) {
-        message = payload.detail;
-      }
-    } catch {
-      message = response.statusText || message;
-    }
-    throw new Error(message);
-  }
-  return (await response.json()) as T;
-}
-
-function buildNextDatasetName(datasets: DatasetRecord[]): string {
-  const existingNames = new Set(
-    datasets.map((dataset) => dataset.name.trim().toLowerCase()),
-  );
-  let nextIndex = 1;
-  while (existingNames.has(`dataset-${nextIndex}`)) {
-    nextIndex += 1;
-  }
-  return `dataset-${nextIndex}`;
-}
-
-function decodeCandidateToken(token?: string, bytes?: number[]): string {
-  if (Array.isArray(bytes) && bytes.length > 0) {
-    try {
-      return new TextDecoder().decode(new Uint8Array(bytes));
-    } catch {
-      return token ?? "";
-    }
-  }
-  return token ?? "";
-}
-
-function buildContinuationPreviewEditList(
-  sample: DatasetSample,
-  selection: TokenSelection,
-  originalToken: string,
-  replacementToken: string,
-  regeneratedFromTokenIndex: number,
-  keepRewriteMark = true,
-) {
-  const previousEdits = sample.edits.filter(
-    (edit) =>
-      edit.message_index < selection.messageIndex ||
-      (edit.message_index === selection.messageIndex &&
-        edit.token_index < selection.tokenIndex),
-  );
-  if (!keepRewriteMark) {
-    return previousEdits;
-  }
-  return [
-    ...previousEdits,
-    {
-      message_index: selection.messageIndex,
-      token_index: selection.tokenIndex,
-      original_token: originalToken,
-      replacement_token: replacementToken,
-      regenerated_from_token_index: regeneratedFromTokenIndex,
-      created_at: Math.floor(Date.now() / 1000),
-    },
-  ];
-}
-
-function buildContinuationPreviewTokenization(
-  tokenization: DatasetSampleTokenization,
-  selection: TokenSelection,
-) {
-  return {
-    ...tokenization,
-    messages: tokenization.messages.map((message) => {
-      if (message.message_index !== selection.messageIndex) {
-        return message;
-      }
-      return {
-        ...message,
-        tokens: message.tokens.filter(
-          (token) => token.token_index < selection.tokenIndex,
-        ),
-      };
-    }),
-  };
 }
 
 function DataWorkspace({
@@ -150,8 +62,6 @@ function DataWorkspace({
   );
   const [replacementToken, setReplacementToken] = useState("");
   const [tokenCandidates, setTokenCandidates] = useState<TokenCandidate[]>([]);
-  const [continuationDraft, setContinuationDraft] =
-    useState<ContinuationDraft | null>(null);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -159,7 +69,6 @@ function DataWorkspace({
   const [creating, setCreating] = useState(false);
   const [savingSample, setSavingSample] = useState(false);
   const [exportingDataset, setExportingDataset] = useState(false);
-  const [generating, setGenerating] = useState(false);
   const [generatingAssistant, setGeneratingAssistant] = useState(false);
   const [mobileExplorerOpen, setMobileExplorerOpen] = useState(false);
   const [mobileSamplesOpen, setMobileSamplesOpen] = useState(false);
@@ -201,6 +110,38 @@ function DataWorkspace({
   const selectedSampleTokenization = selectedSample
     ? (sampleTokenizations[selectedSample.id] ?? null)
     : null;
+  const currentModel = draft?.base_model.trim() || activeDataset?.base_model || "";
+  const {
+    continuationDraft,
+    generating,
+    clearContinuationDraft,
+    handleAbortContinuationGeneration,
+    handleGenerateContinuation,
+    handleGenerateTopCandidateWithoutRewriteMark,
+    handleAcceptContinuationDraft,
+    handleDiscardContinuationDraft,
+  } = useTokenContinuation({
+    activeDatasetId: activeDataset?.id ?? null,
+    model: currentModel,
+    selectedSample,
+    selectedSampleTokenization,
+    selectedToken,
+    replacementToken,
+    tokenCandidates,
+    setSelectedToken,
+    setReplacementToken,
+    setTokenCandidates,
+    setCandidatesLoading,
+    setSamples,
+    setSampleTokenizations,
+    setSavingSample,
+    setError,
+    tokenCandidatesRequestRef,
+    ensureSampleTokenization,
+    updateCurrentSample,
+    persistSample,
+    t,
+  });
   const visibleSample = continuationDraft?.sample ?? selectedSample;
   const visibleSampleTokenization =
     continuationDraft?.tokenization ?? selectedSampleTokenization;
@@ -281,7 +222,7 @@ function DataWorkspace({
       setSelectedSampleId(null);
       setSelectedToken(null);
       setTokenCandidates([]);
-      setContinuationDraft(null);
+      clearContinuationDraft();
       setCandidatesLoading(false);
       setError("");
       tokenCandidatesRequestRef.current += 1;
@@ -322,7 +263,7 @@ function DataWorkspace({
       setSelectedToken(null);
       setReplacementToken("");
       setTokenCandidates([]);
-      setContinuationDraft(null);
+      clearContinuationDraft();
       setCandidatesLoading(false);
       tokenCandidatesRequestRef.current += 1;
       return;
@@ -430,7 +371,7 @@ function DataWorkspace({
       setSelectedToken(null);
       setReplacementToken("");
       setTokenCandidates([]);
-      setContinuationDraft(null);
+      clearContinuationDraft();
       setCandidatesLoading(false);
       tokenCandidatesRequestRef.current += 1;
       setDirtySampleIds([]);
@@ -440,7 +381,7 @@ function DataWorkspace({
       setSamples([]);
       setSampleTokenizations({});
       setSelectedSampleId(null);
-      setContinuationDraft(null);
+      clearContinuationDraft();
       setCandidatesLoading(false);
       tokenCandidatesRequestRef.current += 1;
       setError(
@@ -638,7 +579,7 @@ function DataWorkspace({
       setSelectedToken(null);
       setReplacementToken("");
       setTokenCandidates([]);
-      setContinuationDraft(null);
+      clearContinuationDraft();
       setCandidatesLoading(false);
       tokenCandidatesRequestRef.current += 1;
       setError("");
@@ -685,7 +626,7 @@ function DataWorkspace({
     setSelectedToken(null);
     setReplacementToken("");
     setTokenCandidates([]);
-    setContinuationDraft(null);
+    clearContinuationDraft();
     setCandidatesLoading(false);
     tokenCandidatesRequestRef.current += 1;
   }
@@ -924,341 +865,6 @@ function DataWorkspace({
         setCandidatesLoading(false);
       }
     }
-  }
-
-  async function handleGenerateContinuation(options?: {
-    replacementTokenOverride?: string;
-    keepRewriteMark?: boolean;
-  }) {
-    if (!activeDataset || !draft || !selectedSample || !selectedToken) {
-      return;
-    }
-    const keepRewriteMark = options?.keepRewriteMark ?? true;
-    const submittedReplacementToken =
-      options?.replacementTokenOverride ??
-      (replacementToken === "" ? selectedToken.currentToken : replacementToken);
-    const model = draft.base_model.trim() || activeDataset.base_model || "";
-    if (!model) {
-      setError(
-        t("Please configure a base model for the current dataset first."),
-      );
-      return;
-    }
-    const baseTokenization =
-      visibleSampleTokenization ??
-      (await ensureSampleTokenization(selectedSample));
-    if (!baseTokenization) {
-      return;
-    }
-    setGenerating(true);
-    try {
-      const preparation = await fetchJson<{
-        prompt: string;
-        suggested_max_tokens?: number | null;
-        prefix: string;
-        original_token: string;
-        replacement_token: string;
-        regenerated_from_token_index: number;
-      }>(
-        `/api/datasets/${activeDataset.id}/samples/${selectedSample.id}/continue_prepare`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            model,
-            message_index: selectedToken.messageIndex,
-            token_index: selectedToken.tokenIndex,
-            replacement_token: submittedReplacementToken,
-          }),
-        },
-      );
-      const previewTokenization = buildContinuationPreviewTokenization(
-        baseTokenization,
-        selectedToken,
-      );
-      const previewEdits = buildContinuationPreviewEditList(
-        selectedSample,
-        selectedToken,
-        preparation.original_token,
-        preparation.replacement_token,
-        preparation.regenerated_from_token_index,
-        keepRewriteMark,
-      );
-      const previewSample: DatasetSample = {
-        ...selectedSample,
-        messages: selectedSample.messages.map((message, index) =>
-          index !== selectedToken.messageIndex
-            ? message
-            : {
-                ...message,
-                content: preparation.prefix,
-              },
-        ),
-        edits: previewEdits,
-        anchors: previewEdits,
-      };
-      setContinuationDraft({
-        sample: previewSample,
-        tokenization: previewTokenization,
-        baseTokenization,
-      });
-      const response = await fetch("/v1/completions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model,
-          stream: true,
-          prompt: preparation.prompt,
-          max_tokens:
-            typeof preparation.suggested_max_tokens === "number"
-              ? preparation.suggested_max_tokens
-              : 8192,
-          temperature: 0.7,
-          skip_special_tokens: false,
-          include_stop_str_in_output: true,
-        }),
-      });
-      if (!response.ok || !response.body) {
-        let message = `Request failed: ${response.status}`;
-        try {
-          const payload = (await response.json()) as { detail?: string };
-          if (payload.detail) {
-            message = payload.detail;
-          }
-        } catch {
-          message = response.statusText || message;
-        }
-        throw new Error(message);
-      }
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      let latestSample = previewSample;
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) {
-          break;
-        }
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() ?? "";
-
-        for (const rawLine of lines) {
-          const line = rawLine.trim();
-          if (!line || !line.startsWith("data:")) {
-            continue;
-          }
-          const data = line.slice(5).trim();
-          if (!data || data === "[DONE]") {
-            continue;
-          }
-          const payload = JSON.parse(data) as {
-            choices?: Array<{
-              text?: string;
-            }>;
-            error?: { message?: string };
-          };
-          if (payload.error?.message) {
-            throw new Error(payload.error.message);
-          }
-          const delta = payload.choices?.[0]?.text ?? "";
-          if (!delta) {
-            continue;
-          }
-          latestSample = {
-            ...latestSample,
-            messages: latestSample.messages.map((message, index) =>
-              index !== selectedToken.messageIndex
-                ? message
-                : {
-                    ...message,
-                    content: `${message.content}${delta}`,
-                  },
-            ),
-          };
-          const nextSample = latestSample;
-          setContinuationDraft((current) =>
-            current
-              ? {
-                  ...current,
-                  sample: nextSample,
-                }
-              : current,
-          );
-        }
-      }
-      const finalizedSample: DatasetSample = {
-        ...latestSample,
-        edits: latestSample.edits.map((edit) =>
-          edit.message_index === selectedToken.messageIndex &&
-          edit.token_index === selectedToken.tokenIndex
-            ? {
-                ...edit,
-                original_token: preparation.original_token,
-                replacement_token: preparation.replacement_token,
-                regenerated_from_token_index:
-                  preparation.regenerated_from_token_index,
-              }
-            : edit,
-        ),
-        anchors:
-          latestSample.anchors?.map((edit) =>
-            edit.message_index === selectedToken.messageIndex &&
-            edit.token_index === selectedToken.tokenIndex
-              ? {
-                  ...edit,
-                  original_token: preparation.original_token,
-                  replacement_token: preparation.replacement_token,
-                  regenerated_from_token_index:
-                    preparation.regenerated_from_token_index,
-                }
-              : edit,
-          ) ?? latestSample.edits,
-      };
-      const finalTokenization = await fetchJson<DatasetSampleTokenization>(
-        `/api/datasets/${activeDataset.id}/samples/${selectedSample.id}/tokenize`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            model,
-            messages: finalizedSample.messages,
-          }),
-        },
-      );
-      setSampleTokenizations((current) => ({
-        ...current,
-        [selectedSample.id]: finalTokenization,
-      }));
-      setContinuationDraft({
-        sample: finalizedSample,
-        tokenization: finalTokenization,
-        baseTokenization,
-      });
-      setSelectedToken({
-        ...selectedToken,
-        currentToken: preparation.replacement_token,
-      });
-      setReplacementToken(preparation.replacement_token);
-      setError("");
-    } catch (generateError) {
-      setContinuationDraft(null);
-      setSelectedToken((current) =>
-        current
-          ? {
-              ...current,
-              currentToken: current.originalToken,
-            }
-          : current,
-      );
-      setReplacementToken(selectedToken.originalToken);
-      setError(
-        generateError instanceof Error
-          ? generateError.message
-          : t("Failed to generate assistant message"),
-      );
-    } finally {
-      setGenerating(false);
-    }
-  }
-
-  async function handleGenerateTopCandidateWithoutRewriteMark() {
-    if (!selectedToken || tokenCandidates.length === 0) {
-      return;
-    }
-    const [topCandidate] = [...tokenCandidates].sort((left, right) => {
-      if (left.logprob === null && right.logprob === null) {
-        return 0;
-      }
-      if (left.logprob === null) {
-        return 1;
-      }
-      if (right.logprob === null) {
-        return -1;
-      }
-      return right.logprob - left.logprob;
-    });
-    if (!topCandidate?.text) {
-      return;
-    }
-    setReplacementToken(topCandidate.text);
-    await handleGenerateContinuation({
-      replacementTokenOverride: topCandidate.text,
-      keepRewriteMark: false,
-    });
-  }
-
-  async function handleAcceptContinuationDraft() {
-    if (!selectedSample || !continuationDraft || !selectedToken) {
-      return;
-    }
-    const acceptedSample: DatasetSample = {
-      ...continuationDraft.sample,
-      edits: continuationDraft.sample.edits.map((edit) => ({
-        ...edit,
-        regenerated_from_token_index: null,
-      })),
-      updated_at: Math.floor(Date.now() / 1000),
-    };
-    updateCurrentSample(acceptedSample);
-    setSampleTokenizations((current) => ({
-      ...current,
-      [acceptedSample.id]: continuationDraft.tokenization,
-    }));
-    setContinuationDraft(null);
-    const activeEdit = acceptedSample.edits.find(
-      (edit) =>
-        edit.message_index === selectedToken.messageIndex &&
-        edit.token_index === selectedToken.tokenIndex,
-    );
-    setSelectedToken({
-      ...selectedToken,
-      currentToken: activeEdit?.replacement_token ?? selectedToken.currentToken,
-    });
-    setTokenCandidates([]);
-    setCandidatesLoading(false);
-    tokenCandidatesRequestRef.current += 1;
-    setSavingSample(true);
-    try {
-      const updated = await persistSample(acceptedSample);
-      setSamples((current) =>
-        current.map((sample) => (sample.id === updated.id ? updated : sample)),
-      );
-      setError("");
-    } catch (saveError) {
-      setError(
-        saveError instanceof Error
-          ? saveError.message
-          : "Auto-save failed after accepting rewrite",
-      );
-    } finally {
-      setSavingSample(false);
-    }
-  }
-
-  function handleDiscardContinuationDraft() {
-    if (!continuationDraft || !selectedSample) {
-      return;
-    }
-    setSampleTokenizations((current) => ({
-      ...current,
-      [selectedSample.id]: continuationDraft.baseTokenization,
-    }));
-    setContinuationDraft(null);
-    setSelectedToken((current) =>
-      current
-        ? {
-            ...current,
-            currentToken: current.originalToken,
-          }
-        : null,
-    );
-    setReplacementToken(selectedToken?.originalToken ?? "");
-    setTokenCandidates([]);
-    setCandidatesLoading(false);
-    tokenCandidatesRequestRef.current += 1;
   }
 
   async function handleSaveSample() {
@@ -1535,7 +1141,7 @@ function DataWorkspace({
         return next;
       });
       if (selectedSampleId === deletingSampleId) {
-        setContinuationDraft(null);
+        clearContinuationDraft();
         clearSelectedToken();
       }
       setSampleToDelete(null);
@@ -1664,6 +1270,7 @@ function DataWorkspace({
         selectedTokenHasRewriteMark={selectedTokenHasRewriteMark}
         replacementToken={replacementToken}
         generating={generating}
+        onAbortGeneration={handleAbortContinuationGeneration}
         generatingAssistant={generatingAssistant}
         saving={saving}
         exportingDataset={exportingDataset}
@@ -1689,7 +1296,7 @@ function DataWorkspace({
         hasPrevToken={selectedTokenSequenceIndex > 0}
         onSelectSample={(sampleId) => {
           setSelectedSampleId(sampleId);
-          setContinuationDraft(null);
+          clearContinuationDraft();
           clearSelectedToken();
         }}
         onSelectToken={handleSelectToken}

@@ -69,6 +69,7 @@ function CandidateTokenButton({
 export function TokenActionPanel({
   candidatesLoading,
   generating,
+  onAbortGeneration,
   hasContinuationDraft,
   selectedTokenHasRewriteMark,
   onAcceptContinuationDraft,
@@ -84,6 +85,7 @@ export function TokenActionPanel({
 }: {
   candidatesLoading: boolean;
   generating: boolean;
+  onAbortGeneration: () => void;
   hasContinuationDraft: boolean;
   selectedTokenHasRewriteMark: boolean;
   onAcceptContinuationDraft: () => void;
@@ -212,6 +214,14 @@ export function TokenActionPanel({
                       {t("Discard rewrite")}
                     </Button>
                   </Stack>
+                ) : generating ? (
+                  <Button
+                    variant="outlined"
+                    onClick={onAbortGeneration}
+                    sx={{ flex: 1, color: "text.primary", borderColor: "divider" }}
+                  >
+                    {t("Interrupt generation")}
+                  </Button>
                 ) : (
                   <Stack direction="row" spacing={1}>
                     <Button
@@ -263,6 +273,7 @@ export function TokenActionPanel({
 export function TokenActionMiniPanel({
   candidatesLoading,
   generating,
+  onAbortGeneration,
   hasContinuationDraft,
   selectedTokenHasRewriteMark,
   onAcceptContinuationDraft,
@@ -279,6 +290,7 @@ export function TokenActionMiniPanel({
 }: {
   candidatesLoading: boolean;
   generating: boolean;
+  onAbortGeneration: () => void;
   hasContinuationDraft: boolean;
   selectedTokenHasRewriteMark: boolean;
   onAcceptContinuationDraft: () => void;
@@ -377,6 +389,15 @@ export function TokenActionMiniPanel({
               {t("Discard")}
             </Button>
           </>
+        ) : generating ? (
+          <Button
+            variant="outlined"
+            size="small"
+            onClick={onAbortGeneration}
+            sx={{ flex: 1, color: "text.primary", borderColor: "divider" }}
+          >
+            {t("Interrupt generation")}
+          </Button>
         ) : (
           <>
             <Button
